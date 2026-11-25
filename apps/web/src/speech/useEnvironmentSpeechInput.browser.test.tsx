@@ -61,7 +61,6 @@ const mocks = vi.hoisted(() => ({
   transcripts: [] as Array<string | Error>,
   committed: vi.fn(),
   draft: "",
-  appleSpeech: false,
   storedDraft: "",
 }));
 
@@ -176,13 +175,7 @@ vi.mock("@t3tools/client-runtime/voice-input", async (importOriginal) => ({
       return { text: `Cleaned ${transcript}` };
     }),
 }));
-vi.mock("./appleSpeech", () => ({
-  useAppleSpeechLocales: () => (mocks.appleSpeech ? ["en-US"] : []),
-}));
 vi.mock("./browserVoiceInput", () => ({
-  createAppleSpeechVoiceInputPlatform: (
-    input: Omit<Parameters<typeof createBrowserVoiceInputPlatform>[0], "prepared">,
-  ) => mockPlatform("apple-speech", input),
   createBrowserVoiceInputPlatform: (input: Parameters<typeof createBrowserVoiceInputPlatform>[0]) =>
     mockPlatform(input.prepared.environmentId, input),
 }));
@@ -258,7 +251,6 @@ function setup(options: { readonly destination?: string | null } = {}) {
   mocks.transcripts = [];
   mocks.committed.mockClear();
   mocks.draft = "";
-  mocks.appleSpeech = false;
   mocks.storedDraft = "";
 }
 
@@ -398,28 +390,17 @@ it.each([
   expect(mocks.committed).not.toHaveBeenCalled();
 });
 
-it.each([true, false])(
-  "transcribes on this Mac with Apple Speech, never an environment, when available is %s",
-  async (available) => {
-    setup();
-    mocks.appleSpeech = available;
-    chooseAudioDestination({ kind: "device" });
-    await using _screen = await render(<Probe />);
-    expect(mocks.voice.transcriptionEnvironmentId).toBeNull();
-    expect(mocks.voice.available).toBe(available);
-    await act(() => mocks.voice.start());
-    if (!available) {
-      expectNoAudioSent();
-      return;
-    }
-    await act(() => mocks.voice.stop());
-    expect(new Set([...mocks.platforms, ...mocks.transcribeCalls])).toEqual(
-      new Set(["apple-speech"]),
-    );
-    expect(mocks.statusRequests).toEqual([]);
-    expect(mocks.committed).toHaveBeenCalledExactlyOnceWith("dictated", expect.anything());
-  },
-);
+it("ignores an on-device grant saved by an older build and sends no audio", async () => {
+  setup();
+  window.localStorage.setItem(
+    "t3code:voice-audio-grant:v1",
+    JSON.stringify({ id: "legacy", destination: { kind: "device" } }),
+  );
+  await using _screen = await render(<Probe />);
+  expect(mocks.voice.transcriptionEnvironmentId).toBeNull();
+  await act(() => mocks.voice.start());
+  expectNoAudioSent();
+});
 
 it("retries a failed transcription on the same chosen environment", async () => {
   setup({ destination: "env-a" });
@@ -435,15 +416,10 @@ it("retries a failed transcription on the same chosen environment", async () => 
 });
 
 it.each([
-  ["a stored thread draft keeps recording into it", true, false],
-  ["an editor-only draft is abandoned", false, false],
-  ["Apple Speech keeps recording into a stored thread draft", true, true],
-])("when the editor switches owner mid-recording, %s", async (_name, persistent, onDevice) => {
+  ["a stored thread draft keeps recording into it", true],
+  ["an editor-only draft is abandoned", false],
+])("when the editor switches owner mid-recording, %s", async (_name, persistent) => {
   setup({ destination: "env-a" });
-  if (onDevice) {
-    mocks.appleSpeech = true;
-    chooseAudioDestination({ kind: "device" });
-  }
   mocks.storedDraft = "Earlier text";
   const view = (ownerKey: string) => (
     <>
@@ -471,7 +447,7 @@ it.each([
   await page.getByRole("button", { name: "Finish voice input" }).click();
 
   await vi.waitFor(() => expect(mocks.storedDraft).toBe("Earlier text dictated"));
-  expect(mocks.transcribeCalls).toEqual([onDevice ? "apple-speech" : "env-a"]);
+  expect(mocks.transcribeCalls).toEqual(["env-a"]);
   expect(mocks.committed).not.toHaveBeenCalled();
 });
 

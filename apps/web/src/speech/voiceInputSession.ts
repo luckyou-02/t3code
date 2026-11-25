@@ -26,10 +26,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { toastManager } from "../components/ui/toast";
 import { chooseRecordingMicrophone } from "./browserMicrophones";
-import {
-  createAppleSpeechVoiceInputPlatform,
-  createBrowserVoiceInputPlatform,
-} from "./browserVoiceInput";
+import { createBrowserVoiceInputPlatform } from "./browserVoiceInput";
 import { runEnvironmentSpeech } from "./runEnvironmentSpeech";
 import { bindAudioGrant, readCleanupGrant } from "./voiceConsent";
 import { msg } from "gt-react";
@@ -79,8 +76,7 @@ export type VoiceInputSessionActivity = {
 };
 
 type SessionKey = {
-  /** Null is Apple Speech, which transcribes on this Mac without an environment. */
-  readonly prepared: PreparedConnection | null;
+  readonly prepared: PreparedConnection;
   readonly grantId: string;
   readonly cloudProvider: CloudSpeechProvider | undefined;
   readonly cloudModel: CloudSpeechModelId | undefined;
@@ -180,17 +176,15 @@ export class VoiceInputSession {
         if (!this.disposed) void this.controller.interruptRecording(message, null, code);
       },
     };
-    const platform = key.prepared
-      ? createBrowserVoiceInputPlatform({
-          ...platformInput,
-          prepared: key.prepared,
-          cloudProvider: key.cloudProvider,
-          cloudModel: key.cloudModel,
-          onText: (preview) => {
-            if (!this.disposed) this.publishActivity({ ...this.activity, preview });
-          },
-        })
-      : createAppleSpeechVoiceInputPlatform(platformInput);
+    const platform = createBrowserVoiceInputPlatform({
+      ...platformInput,
+      prepared: key.prepared,
+      cloudProvider: key.cloudProvider,
+      cloudModel: key.cloudModel,
+      onText: (preview) => {
+        if (!this.disposed) this.publishActivity({ ...this.activity, preview });
+      },
+    });
     const postProcess: NonNullable<VoiceInputControllerDependencies["postProcess"]> = (
       transcript,
       options,
@@ -420,20 +414,21 @@ function subscribeRegistry(listener: () => void): () => void {
 export function useRetainedVoiceInputSession(input: {
   readonly prepared: PreparedConnection | null;
   readonly grantId: string | null;
-  readonly onDevice?: boolean | undefined;
   readonly cloudProvider?: CloudSpeechProvider | undefined;
   readonly cloudModel?: CloudSpeechModelId | undefined;
 }): VoiceInputSession | null {
   const { grantId, cloudProvider, cloudModel } = input;
-  const prepared = input.onDevice ? null : input.prepared;
-  const ready = (input.onDevice === true || prepared !== null) && grantId !== null;
+  const { prepared } = input;
+  const ready = prepared !== null && grantId !== null;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- retains the shared recording session for this destination while mounted
   useEffect(() => {
-    if (!ready || !grantId || typeof navigator === "undefined") return;
+    if (!ready || !prepared || !grantId || typeof navigator === "undefined") return;
     return retainVoiceInputSession({ prepared, grantId, cloudProvider, cloudModel });
   }, [ready, prepared, grantId, cloudProvider, cloudModel]);
   return useSyncExternalStore(subscribeRegistry, () =>
-    ready && grantId ? findSession({ prepared, grantId, cloudProvider, cloudModel }) : null,
+    ready && prepared && grantId
+      ? findSession({ prepared, grantId, cloudProvider, cloudModel })
+      : null,
   );
 }
 
