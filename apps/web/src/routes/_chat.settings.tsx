@@ -46,34 +46,15 @@ function RestoreDeviceDefaultsButton({ onRestored }: { onRestored: () => void })
 }
 
 function SettingsScopeBoundary({ pathname, children }: { pathname: string; children: ReactNode }) {
-  const { scope, connectedEnvironments } = useSettingsScope();
+  const { scope } = useSettingsScope();
   const { environments } = useEnvironments();
   const gt = useGT();
   const m = useMessages();
   const hash = useLocation({ select: (location) => location.hash });
   const searchTarget = getSettingsSearchTargetScope(hash);
-  const agentFeedbackAvailability = searchTarget?.agentFeedbackOnly
-    ? {
-        eligibleEnvironmentIds: environments
-          .filter(
-            (environment) =>
-              environment.connection.phase === "connected" &&
-              environment.serverConfig?.environment.capabilities.agentFeedback === true,
-          )
-          .map((environment) => environment.environmentId),
-        isTargetAvailable:
-          connectedEnvironments.length > 0 &&
-          connectedEnvironments.every(
-            (environment) =>
-              environment.serverConfig?.environment.capabilities.agentFeedback === true,
-          ),
-      }
+  const targetAvailability = searchTarget?.requiresThreadAutoSettlement
+    ? getThreadAutoSettlementSearchAvailability(environments, scope)
     : null;
-  const targetAvailability =
-    agentFeedbackAvailability ??
-    (searchTarget?.requiresThreadAutoSettlement
-      ? getThreadAutoSettlementSearchAvailability(environments, scope)
-      : null);
   if (
     scope.kind !== "unavailable" &&
     searchTarget &&

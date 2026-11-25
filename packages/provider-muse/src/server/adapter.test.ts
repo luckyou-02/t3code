@@ -415,12 +415,10 @@ describe("MuseAdapterV2", () => {
           },
         });
         yield* sessions.clear(THREAD_ID);
-        yield* harness.runtime.startTurn({
-          ...(yield* turnInput(harness.providerThread, 1, harness.policy)),
-          agentFeedback: "auto",
-        });
-        const turn = yield* fake.takeCall("turn/start");
-        assert.match(JSON.stringify(turn.params.input), /t3_feedback/);
+        yield* harness.runtime.startTurn(
+          yield* turnInput(harness.providerThread, 1, harness.policy),
+        );
+        yield* fake.takeCall("turn/start");
       }
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
   );
