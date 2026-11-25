@@ -1,6 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
-  allowsPreviewTunnel,
   type EnvironmentId,
   type PreviewRuntime,
   type PreviewSessionSnapshot,
@@ -16,23 +15,18 @@ import {
   readEnvironmentSupportsServerBrowser,
   useEnvironmentSupportsServerBrowser,
 } from "~/state/entities";
-import { environmentServerConfigsAtom } from "~/state/server";
 
 import { tunnelsEnvironmentLoopback } from "./browserTargetResolver";
 
-/** Whether this desktop loads the environment's localhost itself: it is local, or its tunnel is on. */
 const desktopLoadsLoopbackAtom = Atom.family((environmentId: EnvironmentId) =>
   Atom.make((get) => {
     const target = get(environmentCatalog.catalogValueAtom).entries.get(environmentId)?.target;
-    if (!tunnelsEnvironmentLoopback(target)) return true;
-    const config = get(environmentServerConfigsAtom).get(environmentId);
-    return config !== undefined && allowsPreviewTunnel(config);
+    return !tunnelsEnvironmentLoopback(target);
   }).pipe(Atom.withLabel(`preview:desktop-loads-loopback:${environmentId}`)),
 );
 
 export function previewRuntimeFor(environmentId: EnvironmentId): PreviewRuntime | undefined {
   if (!readEnvironmentSupportsServerBrowser(environmentId)) return undefined;
-  // Without its tunnel, another environment's tabs stream from it, as on the web.
   if (
     isPreviewSupportedInRuntime() &&
     environmentId !== appAtomRegistry.get(primaryEnvironmentIdAtom) &&

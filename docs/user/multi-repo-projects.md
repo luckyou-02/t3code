@@ -144,8 +144,7 @@ What the commands can rely on, and what they must do:
   folder without its own locking.
 - **Each command has ten minutes.**
 - **The commands run only for requests that may run commands on the host.** A client paired
-  without `orchestration:operate` and `terminal:operate`, and a thread started through a
-  [linked environment](remote-access.md#link-another-environment) paired below full access, get no worktree in a project
+  without `orchestration:operate` and `terminal:operate` gets no worktree in a project
   that declares a layout, and their cleanup leaves `remove` out.
 
 #### Approve the commands

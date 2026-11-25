@@ -1,5 +1,8 @@
 import {
+  BearerConnectionTarget,
   ConnectionTransientError,
+  RelayConnectionTarget,
+  SshConnectionTarget,
   PrimaryConnectionTarget,
 } from "@t3tools/client-runtime/connection";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
@@ -95,6 +98,46 @@ describe("ConnectionStorage.makeCatalogBackend", () => {
     }),
   );
 });
+
+it.effect("loads local WSL targets alongside legacy remote records", () =>
+  Effect.gen(function* () {
+    vi.stubGlobal("window", {});
+    const local = new BearerConnectionTarget({
+      environmentId: EnvironmentId.make("wsl"),
+      label: "WSL",
+      connectionId: "local:wsl",
+    });
+    const remote = {
+      environmentId: EnvironmentId.make("remote"),
+      label: "Another machine",
+    };
+    const raw = encodeCatalog({
+      ...emptyCatalog,
+      targets: [
+        new BearerConnectionTarget({ ...remote, connectionId: "bearer:remote" }),
+        new RelayConnectionTarget(remote),
+        new SshConnectionTarget({ ...remote, connectionId: "ssh:remote" }),
+        local,
+      ],
+    });
+    const request = (result: unknown) => {
+      const pending = Object.assign(new EventTarget(), { result, error: null });
+      queueMicrotask(() => pending.dispatchEvent(new Event("success")));
+      return pending;
+    };
+    const database = Object.assign(new EventTarget(), {
+      close: vi.fn(),
+      transaction: () => ({ objectStore: () => ({ get: () => request(raw) }) }),
+    });
+    vi.stubGlobal("indexedDB", { open: () => request(database) });
+
+    const targets = yield* Persistence.ConnectionTargetStore.use(({ list }) => list).pipe(
+      Effect.provide(ConnectionStorage.layer),
+    );
+
+    expect(targets).toEqual([local]);
+  }),
+);
 
 describe("IndexedDB connection recovery", () => {
   it.effect("reopens after a forced close and finalizes the current connection", () =>

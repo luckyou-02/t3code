@@ -45,6 +45,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { m } from "../i18n/messages";
 import { projectFaviconCache } from "../assets/projectFaviconCache";
+import { isDesktopLocalConnectionTarget } from "./desktopLocal";
 import { browserThreadTriageOutboxStore } from "./threadTriageOutboxStore";
 
 const DATABASE_NAME = "t3code:connection-runtime";
@@ -763,7 +764,7 @@ export const layer = Layer.effectContext(
 
     const targetStore = Persistence.ConnectionTargetStore.of({
       list: catalog.read.pipe(
-        Effect.map((document) => document.targets),
+        Effect.map((document) => document.targets.filter(isDesktopLocalConnectionTarget)),
         Effect.mapError((cause) => persistenceError("list-targets", cause)),
       ),
       listDisabled: catalog.read.pipe(

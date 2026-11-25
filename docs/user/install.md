@@ -32,7 +32,6 @@ one alone and stops. Set `T3CODE_CHANNEL=nightly` to install the nightly train, 
 | ------------------------------------- | ----------------------------------------------------------------------- |
 | Start the server and open the web app | `t3`                                                                    |
 | Start the server without a browser    | `t3 serve`                                                              |
-| Use it from your other devices        | `t3 up` ([details](./remote-access.md))                                 |
 | Keep it running in the background     | `t3 service install` ([details](./background-service.md))               |
 | Move to the newest release            | `t3 update`                                                             |
 | Reclaim database space                | `t3 doctor` ([details](./background-service.md#reclaim-database-space)) |
@@ -51,7 +50,7 @@ To try T3 Code once without installing it, run `npx t3@latest` instead (needs
 Node.js for `npx`). It offers to install the `t3` command first. If you say no,
 it asks again at the next minor release, and `npx t3 install` installs it later.
 `npx t3` always runs the version npm picked, even when a `t3` is installed. On
-the nightly train, run your installed `t3` (for example `t3 up`), not
+the nightly train, run your installed `t3` (for example `t3`), not
 `npx t3`, which runs the latest stable release.
 
 ### Intel Macs
@@ -173,7 +172,7 @@ Install T3 Code from the
 [App Store](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) or
 [Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code).
 The phone connects to a server on another machine. Follow
-[remote access](./remote-access.md) to connect it with a pairing URL over your local network or Tailscale.
+[local access](./remote-access.md) to connect it with a pairing URL from this machine.
 
 Store links and QR codes are also available in **Settings → About → Mobile app**
 on web and desktop. The store apps work with both stable and Nightly servers. Test builds are optional:
@@ -295,7 +294,7 @@ installation, update checks, and shutdown limits keep their existing behavior.
 
 - [Working with threads](./thread-sidebar.md): start tasks and organize parallel work.
 - [Permission modes](./permission-modes.md): choose when agents ask before acting.
-- [Remote access](./remote-access.md): connect from another device.
+- [Local access](./remote-access.md): pair from this machine.
 - [Running in the background](./background-service.md): keep a host available.
 - [Updating T3 Code](./updating.md): update the app and connected servers.
 - [Managed policy](./managed-policy.md): configure T3 Code for everyone on a machine.

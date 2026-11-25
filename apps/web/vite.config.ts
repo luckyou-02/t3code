@@ -294,7 +294,7 @@ const configuredAllowedHosts = (process.env.T3CODE_DEV_ALLOWED_HOSTS ?? "")
   .split(",")
   .map((entry) => entry.trim())
   .filter((entry) => entry.length > 0);
-const allowedHosts = [".ts.net", ...configuredAllowedHosts];
+const allowedHosts = configuredAllowedHosts;
 
 export default defineConfig(({ command }) => {
   // `vp dev` and `--built` dev pair this client with a server run from source, which reports the

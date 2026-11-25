@@ -123,7 +123,7 @@ Top-level skipped runs, such as webhook deliveries a workflow chose to ignore, d
 
 Each `agent` step runs in an ordinary thread, left out of thread lists (including `t3 thread list`). Open it from the run to watch it live, read its transcript, or send follow-up messages; the thread links back to the run.
 
-An `agent` step can launch a new thread with its own `workspace` (such as a worktree), `runtimeMode`, `interactionMode`, `title`, and typed `returns`, or continue an earlier step's thread. Runs can set their display name with `title(text)`. An `agent` step can also target a project on a [linked environment](remote-access.md#link-another-environment) (requires **Settings → Labs → Linked environments**); the run itself stays on the server that started it.
+An `agent` step can launch a new thread with its own `workspace` (such as a worktree), `runtimeMode`, `interactionMode`, `title`, and typed `returns`, or continue an earlier step's thread. Runs can set their display name with `title(text)`.
 
 ### Failures, pause, and cancel
 

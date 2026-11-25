@@ -8,15 +8,13 @@ do not need to keep a terminal open.
 Install the `t3` CLI first ([Install T3 Code](./install.md#command-line)), then
 run these commands on the machine that will host T3 Code:
 
-| Task                                | Command                |
-| ----------------------------------- | ---------------------- |
-| Set up local network access         | `t3 up`                |
-| See how your other devices reach it | `t3 status`            |
-| Install and start                   | `t3 service install`   |
-| Inspect status and log location     | `t3 service status`    |
-| Move to a newer release             | `t3 update`            |
-| Restart                             | `t3 service restart`   |
-| Stop and remove from startup        | `t3 service uninstall` |
+| Task                            | Command                |
+| ------------------------------- | ---------------------- |
+| Install and start               | `t3 service install`   |
+| Inspect status and log location | `t3 service status`    |
+| Move to a newer release         | `t3 update`            |
+| Restart                         | `t3 service restart`   |
+| Stop and remove from startup    | `t3 service uninstall` |
 
 Uninstalling the service leaves your projects, threads, and settings intact.
 Running `t3 service install` again repairs a service that `t3 service status`
@@ -42,19 +40,7 @@ downloaded versions after showing you the list and asking once. Your projects,
 threads, and settings under `~/.t3/userdata` are kept, along with `service.env`
 under T3 home. Pass `--yes` from a script.
 
-## Local network access
-
-A new service answers only on this machine. Other devices reach it once you
-choose the local network in `t3 up` (or run `t3 up --lan`, which sets
-`T3CODE_LAN=true` in `service.env`). It then listens on your local network and
-Tailscale addresses, so the desktop and mobile apps on the same network or
-tailnet connect directly. It still does not answer on public addresses. Anyone
-on the same network can reach the port, so a pairing code is all that keeps
-them out.
-
-A service installed before `T3CODE_LAN` existed keeps listening on the local
-network. `t3 status` says so, and `t3 up --no-lan` turns it off. Any
-`T3CODE_HOST` value replaces this setting.
+The service listens on loopback. Use `t3 pair` to open it in a browser on this machine.
 
 ## Configure the service environment
 

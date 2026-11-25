@@ -31,7 +31,7 @@ import { m, type MessageResolver } from "../i18n/messages";
 
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { serverEnvironment, updateOutdatedServer } from "~/state/server";
+import { serverEnvironment } from "~/state/server";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { useServerConfigs } from "~/state/entities";
@@ -447,51 +447,3 @@ export function ServerUpdateAction({
 }
 
 /** Read the host descriptor's version because the host never delivers server config. */
-export function OutdatedServerUpdateAction({
-  environmentId,
-  serverLabel,
-  fromVersion,
-  targetVersion,
-  label,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly serverLabel: string;
-  readonly fromVersion: string | undefined;
-  readonly targetVersion: string;
-  readonly label?: string;
-}) {
-  const gt = useGT();
-  const update = useAtomCommand(updateOutdatedServer, { reportFailure: false });
-  const handleUpdate = async () => {
-    if (pendingUpdateEnvironmentIds.has(environmentId)) return;
-    pendingUpdateEnvironmentIds.add(environmentId);
-    const result = await update({
-      environmentId,
-      input: { targetVersion },
-      ...(fromVersion === undefined ? {} : { fromVersion }),
-    });
-    pendingUpdateEnvironmentIds.delete(environmentId);
-    if (result._tag === "Failure") {
-      if (isAtomCommandInterrupted(result)) return;
-      toastManager.add({
-        type: "error",
-        title: m(msg("{serverLabel} update failed", { serverLabel })),
-        description: updateFailureMessage(squashAtomCommandFailure(result)),
-      });
-      return;
-    }
-    toastManager.add({
-      type: "success",
-      title: m(msg("{serverLabel} updated", { serverLabel })),
-      description: m(msg("Reconnected on t3@{version}.", { version: result.value.targetVersion })),
-    });
-  };
-  if (fromVersion !== undefined && crossesReleaseTrack(fromVersion, targetVersion)) {
-    return <CrossTrackNote />;
-  }
-  return (
-    <Button size="xs" variant="outline" onClick={() => void handleUpdate()}>
-      {label ?? gt("Update", { $context: "verb, updates the server" })}
-    </Button>
-  );
-}

@@ -8,20 +8,9 @@ agent signs in once, and you choose what it may do.
 
 ## Get the MCP URL
 
-In **Settings → Environments**, open a saved environment's menu and choose
-**Copy MCP URL**. The URL is the environment's address followed by `/mcp`, for
-example:
-
-```text
-https://<environment-address>/mcp
-```
-
-The agent must run on your own computers and use `localhost` on the host or an
-`https` address, such as [Tailscale HTTPS](./remote-access.md#tailscale-https).
-Signing in sends the agent's credentials to the environment, and agents only do
-that over `https` or to `localhost`. A plain-`http` LAN or Tailscale address,
-like `http://100.x.y.z:3773`, lets an agent find the environment but not finish
-signing in.
+Use `http://127.0.0.1:3773/mcp` from the machine running T3 Code. If the
+server selected a different port, use the port in the local URL printed by
+`t3 pair`.
 
 ## Approve a sign-in
 
@@ -66,7 +55,7 @@ T3 Code.
 ## Claude Code
 
 ```sh
-claude mcp add --transport http t3 https://<environment-address>/mcp
+claude mcp add --transport http t3 http://127.0.0.1:3773/mcp
 claude mcp login t3
 ```
 
@@ -78,7 +67,7 @@ once you approve.
 ## Codex
 
 ```sh
-codex mcp add t3 --url https://<environment-address>/mcp
+codex mcp add t3 --url http://127.0.0.1:3773/mcp
 codex mcp login t3
 ```
 

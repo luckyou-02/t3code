@@ -337,9 +337,7 @@ back the standard rows.
 
 ## Open a thread beside the one you are in
 
-On web and desktop, a subagent, a side chat, and a
-[thread on a linked machine](remote-access.md#read-a-linked-machines-threads)
-all open the same way. Click one to open it as a tab in the right panel, so the
+On web and desktop, subagents and side chats open the same way. Click one to open it as a tab in the right panel, so the
 thread you are in stays in view. Hold ⌘ (Ctrl on Windows and Linux) while you
 click, or middle-click, to open it in the main view instead. With the keyboard,
 Enter and ⌘/Ctrl + Enter do the same. Right-click for **Open in side panel** and

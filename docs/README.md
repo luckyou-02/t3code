@@ -22,7 +22,7 @@
 - [Usage and limits](./user/usage.md)
 - [Secrets](./user/secrets.md)
 - [Diagnostics export](./user/telemetry.md)
-- [Remote access](./user/remote-access.md)
+- [Local access](./user/remote-access.md)
 - [Outside agents (MCP)](./user/outside-agents.md)
 - [Running in the background](./user/background-service.md)
 - [Updating T3 Code](./user/updating.md)

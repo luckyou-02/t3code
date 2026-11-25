@@ -1338,30 +1338,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("machine glyph sidebar mac mini studio laptop desktop server cloud vm")],
   },
   {
-    id: "local-environment",
-    title: msg("Local environment"),
-    to: "/settings/connections",
-    searchTerms: [msg("turn off on disable enable local server agents remote only restart")],
-    desktopOnly: true,
-  },
-  {
-    id: "network-access",
-    title: msg("Network access"),
-    to: "/settings/access",
-    targetId: "connections-environment",
-    searchTerms: [msg("expose backend remote pairing local machine interfaces host restart")],
-    localBackendManagementOnly: true,
-  },
-  {
-    id: "tailscale-https",
-    title: msg("Tailscale HTTPS"),
-    to: "/settings/access",
-    targetId: "connections-environment",
-    searchTerms: [msg("serve magicdns endpoint remote secure network")],
-    desktopOnly: true,
-    localBackendManagementOnly: true,
-  },
-  {
     id: "wsl-backend",
     title: msg("WSL backend"),
     to: "/settings/access",
@@ -1376,15 +1352,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     wslAvailableOnly: true,
   },
   {
-    id: "preview-tunnel",
-    title: msg("Preview tunnel"),
-    to: "/settings/access",
-    targetId: "connections-environment",
-    searchTerms: [
-      msg("localhost loopback port forwarding open on this device browser tabs stream security"),
-    ],
-  },
-  {
     id: "connections-environment",
     title: msg("This machine"),
     to: "/settings/access",
@@ -1393,12 +1360,6 @@ export const SETTINGS_SEARCH_ITEMS = [
         "connections server backend local remote access administrative permissions scope pairing links qr code authorized clients sessions revoke endpoint",
       ),
     ],
-  },
-  {
-    id: "remote-environments",
-    title: msg("Environments"),
-    to: "/settings/connections",
-    searchTerms: [msg("add pair backend host code ssh config agent tunnel saved t3 connect")],
   },
   {
     id: "load-balancing",
