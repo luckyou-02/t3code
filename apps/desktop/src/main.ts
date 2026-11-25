@@ -1,4 +1,3 @@
-import * as MacPermissions from "./permissions/MacPermissions.ts";
 import { handleStdioError } from "./app/stdioErrors.ts";
 
 for (const stream of [process.stdout, process.stderr]) {
@@ -141,7 +140,6 @@ const layerElectron = Layer.mergeAll(
 );
 
 const layerDesktopFoundation = Layer.mergeAll(
-  MacPermissions.layer,
   DesktopManagedPolicy.layer,
   DesktopState.layer,
   DesktopShutdown.layer,

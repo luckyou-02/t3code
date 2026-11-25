@@ -129,8 +129,6 @@ export const PORT_FORWARD_LIST_CHANNEL = "desktop:port-forward-list";
 export const PORT_FORWARD_CHANGE_CHANNEL = "desktop:port-forward-change";
 export const PORT_FORWARD_SHARES_LOOPBACK_CHANNEL = "desktop:port-forward-shares-loopback";
 
-export const MAC_PERMISSION_HELPER_CHANNEL = "desktop:mac-permission-helper";
-
 export const PREVIEW_RECORDING_INPUT_CHANNEL = "desktop:preview-recording-input";
 
 export const PREVIEW_ANNOTATION_VOICE_EVENT_CHANNEL = "desktop:preview-annotation-voice-event";
