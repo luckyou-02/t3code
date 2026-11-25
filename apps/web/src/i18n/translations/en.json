@@ -31,9 +31,6 @@
   "d8fa0a55446bbb0d": "Before the cache expires (beta)",
   "1574d19b613d3274": "Never",
   "a78eb961f5618e7f": "Not installed on this machine.",
-  "4c34e647dc74b279": "Needs Keychain access to read its cookies.",
-  "a613ba1b6f32fc2c": "No encryption key in your Keychain. Sign in to that browser once, then retry.",
-  "322d9662c37ead48": "Give T3 Code Full Disk Access in System Settings → Privacy & Security, then retry.",
   "24fdd54c2321912a": "Quit the browser first so its cookie database can be read.",
   "1e3857bfd41528f6": "Importing from this browser isn't possible on this platform.",
   "2bfa3f72b8bb8657": "The system keyring could not be accessed. Make sure your desktop keyring is running and unlocked, then retry.",
@@ -1326,7 +1323,6 @@
   "415d9fed5542d278": "Could not open file",
   "1d1bbe5b700afe63": "Unable to reveal file",
   "31dc19d033af2774": "Unable to open link.",
-  "029d8d0201aed231": "Unable to open System Settings.",
   "9af3083226778d3c": "Open VSX returned malformed theme details.",
   "b42cb65fd27d4d34": "Open VSX took too long to respond.",
   "6521de72c1ad5528": "Open VSX search is unavailable right now.",
@@ -7348,20 +7344,13 @@
   "35c482e288f87f27": "no cookies",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
   "800c4f374a9ad325": "That profile is no longer available. Choose where to import these cookies.",
-  "e26c3e8a2b76eb7c": "Could not open System Settings. Try Allow again.",
-  "6691de9875a03f07": "Full Disk Access",
-  "c8c61106697ccef6": "Read {browser}''s cookies for this import.",
-  "9d7376f252f4b80f": "Access is still required. Quit and reopen T3 Code if you just allowed it, then retry the import.",
-  "a134bbc40d0bb293": "If access doesn't update after you allow it, quit and reopen T3 Code, then retry the import.",
   "7f0e44a32856487e": "You've reached the profile limit. Choose an existing profile to import into.",
   "38419e3442b3a9b1": "From",
   "0b6c47fddd767fe6": "Into",
   "5b8d4a3e5e16309b": "New profile",
   "b2438565fb42704d": "Created for these cookies",
   "993e86bc7af6447e": "Existing profile",
-  "65962374e1102956": "Checking Full Disk Access.",
   "46b4bff87df769a3": "Checking whether the browser has closed.",
-  "ad9445ed88e11622": "Checking access…",
   "7513f0a2afb216be": "{count, plural, one {Imported {formatted} cookie} other {Imported {formatted} cookies}}",
   "982bd5b9687a7474": "{count, plural, one {Skipped {formatted} cookie} other {Skipped {formatted} cookies}}",
   "6cab2d410a8b3237": "No cookies found",
@@ -7388,24 +7377,6 @@
     " is open, so its cookies can’t be read yet. Quit it, then continue."
   ],
   "33e46d95a6e43975": "I’ve quit it",
-  "4244ad5e8e097a55": [
-    "Let T3 Code read ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    "’s cookies"
-  ],
-  "8f8f31363cbae72f": [
-    "To import cookies from ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    ", T3 Code needs Full Disk Access. Turn it on in System Settings, then come back to finish the import. You can revoke it again once the import is done."
-  ],
   "6418483c2e2b1e27": [
     "Import from ",
     {
@@ -8317,8 +8288,6 @@
   "8b45e296e25933cb": "Connect to an environment to clear profile data",
   "c7902d95bd57a25f": "Removing…",
   "4a42ed8f9a4c6750": "Remove profile",
-  "90eae6ed93306de1": "Could not open System Settings",
-  "e80b0936736a6dd8": "Open Privacy & Security → Full Disk Access manually.",
   "742074ac5e6fa00e": "Browsing",
   "1c9c2e85e8153875": "Recordings",
   "fedb5397301d3392": "Fill panel",

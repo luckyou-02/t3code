@@ -31,9 +31,6 @@
   "d8fa0a55446bbb0d": "Innan cachen går ut (beta)",
   "1574d19b613d3274": "Aldrig",
   "a78eb961f5618e7f": "Inte installerad på den här datorn.",
-  "4c34e647dc74b279": "Behöver åtkomst till nyckelringen för att läsa sina cookies.",
-  "a613ba1b6f32fc2c": "Ingen krypteringsnyckel i nyckelringen. Logga in i webbläsaren en gång och försök sedan igen.",
-  "322d9662c37ead48": "Ge T3 Code Full skivåtkomst i Systeminställningar → Integritet och säkerhet och försök sedan igen.",
   "24fdd54c2321912a": "Avsluta webbläsaren först så att dess cookie-databas kan läsas.",
   "1e3857bfd41528f6": "Import från den här webbläsaren går inte på den här plattformen.",
   "2bfa3f72b8bb8657": "Systemets nyckelring kunde inte nås. Kontrollera att skrivbordets nyckelring körs och är upplåst och försök sedan igen.",
@@ -1326,7 +1323,6 @@
   "415d9fed5542d278": "Kunde inte öppna filen",
   "1d1bbe5b700afe63": "Det gick inte att visa filen",
   "31dc19d033af2774": "Det gick inte att öppna länken.",
-  "029d8d0201aed231": "Det gick inte att öppna Systeminställningar.",
   "9af3083226778d3c": "Open VSX returnerade felformaterad temainformation.",
   "b42cb65fd27d4d34": "Open VSX tog för lång tid att svara.",
   "6521de72c1ad5528": "Sökning i Open VSX är inte tillgänglig just nu.",
@@ -7347,20 +7343,13 @@
   "35c482e288f87f27": "inga cookies",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
   "800c4f374a9ad325": "Den profilen är inte längre tillgänglig. Välj var de här cookies ska importeras.",
-  "e26c3e8a2b76eb7c": "Kunde inte öppna Systeminställningar. Försök med Tillåt igen.",
-  "6691de9875a03f07": "Full skivåtkomst",
-  "c8c61106697ccef6": "Läs cookies från {browser} för den här importen.",
-  "9d7376f252f4b80f": "Åtkomst krävs fortfarande. Avsluta och öppna T3 Code igen om du precis tillät det, och försök sedan importera igen.",
-  "a134bbc40d0bb293": "Om åtkomsten inte uppdateras efter att du har tillåtit den, avsluta och öppna T3 Code igen och försök sedan importera igen.",
   "7f0e44a32856487e": "Du har nått gränsen för profiler. Välj en befintlig profil att importera till.",
   "38419e3442b3a9b1": "Från",
   "0b6c47fddd767fe6": "Till",
   "5b8d4a3e5e16309b": "Ny profil",
   "b2438565fb42704d": "Skapad för de här cookies",
   "993e86bc7af6447e": "Befintlig profil",
-  "65962374e1102956": "Kontrollerar Full skivåtkomst.",
   "46b4bff87df769a3": "Kontrollerar om webbläsaren har stängts.",
-  "ad9445ed88e11622": "Kontrollerar åtkomst…",
   "7513f0a2afb216be": "{count, plural, one {Importerade {formatted} cookie} other {Importerade {formatted} cookies}}",
   "982bd5b9687a7474": "{count, plural, one {Hoppade över {formatted} cookie} other {Hoppade över {formatted} cookies}}",
   "6cab2d410a8b3237": "Inga cookies hittades",
@@ -7387,23 +7376,6 @@
     " är öppen, så dess cookies kan inte läsas än. Avsluta den och fortsätt sedan."
   ],
   "33e46d95a6e43975": "Jag har avslutat den",
-  "4244ad5e8e097a55": [
-    "Låt T3 Code läsa cookies från ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    }
-  ],
-  "8f8f31363cbae72f": [
-    "För att importera cookies från ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " behöver T3 Code Full skivåtkomst. Aktivera det i Systeminställningar och kom sedan tillbaka för att slutföra importen. Du kan återkalla det igen när importen är klar."
-  ],
   "6418483c2e2b1e27": [
     "Importera från ",
     {
@@ -8315,8 +8287,6 @@
   "8b45e296e25933cb": "Anslut till en miljö för att rensa profildata",
   "c7902d95bd57a25f": "Tar bort…",
   "4a42ed8f9a4c6750": "Ta bort profil",
-  "90eae6ed93306de1": "Kunde inte öppna Systeminställningar",
-  "e80b0936736a6dd8": "Öppna Integritet och säkerhet → Full skivåtkomst manuellt.",
   "742074ac5e6fa00e": "Surfning",
   "1c9c2e85e8153875": "Inspelningar",
   "fedb5397301d3392": "Fyll panelen",

@@ -38,15 +38,6 @@ export function createLocalApi(): LocalApi {
         if (!isWebUrl(url)) throw new Error(m(msg("Unable to open link.")));
         window.open(url, "_blank", "noopener,noreferrer");
       },
-      openSystemSettings: async (pane) => {
-        if (!window.desktopBridge) {
-          throw new Error(m(msg("Unable to open System Settings.")));
-        }
-        const opened = await window.desktopBridge.openSystemSettings(pane);
-        if (!opened) {
-          throw new Error(m(msg("Unable to open System Settings.")));
-        }
-      },
     },
     contextMenu: {
       show: async <T extends string>(

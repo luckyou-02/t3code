@@ -15,7 +15,6 @@ import {
   ChromiumKeyError,
   ChromiumKeyFailure,
   readWindowsKey,
-  resolveChromiumKeys,
   type ChromiumKeyMaterial,
 } from "./ChromiumKeys.ts";
 import {
@@ -26,11 +25,8 @@ import {
   type ImportedCookie,
 } from "./CookieDatabase.ts";
 
-/** OSCrypt's CBC mode uses a fixed IV of 16 spaces rather than a per-record one. */
-const AES_CBC_IV = Buffer.alloc(16, 0x20);
 const AES_GCM_NONCE_LENGTH = 12;
 const AES_GCM_TAG_LENGTH = 16;
-const isChromiumKeyError = Schema.is(ChromiumKeyError);
 
 export const ChromiumCookieReadReason = Schema.Literals([
   ...ChromiumKeyFailure.literals,
@@ -101,22 +97,6 @@ const stripDomainBinding = (
     : null;
 };
 
-const decryptCbc = (
-  payload: Buffer,
-  key: Buffer,
-  domain: string,
-  schemaVersion: number,
-): string | null => {
-  try {
-    const decipher = NodeCrypto.createDecipheriv("aes-128-cbc", key, AES_CBC_IV);
-    decipher.setAutoPadding(true);
-    const plaintext = Buffer.concat([decipher.update(payload), decipher.final()]);
-    return stripDomainBinding(plaintext, domain, schemaVersion)?.toString("utf8") ?? null;
-  } catch {
-    return null;
-  }
-};
-
 const decryptGcm = (
   payload: Buffer,
   key: Buffer,
@@ -142,7 +122,6 @@ export function decryptChromiumValue(
   keys: ChromiumKeyMaterial,
   domain: string,
   schemaVersion = 23,
-  platform: NodeJS.Platform = "linux",
 ): string | null {
   const buffer = Buffer.from(encrypted);
   if (buffer.length === 0) return "";
@@ -150,35 +129,13 @@ export function decryptChromiumValue(
   const payload = buffer.subarray(3);
 
   // Windows v10 uses AES-256-GCM; app-bound v20 records have no key here.
-  if (platform === "win32") {
-    return prefix === "v10" && keys.gcmV10
-      ? decryptGcm(payload, keys.gcmV10, domain, schemaVersion)
-      : null;
-  }
-
-  // Retry the empty-passphrase key used by some Linux clients (crbug.com/1195256).
-  if (prefix === "v10") {
-    if (!keys.cbcV10) return null;
-    return (
-      decryptCbc(payload, keys.cbcV10, domain, schemaVersion) ??
-      (keys.cbcEmpty ? decryptCbc(payload, keys.cbcEmpty, domain, schemaVersion) : null)
-    );
-  }
-  if (prefix === "v11") {
-    if (!keys.cbcV11) return null;
-    return (
-      decryptCbc(payload, keys.cbcV11, domain, schemaVersion) ??
-      (keys.cbcEmpty ? decryptCbc(payload, keys.cbcEmpty, domain, schemaVersion) : null)
-    );
-  }
-  if (platform === "darwin" || platform === "linux") {
-    return stripDomainBinding(buffer, domain, schemaVersion)?.toString("utf8") ?? null;
-  }
-  return null;
+  return prefix === "v10" && keys.gcmV10
+    ? decryptGcm(payload, keys.gcmV10, domain, schemaVersion)
+    : null;
 }
 
 export const readChromiumCookieDatabase = Effect.fn("ChromiumCookies.readChromiumCookieDatabase")(
-  function* (snapshotPath: string, keys: ChromiumKeyMaterial, platform: NodeJS.Platform) {
+  function* (snapshotPath: string, keys: ChromiumKeyMaterial) {
     const result = yield* Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       // Chromium razes a damaged jar to a file with no tables and rebuilds it on its next write.
@@ -212,13 +169,7 @@ export const readChromiumCookieDatabase = Effect.fn("ChromiumCookies.readChromiu
       const value =
         row.encrypted_value.length === 0
           ? row.value
-          : decryptChromiumValue(
-              row.encrypted_value,
-              keys,
-              row.host_key,
-              result.schemaVersion,
-              platform,
-            );
+          : decryptChromiumValue(row.encrypted_value, keys, row.host_key, result.schemaVersion);
       if (value === null) {
         undecryptable += 1;
         undecryptableHosts.add(bareHost(row.host_key));
@@ -238,17 +189,6 @@ export const readChromiumCookieDatabase = Effect.fn("ChromiumCookies.readChromiu
         sameSite: sameSiteFromColumn(row.samesite),
       });
     }
-    if (
-      cookies.length === 0 &&
-      keys.cbcV11Error !== undefined &&
-      result.rows.some(
-        (row) =>
-          row.top_frame_site_key === "" &&
-          Buffer.from(row.encrypted_value.subarray(0, 3)).toString("latin1") === "v11",
-      )
-    ) {
-      return yield* keys.cbcV11Error;
-    }
     return {
       cookies,
       undecryptable,
@@ -259,11 +199,7 @@ export const readChromiumCookieDatabase = Effect.fn("ChromiumCookies.readChromiu
 
 export interface ChromiumCookieSource {
   readonly cookieDatabasePath: string;
-  readonly keychainService: string | undefined;
-  readonly keychainAccount: string | undefined;
-  readonly linuxSecretApplication: string | undefined;
   readonly windowsLocalStatePath?: string;
-  readonly platform: NodeJS.Platform;
 }
 
 export const readChromiumCookies = Effect.fn("ChromiumCookies.readChromiumCookies")(function* (
@@ -274,14 +210,9 @@ export const readChromiumCookies = Effect.fn("ChromiumCookies.readChromiumCookie
   FileSystem.FileSystem | Path.Path | Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
 > {
   const keys = yield* (
-    source.platform === "win32" && source.windowsLocalStatePath
+    source.windowsLocalStatePath
       ? readWindowsKey(source.windowsLocalStatePath).pipe(Effect.map((gcmV10) => ({ gcmV10 })))
-      : resolveChromiumKeys({
-          platform: source.platform,
-          keychainService: source.keychainService,
-          keychainAccount: source.keychainAccount,
-          linuxSecretApplication: source.linuxSecretApplication,
-        })
+      : Effect.fail(new ChromiumKeyError({ reason: "unsupportedPlatform" }))
   ).pipe(
     Effect.mapError(
       (cause: ChromiumKeyError) =>
@@ -304,11 +235,11 @@ export const readChromiumCookies = Effect.fn("ChromiumCookies.readChromiumCookie
     ),
   );
 
-  return yield* readChromiumCookieDatabase(snapshotPath, keys, source.platform).pipe(
+  return yield* readChromiumCookieDatabase(snapshotPath, keys).pipe(
     Effect.mapError(
       (cause) =>
         new ChromiumCookieReadError({
-          reason: isChromiumKeyError(cause) ? cause.reason : "readFailed",
+          reason: "readFailed",
           cookieDatabasePath: source.cookieDatabasePath,
           cause,
         }),

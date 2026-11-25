@@ -74,7 +74,6 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
-import { readLocalApi } from "~/localApi";
 
 import { toastManager } from "../ui/toast";
 import {
@@ -1669,22 +1668,6 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
             runWizardImport(importSession.source, importSession.environmentId, input)
           }
           onRefreshSource={() => refreshImportSource(importSession.source.id)}
-          onCheckFullDiskAccess={
-            window.desktopBridge
-              ? () => window.desktopBridge!.checkSystemPermission("full-disk-access")
-              : undefined
-          }
-          onOpenFullDiskAccessSettings={async () => {
-            await readLocalApi()
-              ?.shell.openSystemSettings("full-disk-access")
-              .catch(() => {
-                toastManager.add({
-                  type: "error",
-                  title: gt("Could not open System Settings"),
-                  description: gt("Open Privacy & Security → Full Disk Access manually."),
-                });
-              });
-          }}
           onClose={() => setImportSession(null)}
         />
       ) : null}

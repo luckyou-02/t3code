@@ -31,9 +31,6 @@
   "d8fa0a55446bbb0d": "Bevor der Cache abläuft (Beta)",
   "1574d19b613d3274": "Nie",
   "a78eb961f5618e7f": "Auf diesem Rechner nicht installiert.",
-  "4c34e647dc74b279": "Benötigt Zugriff auf den Schlüsselbund, um die Cookies zu lesen.",
-  "a613ba1b6f32fc2c": "Kein Verschlüsselungsschlüssel in deinem Schlüsselbund. Melde dich einmal in diesem Browser an und versuche es dann erneut.",
-  "322d9662c37ead48": "Gib T3 Code in Systemeinstellungen → Datenschutz & Sicherheit den Festplattenvollzugriff und versuche es dann erneut.",
   "24fdd54c2321912a": "Beende zuerst den Browser, damit seine Cookie-Datenbank gelesen werden kann.",
   "1e3857bfd41528f6": "Der Import aus diesem Browser ist auf dieser Plattform nicht möglich.",
   "2bfa3f72b8bb8657": "Auf den System-Schlüsselbund konnte nicht zugegriffen werden. Stelle sicher, dass der Schlüsselbund deines Desktops läuft und entsperrt ist, und versuche es dann erneut.",
@@ -1326,7 +1323,6 @@
   "415d9fed5542d278": "Datei konnte nicht geöffnet werden",
   "1d1bbe5b700afe63": "Datei kann nicht angezeigt werden",
   "31dc19d033af2774": "Link kann nicht geöffnet werden.",
-  "029d8d0201aed231": "Systemeinstellungen können nicht geöffnet werden.",
   "9af3083226778d3c": "Open VSX hat fehlerhafte Design-Details zurückgegeben.",
   "b42cb65fd27d4d34": "Open VSX hat zu lange für eine Antwort gebraucht.",
   "6521de72c1ad5528": "Die Open-VSX-Suche ist gerade nicht verfügbar.",
@@ -7341,20 +7337,13 @@
   "35c482e288f87f27": "keine Cookies",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} Cookie} other {{formatted} Cookies}}",
   "800c4f374a9ad325": "Dieses Profil ist nicht mehr verfügbar. Wähle, wohin diese Cookies importiert werden sollen.",
-  "e26c3e8a2b76eb7c": "Systemeinstellungen konnten nicht geöffnet werden. Versuche „Erlauben“ erneut.",
-  "6691de9875a03f07": "Festplattenvollzugriff",
-  "c8c61106697ccef6": "Cookies von {browser} für diesen Import lesen.",
-  "9d7376f252f4b80f": "Der Zugriff ist weiterhin erforderlich. Beende T3 Code und öffne es erneut, falls du ihn gerade erlaubt hast, und wiederhole dann den Import.",
-  "a134bbc40d0bb293": "Falls der Zugriff nach dem Erlauben nicht übernommen wird, beende T3 Code, öffne es erneut und wiederhole dann den Import.",
   "7f0e44a32856487e": "Du hast das Profillimit erreicht. Wähle ein vorhandenes Profil für den Import.",
   "38419e3442b3a9b1": "Von",
   "0b6c47fddd767fe6": "Nach",
   "5b8d4a3e5e16309b": "Neues Profil",
   "b2438565fb42704d": "Für diese Cookies erstellt",
   "993e86bc7af6447e": "Vorhandenes Profil",
-  "65962374e1102956": "Festplattenvollzugriff wird geprüft.",
   "46b4bff87df769a3": "Es wird geprüft, ob der Browser geschlossen wurde.",
-  "ad9445ed88e11622": "Zugriff wird geprüft…",
   "7513f0a2afb216be": "{count, plural, one {{formatted} Cookie importiert} other {{formatted} Cookies importiert}}",
   "982bd5b9687a7474": "{count, plural, one {{formatted} Cookie übersprungen} other {{formatted} Cookies übersprungen}}",
   "6cab2d410a8b3237": "Keine Cookies gefunden",
@@ -7380,24 +7369,6 @@
     " ist geöffnet, daher können seine Cookies noch nicht gelesen werden. Beende es und fahre dann fort."
   ],
   "33e46d95a6e43975": "Ich habe es beendet",
-  "4244ad5e8e097a55": [
-    "T3 Code die Cookies von ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " lesen lassen"
-  ],
-  "8f8f31363cbae72f": [
-    "Um Cookies aus ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " zu importieren, braucht T3 Code Festplattenvollzugriff. Aktiviere ihn in den Systemeinstellungen und kehre dann zurück, um den Import abzuschließen. Nach dem Import kannst du ihn wieder entziehen."
-  ],
   "6418483c2e2b1e27": [
     "Aus ",
     {
@@ -8310,8 +8281,6 @@
   "8b45e296e25933cb": "Verbinde dich mit einer Umgebung, um Profildaten zu löschen",
   "c7902d95bd57a25f": "Wird entfernt…",
   "4a42ed8f9a4c6750": "Profil entfernen",
-  "90eae6ed93306de1": "Systemeinstellungen konnten nicht geöffnet werden",
-  "e80b0936736a6dd8": "Öffne „Datenschutz & Sicherheit → Festplattenvollzugriff“ manuell.",
   "742074ac5e6fa00e": "Browsen",
   "1c9c2e85e8153875": "Aufnahmen",
   "fedb5397301d3392": "Bereich füllen",

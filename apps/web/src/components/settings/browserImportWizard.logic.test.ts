@@ -39,9 +39,9 @@ const source = (over: Partial<BrowserImportSource> = {}): BrowserImportSource =>
 
 describe("initialWizardStep", () => {
   it("handles source availability before checking its profiles", () => {
-    expect(
-      initialWizardStep(source({ profiles: [], unavailable: "needsKeychainApproval" })),
-    ).toEqual({ step: "blocked", reason: "needsKeychainApproval" });
+    expect(initialWizardStep(source({ profiles: [], unavailable: "unsupportedPlatform" }))).toEqual(
+      { step: "blocked", reason: "unsupportedPlatform" },
+    );
   });
 });
 

@@ -1,5 +1,8 @@
+// @effect-diagnostics nodeBuiltinImport:off - Encrypts test fixtures with node:crypto
+// and constructs OS-native fixture paths.
+import * as NodeCrypto from "node:crypto";
+import * as NodePath from "node:path";
 import * as NodeSqlite from "node:sqlite";
-import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { BrowserImportSource } from "@t3tools/contracts";
@@ -9,35 +12,18 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as Cipher from "effect/crypto/Cipher";
-import * as Digest from "effect/crypto/Digest";
-import * as Kdf from "effect/crypto/Kdf";
-import { vi } from "vite-plus/test";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import { ChildProcessSpawner } from "effect/process";
 
 import * as BrowserSession from "../BrowserSession.ts";
 import { readManagedPolicyFile } from "@t3tools/shared/managedPolicyFile";
 import * as DesktopManagedPolicy from "../../app/DesktopManagedPolicy.ts";
 import * as BrowserImport from "./BrowserImport.ts";
-import { LinuxBrowserSecretPath } from "./LinuxBrowserSecret.ts";
 import { BROWSER_IMPORT_SOURCES, sourcePathContext } from "./Sources.ts";
-import { symlinksSupported } from "@t3tools/shared/testing/symlinks";
 
 const helium = BROWSER_IMPORT_SOURCES.find((source) => source.id === "helium")!;
 const decodeImportSource = Schema.decodeEffect(BrowserImportSource);
-const chromiumKeychainSecret = "fixture-chromium-keychain-secret";
-
-vi.mock("@napi-rs/keyring", () => ({
-  AsyncEntry: class {
-    readonly getPassword: () => Promise<string | undefined>;
-
-    constructor(service: string, account: string) {
-      this.getPassword = async () =>
-        service === "Chromium Safe Storage" && account === "Chromium"
-          ? chromiumKeychainSecret
-          : undefined;
-    }
-  },
-}));
 
 const cookie = {
   url: "https://rejected.example/path",
@@ -66,13 +52,18 @@ const layerRejectedBeforeSession = Layer.succeed(
 const withImporter = Effect.fnUntraced(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-import-" });
-  const layerEnvironment = Layer.succeed(HostProcess.Environment, { HOME: home });
+  const env = {
+    HOME: home,
+    APPDATA: NodePath.join(home, "AppData", "Roaming"),
+    LOCALAPPDATA: NodePath.join(home, "AppData", "Local"),
+  };
+  const layerEnvironment = Layer.succeed(HostProcess.Environment, env);
   const context = yield* sourcePathContext.pipe(
-    Effect.provideService(HostProcess.Environment, { HOME: home }),
-    Effect.provideService(HostProcess.Platform, "darwin"),
+    Effect.provideService(HostProcess.Environment, env),
+    Effect.provideService(HostProcess.Platform, "win32"),
   );
   const root = helium.userDataDirectory(context);
-  if (root === undefined) throw new Error("Helium has no macOS user-data directory");
+  if (root === undefined) throw new Error("Helium has no Windows user-data directory");
   yield* fileSystem.makeDirectory(`${root}/Default`, { recursive: true });
   yield* fileSystem.writeFileString(`${root}/Default/Cookies`, "db");
 
@@ -82,8 +73,7 @@ const withImporter = Effect.fnUntraced(function* () {
         Layer.provide(layerRejectedBeforeSession),
         Layer.provide(DesktopManagedPolicy.layerTest()),
         Layer.provide(layerEnvironment),
-        Layer.provide(Layer.succeed(HostProcess.Platform, "darwin")),
-        Layer.provide(Layer.succeed(HostProcess.ExecutablePath, "/Applications/T3 Code.app")),
+        Layer.provide(Layer.succeed(HostProcess.Platform, "win32")),
         Layer.provide(NodeServices.layer),
       ),
     ),
@@ -92,37 +82,32 @@ const withImporter = Effect.fnUntraced(function* () {
 });
 
 describe("BrowserImport.importCookies", () => {
-  it.effect.each([
-    { platform: "linux", cookiePath: "Cookies" },
-    { platform: "linux", cookiePath: "Network/Cookies" },
-    { platform: "darwin", cookiePath: "Network/Cookies" },
-  ] as const)(
-    "discovers and imports Chromium cookies on $platform from $cookiePath",
-    ({ platform, cookiePath }) =>
+  it.effect.each(["Cookies", "Network/Cookies"] as const)(
+    "discovers and imports Helium cookies on Windows from %s",
+    (cookiePath) =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
-        const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-chromium-" });
-        const root =
-          platform === "darwin"
-            ? `${home}/Library/Application Support/Chromium`
-            : `${home}/.config/chromium`;
+        const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-helium-" });
+        const localAppData = NodePath.join(home, "AppData", "Local");
+        const root = NodePath.join(localAppData, "imput", "Helium", "User Data");
+        const gcmKey = Buffer.from("0123456789abcdef0123456789abcdef");
+        const wrapped = Buffer.concat([Buffer.from("DPAPI"), Buffer.from("wrapped-key")]).toString(
+          "base64",
+        );
+
         yield* fileSystem.makeDirectory(`${root}/Default/Network`, { recursive: true });
         yield* fileSystem.writeFileString(
           `${root}/Local State`,
-          JSON.stringify({ profile: { info_cache: { Default: { name: "Personal" } } } }),
+          JSON.stringify({
+            os_crypt: { encrypted_key: wrapped },
+            profile: { info_cache: { Default: { name: "Personal" } } },
+          }),
         );
-        const kdf = yield* Kdf.Kdf;
-        const cipher = yield* Cipher.Cipher;
-        const keyBytes = yield* kdf.derive(
-          Kdf.pbkdf2({ hash: Digest.sha1, iterations: platform === "darwin" ? 1003 : 1 }),
-          Buffer.from(platform === "darwin" ? chromiumKeychainSecret : "peanuts"),
-          { salt: Buffer.from("saltysalt"), length: 16 },
-        );
-        const key = yield* Cipher.key(Cipher.aes128Cbc, keyBytes);
-        const ciphertext = yield* cipher.encrypt(key, Buffer.from("fixture-session"), {
-          iv: Buffer.alloc(16, 0x20),
-        });
-        const value = Buffer.concat([Buffer.from("v10"), ciphertext]);
+
+        const nonce = Buffer.from("0123456789ab");
+        const cipher = NodeCrypto.createCipheriv("aes-256-gcm", gcmKey, nonce);
+        const encrypted = Buffer.concat([cipher.update("fixture-session"), cipher.final()]);
+        const value = Buffer.concat([Buffer.from("v10"), nonce, encrypted, cipher.getAuthTag()]);
         yield* Effect.sync(() => {
           using database = new NodeSqlite.DatabaseSync(`${root}/Default/${cookiePath}`);
           database.exec(`
@@ -136,7 +121,7 @@ describe("BrowserImport.importCookies", () => {
           `);
           database
             .prepare("insert into cookies values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .run("chromium.example", "session", "", value, "/", 0, 1, 1, 1, "");
+            .run("helium.example", "session", "", value, "/", 0, 1, 1, 1, "");
         });
 
         const written: Electron.CookiesSetDetails[] = [];
@@ -153,6 +138,27 @@ describe("BrowserImport.importCookies", () => {
             },
           },
         } as unknown as Session;
+        const mockDpapiSpawner = Layer.succeed(
+          ChildProcessSpawner.ChildProcessSpawner,
+          ChildProcessSpawner.make(() =>
+            Effect.succeed(
+              ChildProcessSpawner.makeHandle({
+                pid: ChildProcessSpawner.ProcessId(1),
+                exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+                isRunning: Effect.succeed(false),
+                kill: () => Effect.void,
+                unref: Effect.succeed(Effect.void),
+                stdin: Sink.drain,
+                stdout: Stream.encodeText(Stream.make(gcmKey.toString("base64"))),
+                stderr: Stream.empty,
+                all: Stream.empty,
+                getInputFd: () => Sink.drain,
+                getOutputFd: () => Stream.empty,
+              }),
+            ),
+          ),
+        );
+
         const importer = yield* BrowserImport.BrowserImport.pipe(
           Effect.provide(
             BrowserImport.layer.pipe(
@@ -167,26 +173,29 @@ describe("BrowserImport.importCookies", () => {
                 }),
               ),
               Layer.provide(DesktopManagedPolicy.layerTest()),
-              Layer.provide(Layer.succeed(HostProcess.Environment, { HOME: home })),
-              Layer.provide(Layer.succeed(HostProcess.Platform, platform)),
-              Layer.provide(Layer.succeed(HostProcess.ExecutablePath, "/fixture/t3code")),
+              Layer.provide(
+                Layer.succeed(HostProcess.Environment, {
+                  HOME: home,
+                  LOCALAPPDATA: localAppData,
+                }),
+              ),
+              Layer.provide(Layer.succeed(HostProcess.Platform, "win32")),
+              Layer.provide(mockDpapiSpawner),
               Layer.provide(NodeServices.layer),
             ),
           ),
         );
-        const source = (yield* importer.listSources).find(
-          (candidate) => candidate.id === "chromium",
-        );
+        const source = (yield* importer.listSources).find((candidate) => candidate.id === "helium");
         assert.isDefined(source);
         assert.deepEqual(yield* decodeImportSource(source!), {
-          id: "chromium",
-          name: "Chromium",
+          id: "helium",
+          name: "Helium",
           profiles: [{ directory: "Default", name: "Personal", cookieCount: 1 }],
         });
         assert.deepEqual(
           yield* importer.importCookies({
             input: {
-              sourceId: "chromium",
+              sourceId: "helium",
               sourceProfileDirectory: "Default",
               targetProfileId: "default",
             },
@@ -197,7 +206,7 @@ describe("BrowserImport.importCookies", () => {
         );
         assert.deepEqual(written, [
           {
-            url: "https://chromium.example/",
+            url: "https://helium.example/",
             name: "session",
             value: "fixture-session",
             path: "/",
@@ -207,11 +216,7 @@ describe("BrowserImport.importCookies", () => {
           },
         ]);
         assert.isTrue(flushed);
-      }).pipe(
-        Effect.provideService(LinuxBrowserSecretPath, undefined),
-        Effect.provide([NodeServices.layer, NodeCrypto.layerKdf, NodeCrypto.layerCipher]),
-        Effect.scoped,
-      ),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
   );
 
   it.effect("rejects a source profile the browser never reported", () =>
@@ -237,31 +242,6 @@ describe("BrowserImport.importCookies", () => {
       assert.instanceOf(error, BrowserImport.BrowserImportFailedError);
       assert.equal(error.reason, "unknownSourceProfile");
     }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect.skipIf(!symlinksSupported)(
-    "refuses to import while the source browser holds its profile",
-    () =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const { importer, root } = yield* withImporter();
-        yield* fileSystem.symlink("host-that-does-not-exist-1234", `${root}/SingletonLock`);
-
-        const error = yield* importer
-          .importCookies({
-            input: {
-              sourceId: "helium",
-              sourceProfileDirectory: "Default",
-              targetProfileId: "default",
-            },
-            scope: "persist:t3code-preview-test",
-            persistent: true,
-          })
-          .pipe(Effect.flip);
-
-        assert.instanceOf(error, BrowserImport.BrowserImportFailedError);
-        assert.equal(error.reason, "browserRunning");
-      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
 

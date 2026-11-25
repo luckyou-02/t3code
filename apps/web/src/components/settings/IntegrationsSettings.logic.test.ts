@@ -53,12 +53,11 @@ describe("clearBrowserProfileData with server browsers", () => {
 // Mirrors `BrowserImportFailedError.message`, which IPC flattens to a string
 // before the renderer sees it.
 const failure = (reason: string) => ({
-  message: `Importing cookies from safari failed: ${reason}.`,
+  message: `Importing cookies from firefox failed: ${reason}.`,
 });
 
 describe("importFailureReason", () => {
   it("recovers the reason token from the flattened message", () => {
-    expect(importFailureReason(failure("needsFullDiskAccess"))).toBe("needsFullDiskAccess");
     expect(importFailureReason(failure("browserRunning"))).toBe("browserRunning");
     expect(importFailureReason(failure("readFailed"))).toBe("readFailed");
     expect(importFailureReason(failure("keychainUnavailable"))).toBe("keychainUnavailable");

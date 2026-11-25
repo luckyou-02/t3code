@@ -31,9 +31,6 @@
   "d8fa0a55446bbb0d": "Avant l’expiration du cache (bêta)",
   "1574d19b613d3274": "Jamais",
   "a78eb961f5618e7f": "Non installé sur cette machine.",
-  "4c34e647dc74b279": "Nécessite l’accès au Trousseau pour lire ses cookies.",
-  "a613ba1b6f32fc2c": "Aucune clé de chiffrement dans votre Trousseau. Connectez-vous une fois à ce navigateur, puis réessayez.",
-  "322d9662c37ead48": "Accordez à T3 Code l’accès complet au disque dans Réglages Système → Confidentialité et sécurité, puis réessayez.",
   "24fdd54c2321912a": "Quittez d’abord le navigateur pour que sa base de cookies puisse être lue.",
   "1e3857bfd41528f6": "L’import depuis ce navigateur n’est pas possible sur cette plateforme.",
   "2bfa3f72b8bb8657": "Impossible d’accéder au trousseau du système. Vérifiez que le trousseau de votre bureau est lancé et déverrouillé, puis réessayez.",
@@ -1326,7 +1323,6 @@
   "415d9fed5542d278": "Impossible d’ouvrir le fichier",
   "1d1bbe5b700afe63": "Impossible d’afficher le fichier",
   "31dc19d033af2774": "Impossible d’ouvrir le lien.",
-  "029d8d0201aed231": "Impossible d’ouvrir les Réglages Système.",
   "9af3083226778d3c": "Open VSX a renvoyé des détails de thème mal formés.",
   "b42cb65fd27d4d34": "Open VSX a mis trop de temps à répondre.",
   "6521de72c1ad5528": "La recherche Open VSX est indisponible pour le moment.",
@@ -7342,20 +7338,13 @@
   "35c482e288f87f27": "aucun cookie",
   "08e1362ecbb815d7": "{count, plural, one {{formatted} cookie} other {{formatted} cookies}}",
   "800c4f374a9ad325": "Ce profil n’est plus disponible. Choisissez où importer ces cookies.",
-  "e26c3e8a2b76eb7c": "Impossible d’ouvrir les Réglages Système. Réessayez Autoriser.",
-  "6691de9875a03f07": "Accès complet au disque",
-  "c8c61106697ccef6": "Lire les cookies de {browser} pour cet import.",
-  "9d7376f252f4b80f": "L’accès est toujours requis. Quittez et rouvrez T3 Code si vous venez de l’autoriser, puis relancez l’import.",
-  "a134bbc40d0bb293": "Si l’accès ne se met pas à jour après l’avoir autorisé, quittez et rouvrez T3 Code, puis relancez l’import.",
   "7f0e44a32856487e": "Vous avez atteint la limite de profils. Choisissez un profil existant dans lequel importer.",
   "38419e3442b3a9b1": "Depuis",
   "0b6c47fddd767fe6": "Vers",
   "5b8d4a3e5e16309b": "Nouveau profil",
   "b2438565fb42704d": "Créé pour ces cookies",
   "993e86bc7af6447e": "Profil existant",
-  "65962374e1102956": "Vérification de l’accès complet au disque.",
   "46b4bff87df769a3": "Vérification de la fermeture du navigateur.",
-  "ad9445ed88e11622": "Vérification de l’accès…",
   "7513f0a2afb216be": "{count, plural, one {{formatted} cookie importé} other {{formatted} cookies importés}}",
   "982bd5b9687a7474": "{count, plural, one {{formatted} cookie ignoré} other {{formatted} cookies ignorés}}",
   "6cab2d410a8b3237": "Aucun cookie trouvé",
@@ -7382,23 +7371,6 @@
     " est ouvert, ses cookies ne peuvent donc pas encore être lus. Quittez-le, puis continuez."
   ],
   "33e46d95a6e43975": "Je l’ai quitté",
-  "4244ad5e8e097a55": [
-    "Autoriser T3 Code à lire les cookies de ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    }
-  ],
-  "8f8f31363cbae72f": [
-    "Pour importer les cookies de ",
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    ", T3 Code a besoin de l’accès complet au disque. Activez-le dans les Réglages Système, puis revenez terminer l’import. Vous pourrez le révoquer une fois l’import terminé."
-  ],
   "6418483c2e2b1e27": [
     "Importer depuis ",
     {
@@ -8308,8 +8280,6 @@
   "8b45e296e25933cb": "Connectez-vous à un environnement pour effacer les données du profil",
   "c7902d95bd57a25f": "Suppression…",
   "4a42ed8f9a4c6750": "Supprimer le profil",
-  "90eae6ed93306de1": "Impossible d’ouvrir les Réglages Système",
-  "e80b0936736a6dd8": "Ouvrez manuellement Confidentialité et sécurité → Accès complet au disque.",
   "742074ac5e6fa00e": "Navigation",
   "1c9c2e85e8153875": "Enregistrements",
   "fedb5397301d3392": "Remplir le panneau",

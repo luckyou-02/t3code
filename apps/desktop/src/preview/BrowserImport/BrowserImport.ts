@@ -27,7 +27,6 @@ import * as BrowserSession from "../BrowserSession.ts";
 import { ChromiumCookieReadError, readChromiumCookies } from "./ChromiumCookies.ts";
 import type { CookieReadResult } from "./CookieDatabase.ts";
 import { FirefoxCookieReadError, readFirefoxCookies } from "./FirefoxCookies.ts";
-import { readSafariCookies, safariAccessDenied, SafariCookieReadError } from "./SafariCookies.ts";
 import {
   BROWSER_IMPORT_SOURCES,
   resolveCookieDatabase,
@@ -130,19 +129,10 @@ export class BrowserImport extends Context.Service<
 const unavailableReason = Effect.fn("BrowserImport.unavailableReason")(function* (
   definition: BrowserImportSourceDefinition,
   context: BrowserImportPathContext,
-): Effect.fn.Return<
-  BrowserImportUnavailableReason | undefined,
-  never,
-  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-> {
+): Effect.fn.Return<BrowserImportUnavailableReason | undefined, never, FileSystem.FileSystem> {
   if (!definition.platforms.includes(context.platform)) return "unsupportedPlatform";
   if (!(yield* isSourceInstalled(definition, context))) return "notInstalled";
   if (yield* isSourceRunning(definition, context)) return "browserRunning";
-  // TCC permits stat without Full Disk Access, so a listed Safari jar may still be unreadable.
-  if (definition.engine === "safari") {
-    const jar = yield* resolveCookieDatabase(definition, context, ".");
-    if (jar !== undefined && (yield* safariAccessDenied(jar))) return "needsFullDiskAccess";
-  }
   return undefined;
 });
 
@@ -210,7 +200,6 @@ export const make = Effect.gen(function* BrowserImportMake() {
   const browserSession = yield* BrowserSession.BrowserSession;
   const managedPolicy = yield* DesktopManagedPolicy.DesktopManagedPolicy;
   const platform = yield* HostProcess.Platform;
-  const executablePath = yield* HostProcess.ExecutablePath;
   const platformServices = yield* Effect.context<
     FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
   >();
@@ -254,14 +243,6 @@ export const make = Effect.gen(function* BrowserImportMake() {
       return yield* new BrowserImportFailedError({ sourceId: definition.id, reason: blocked });
     }
 
-    if (platform === "darwin" && definition.engine === "chromium") {
-      // macOS attributes Keychain prompts and ACL grants to the executable, which differs in dev and packaged builds.
-      yield* Effect.logInfo("Reading browser cookie key from the keychain", {
-        sourceId: definition.id,
-        executablePath,
-      });
-    }
-
     // IPC profile paths must match the source's listing to prevent traversal outside browser user-data.
     const sourceProfiles = yield* listSourceProfiles(definition, pathContext).pipe(
       Effect.provide(platformServices),
@@ -289,29 +270,21 @@ export const make = Effect.gen(function* BrowserImportMake() {
     const userDataDirectory = definition.userDataDirectory(pathContext);
     const read: Effect.Effect<
       CookieReadResult,
-      ChromiumCookieReadError | FirefoxCookieReadError | SafariCookieReadError,
+      ChromiumCookieReadError | FirefoxCookieReadError,
       FileSystem.FileSystem | Path.Path | Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
     > =
-      definition.engine === "safari"
-        ? readSafariCookies(databasePath).pipe(
+      definition.engine === "firefox"
+        ? readFirefoxCookies(databasePath).pipe(
             Effect.map((cookies) => ({ cookies, undecryptable: 0, undecryptableHosts: [] })),
           )
-        : definition.engine === "firefox"
-          ? readFirefoxCookies(databasePath).pipe(
-              Effect.map((cookies) => ({ cookies, undecryptable: 0, undecryptableHosts: [] })),
-            )
-          : readChromiumCookies({
-              cookieDatabasePath: databasePath,
-              keychainService: definition.keychainService,
-              keychainAccount: definition.keychainAccount,
-              linuxSecretApplication: definition.linuxSecretApplication,
-              ...(platform === "win32" && userDataDirectory !== undefined
-                ? {
-                    windowsLocalStatePath: pathContext.path.join(userDataDirectory, "Local State"),
-                  }
-                : {}),
-              platform,
-            });
+        : readChromiumCookies({
+            cookieDatabasePath: databasePath,
+            ...(platform === "win32" && userDataDirectory !== undefined
+              ? {
+                  windowsLocalStatePath: pathContext.path.join(userDataDirectory, "Local State"),
+                }
+              : {}),
+          });
 
     const result = yield* read.pipe(
       Effect.scoped,
@@ -324,10 +297,6 @@ export const make = Effect.gen(function* BrowserImportMake() {
         FirefoxCookieReadError: (cause) =>
           Effect.fail(
             new BrowserImportFailedError({ sourceId: definition.id, reason: "readFailed", cause }),
-          ),
-        SafariCookieReadError: (cause) =>
-          Effect.fail(
-            new BrowserImportFailedError({ sourceId: definition.id, reason: cause.reason, cause }),
           ),
       }),
     );

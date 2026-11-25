@@ -6,18 +6,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as SqlClient from "effect/sql/SqlClient";
 
-export type BrowserImportEngine = "chromium" | "firefox" | "safari";
+export type BrowserImportEngine = "chromium" | "firefox";
 
 export interface BrowserImportPathContext {
   readonly path: Path.Path;
   readonly platform: NodeJS.Platform;
   readonly home: string;
-  readonly linuxConfigHome: string;
-  readonly linuxChromeConfigHome: string;
   readonly appData: string | undefined;
   readonly localAppData: string | undefined;
 }
@@ -28,185 +24,49 @@ export interface BrowserImportSourceDefinition {
   readonly engine: BrowserImportEngine;
   readonly platforms: ReadonlyArray<NodeJS.Platform>;
   readonly userDataDirectory: (context: BrowserImportPathContext) => string | undefined;
-  readonly alternateLinuxRoots?: (context: BrowserImportPathContext) => ReadonlyArray<string>;
-  readonly keychainService?: string;
-  readonly keychainAccount?: string;
-  readonly linuxSecretApplication?: string;
 }
-
-const macApplicationSupport = (
-  context: BrowserImportPathContext,
-  ...segments: ReadonlyArray<string>
-) => context.path.join(context.home, "Library", "Application Support", ...segments);
 
 const chromiumSource = (input: {
   readonly id: BrowserImportSourceId;
   readonly name: string;
-  readonly keychainService: string;
-  readonly keychainAccount: string;
-  readonly macSegments: ReadonlyArray<string>;
-  readonly linuxSegments?: ReadonlyArray<string>;
-  readonly linuxSecretApplication?: string;
-  readonly windowsSegments?: ReadonlyArray<string>;
+  readonly windowsSegments: ReadonlyArray<string>;
 }): BrowserImportSourceDefinition => ({
   id: input.id,
   name: input.name,
   engine: "chromium",
-  platforms: [
-    "darwin" as NodeJS.Platform,
-    ...(input.linuxSegments ? ["linux" as NodeJS.Platform] : []),
-    ...(input.windowsSegments ? ["win32" as NodeJS.Platform] : []),
-  ],
-  keychainService: input.keychainService,
-  keychainAccount: input.keychainAccount,
-  ...(input.linuxSecretApplication === undefined
-    ? {}
-    : { linuxSecretApplication: input.linuxSecretApplication }),
-  userDataDirectory: (context) => {
-    if (context.platform === "darwin") return macApplicationSupport(context, ...input.macSegments);
-    if (context.platform === "win32") {
-      return input.windowsSegments && context.localAppData
-        ? context.path.join(context.localAppData, ...input.windowsSegments)
-        : undefined;
-    }
-    return input.linuxSegments
-      ? context.path.join(
-          input.id === "chrome" || input.id === "chromium"
-            ? context.linuxChromeConfigHome
-            : context.linuxConfigHome,
-          ...input.linuxSegments,
-        )
-      : undefined;
-  },
+  platforms: ["win32"],
+  userDataDirectory: (context) =>
+    context.platform === "win32" && context.localAppData
+      ? context.path.join(context.localAppData, ...input.windowsSegments)
+      : undefined,
 });
 
 export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition> = [
   // Chrome 127+ App-Bound Encryption prevents other processes from reading Windows Chromium cookies.
   chromiumSource({
-    id: "chrome",
-    name: "Chrome",
-    keychainService: "Chrome Safe Storage",
-    keychainAccount: "Chrome",
-    macSegments: ["Google", "Chrome"],
-    linuxSegments: ["google-chrome"],
-    linuxSecretApplication: "chrome",
-  }),
-  chromiumSource({
-    id: "chromium",
-    name: "Chromium",
-    keychainService: "Chromium Safe Storage",
-    keychainAccount: "Chromium",
-    macSegments: ["Chromium"],
-    linuxSegments: ["chromium"],
-    linuxSecretApplication: "chromium",
-  }),
-  chromiumSource({
-    id: "edge",
-    name: "Microsoft Edge",
-    keychainService: "Microsoft Edge Safe Storage",
-    keychainAccount: "Microsoft Edge",
-    macSegments: ["Microsoft Edge"],
-    linuxSegments: ["microsoft-edge"],
-    linuxSecretApplication: "msedge",
-  }),
-  chromiumSource({
-    id: "brave",
-    name: "Brave",
-    keychainService: "Brave Safe Storage",
-    keychainAccount: "Brave",
-    macSegments: ["BraveSoftware", "Brave-Browser"],
-    linuxSegments: ["BraveSoftware", "Brave-Browser"],
-    linuxSecretApplication: "brave",
-  }),
-  chromiumSource({
-    id: "vivaldi",
-    name: "Vivaldi",
-    keychainService: "Vivaldi Safe Storage",
-    keychainAccount: "Vivaldi",
-    macSegments: ["Vivaldi"],
-    linuxSegments: ["vivaldi"],
-    // Vivaldi stores its Linux libsecret key under Chrome's application name.
-    linuxSecretApplication: "chrome",
-  }),
-  chromiumSource({
-    id: "opera",
-    name: "Opera",
-    keychainService: "Opera Safe Storage",
-    keychainAccount: "Opera",
-    macSegments: ["com.operasoftware.Opera"],
-    linuxSegments: ["opera"],
-    linuxSecretApplication: "opera",
-  }),
-  chromiumSource({
-    id: "arc",
-    name: "Arc",
-    keychainService: "Arc Safe Storage",
-    keychainAccount: "Arc",
-    macSegments: ["Arc", "User Data"],
-  }),
-  chromiumSource({
     id: "helium",
     name: "Helium",
-    keychainService: "Helium Storage Key",
-    keychainAccount: "Helium",
-    macSegments: ["net.imput.helium"],
-    linuxSegments: ["net.imput.helium"],
     windowsSegments: ["imput", "Helium", "User Data"],
-    // Helium retains Chromium's libsecret application name on Linux.
-    linuxSecretApplication: "chromium",
   }),
-  {
-    id: "safari",
-    name: "Safari",
-    engine: "safari",
-    platforms: ["darwin"],
-    userDataDirectory: (context) =>
-      context.platform === "darwin"
-        ? context.path.join(
-            context.home,
-            "Library",
-            "Containers",
-            "com.apple.Safari",
-            "Data",
-            "Library",
-            "Cookies",
-          )
-        : undefined,
-  },
   {
     id: "firefox",
     name: "Firefox",
     engine: "firefox",
-    platforms: ["darwin", "win32", "linux"],
-    userDataDirectory: (context) => {
-      if (context.platform === "darwin") return macApplicationSupport(context, "Firefox");
-      if (context.platform === "win32") {
-        return context.appData
-          ? context.path.join(context.appData, "Mozilla", "Firefox")
-          : undefined;
-      }
-      return context.path.join(context.home, ".mozilla", "firefox");
-    },
-    alternateLinuxRoots: (context) => [
-      context.path.join(context.home, "snap", "firefox", "common", ".mozilla", "firefox"),
-    ],
+    platforms: ["win32"],
+    userDataDirectory: (context) =>
+      context.platform === "win32" && context.appData
+        ? context.path.join(context.appData, "Mozilla", "Firefox")
+        : undefined,
   },
   {
     id: "zen",
     name: "Zen",
     engine: "firefox",
-    platforms: ["darwin", "win32", "linux"],
-    userDataDirectory: (context) => {
-      if (context.platform === "darwin") return macApplicationSupport(context, "zen");
-      if (context.platform === "win32") {
-        return context.appData ? context.path.join(context.appData, "zen") : undefined;
-      }
-      return context.path.join(context.linuxConfigHome, "zen");
-    },
-    alternateLinuxRoots: (context) => [
-      context.path.join(context.home, ".zen"),
-      context.path.join(context.home, ".var", "app", "app.zen_browser.zen", "zen"),
-    ],
+    platforms: ["win32"],
+    userDataDirectory: (context) =>
+      context.platform === "win32" && context.appData
+        ? context.path.join(context.appData, "zen")
+        : undefined,
   },
 ];
 
@@ -222,9 +82,6 @@ const cookieDatabaseCandidatePaths = (
     : context.path.join(root, profileDirectory);
   if (definition.engine === "firefox") {
     return [context.path.join(profilePath, "cookies.sqlite")];
-  }
-  if (definition.engine === "safari") {
-    return [context.path.join(profilePath, "Cookies.binarycookies")];
   }
   // Prefer Chromium 96+'s Network/Cookies; upgrades leave the pre-96 Cookies file behind.
   return [
@@ -309,17 +166,10 @@ export const sourcePathContext = Effect.gen(function* () {
   const platform = yield* HostProcess.Platform;
   const environment = yield* HostProcess.Environment;
   const home = environment.HOME ?? environment.USERPROFILE ?? "";
-  const xdgConfigHome = environment.XDG_CONFIG_HOME;
-  const linuxConfigHome =
-    xdgConfigHome && path.isAbsolute(xdgConfigHome) ? xdgConfigHome : path.join(home, ".config");
-  const chromeConfigHome = environment.CHROME_CONFIG_HOME;
   return {
     path,
     platform,
     home,
-    linuxConfigHome,
-    linuxChromeConfigHome:
-      chromeConfigHome && path.isAbsolute(chromeConfigHome) ? chromeConfigHome : linuxConfigHome,
     appData: environment.APPDATA,
     localAppData: environment.LOCALAPPDATA,
   } satisfies BrowserImportPathContext;
@@ -387,74 +237,13 @@ const withCookieCounts = (
     ),
   );
 
-const SafariProfileRows = Schema.Array(
-  Schema.Struct({ title: Schema.NullOr(Schema.String), external_uuid: Schema.String }),
-);
-const decodeSafariProfiles = Schema.decodeUnknownEffect(SafariProfileRows);
-const isSafariProfileUuid = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-
-const listSafariProfiles = Effect.fnUntraced(function* (
-  context: BrowserImportPathContext,
-  root: string,
-) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const library = context.path.dirname(root);
-  const metadata = context.path.join(library, "Safari", "SafariTabs.db");
-  const declared = yield* Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    return yield* decodeSafariProfiles(
-      yield* sql`
-      select title, external_uuid from bookmarks
-      where parent = 0 and type = 1 and subtype = 2 and deleted = 0
-      order by order_index
-    `,
-    );
-  }).pipe(
-    Effect.provide(NodeSqliteClient.layer({ filename: metadata, readonly: true })),
-    Effect.orElseSucceed(() => []),
-  );
-  const defaultProfile = declared.find((profile) => profile.external_uuid === "DefaultProfile");
-  const profiles: Array<BrowserImportSourceProfile> = [
-    {
-      directory: ".",
-      name: defaultProfile ? defaultProfile.title?.trim() || "Personal" : "Safari",
-    },
-  ];
-  const stores = context.path.join(library, "WebKit", "WebsiteDataStore");
-  const profileDirectory = (uuid: string) =>
-    context.path.join(stores, uuid.toLowerCase(), "Cookies");
-  for (const profile of declared) {
-    if (!isSafariProfileUuid(profile.external_uuid)) continue;
-    profiles.push({
-      directory: profileDirectory(profile.external_uuid),
-      name: profile.title?.trim() || profile.external_uuid,
-    });
-  }
-  // With readable metadata, avoid resurrecting deleted profiles left on disk.
-  if (declared.length === 0) {
-    const entries = yield* fileSystem.readDirectory(stores).pipe(Effect.orElseSucceed(() => []));
-    for (const entry of entries.filter(isSafariProfileUuid).sort()) {
-      const directory = context.path.join(stores, entry, "Cookies");
-      if (yield* databaseFileExists(context.path.join(directory, "Cookies.binarycookies"))) {
-        profiles.push({ directory, name: entry });
-      }
-    }
-  }
-  return profiles;
-});
-
-const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
+export const listSourceProfiles = Effect.fn("BrowserImportSources.listSourceProfiles")(function* (
   definition: BrowserImportSourceDefinition,
   context: BrowserImportPathContext,
 ): Effect.fn.Return<ReadonlyArray<BrowserImportSourceProfile>, never, FileSystem.FileSystem> {
   const fileSystem = yield* FileSystem.FileSystem;
   const root = definition.userDataDirectory(context);
   if (root === undefined) return [];
-
-  if (definition.engine === "safari") {
-    return yield* listSafariProfiles(context, root);
-  }
 
   if (definition.engine === "firefox") {
     const declared = yield* fileSystem.readFileString(context.path.join(root, "profiles.ini")).pipe(
@@ -475,13 +264,12 @@ const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
       }
     }
 
-    const fallbackDirectory =
-      context.platform === "linux" ? root : context.path.join(root, "Profiles");
+    const fallbackDirectory = context.path.join(root, "Profiles");
     const scanned = yield* fileSystem
       .readDirectory(fallbackDirectory)
       .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
     const found = yield* Effect.forEach(scanned, (entry) => {
-      const directory = context.platform === "linux" ? entry : context.path.join("Profiles", entry);
+      const directory = context.path.join("Profiles", entry);
       return resolveCookieDatabase(definition, context, directory).pipe(
         Effect.map((database) => (database === undefined ? undefined : { directory, name: entry })),
       );
@@ -522,80 +310,12 @@ const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
   );
 });
 
-/** Keep alternate-root profile paths absolute so cookie reads and locks use the correct installation. */
-export const listSourceProfiles = Effect.fn("BrowserImportSources.listSourceProfiles")(function* (
-  definition: BrowserImportSourceDefinition,
-  context: BrowserImportPathContext,
-): Effect.fn.Return<ReadonlyArray<BrowserImportSourceProfile>, never, FileSystem.FileSystem> {
-  if (definition.engine !== "firefox" || context.platform !== "linux") {
-    return yield* listSourceProfilesInDirectory(definition, context);
-  }
-
-  const root = definition.userDataDirectory(context);
-  if (root === undefined) return [];
-  const roots = [root, ...(definition.alternateLinuxRoots?.(context) ?? [])];
-  const profiles = new Map<string, BrowserImportSourceProfile>();
-  for (const directory of roots) {
-    const found = yield* listSourceProfilesInDirectory(
-      { ...definition, userDataDirectory: () => directory },
-      context,
-    );
-    for (const profile of found) {
-      const absolute = context.path.resolve(directory, profile.directory);
-      if (!profiles.has(absolute)) {
-        profiles.set(absolute, directory === root ? profile : { ...profile, directory: absolute });
-      }
-    }
-  }
-  return [...profiles.values()];
-});
-
 const databaseFileExists = Effect.fnUntraced(function* (path: string) {
   const fileSystem = yield* FileSystem.FileSystem;
   return yield* fileSystem.stat(path).pipe(
     Effect.map((info) => info.type === "File"),
     Effect.orElseSucceed(() => false),
   );
-});
-
-type ProcessLivenessProbe = (pid: number) => Effect.Effect<boolean>;
-
-export const chromiumProcessIsAlive = (
-  pid: number,
-  signalProcess: (pid: number, signal: 0) => unknown = process.kill.bind(process),
-) =>
-  Effect.sync(() => {
-    try {
-      signalProcess(pid, 0);
-      return true;
-    } catch (cause) {
-      // Only ESRCH proves a stale lock; permission and unknown failures may still hide an active browser.
-      return !(
-        typeof cause === "object" &&
-        cause !== null &&
-        "code" in cause &&
-        cause.code === "ESRCH"
-      );
-    }
-  });
-
-const processIsAlive: ProcessLivenessProbe = (pid) => chromiumProcessIsAlive(pid);
-
-export const chromiumSingletonLockIsHeld = Effect.fnUntraced(function* (
-  target: string,
-  currentHost: string,
-  isProcessAlive: ProcessLivenessProbe,
-) {
-  const separator = target.lastIndexOf("-");
-  if (separator <= 0) return true;
-  const host = target.slice(0, separator);
-  const pidText = target.slice(separator + 1);
-  if (!/^\d+$/.test(pidText)) return true;
-  const pid = Number(pidText);
-  if (!Number.isSafeInteger(pid) || pid <= 0) return true;
-  // Foreign-host PIDs may come from a shared home; never declare them stale here.
-  if (host !== currentHost) return true;
-  return yield* isProcessAlive(pid);
 });
 
 /** Windows sharing and lock violations are translated by libuv to `Busy`. */
@@ -633,133 +353,27 @@ export const windowsChromiumCookiesAreHeld = Effect.fnUntraced(function* (
   return held.some(Boolean);
 });
 
-export const firefoxSymlinkLockIsHeld = Effect.fnUntraced(function* (
-  target: string,
-  localAddresses: ReadonlySet<string>,
-  isProcessAlive: ProcessLivenessProbe,
-) {
-  const separator = target.lastIndexOf(":");
-  if (separator < 0) return true;
-  // Firefox resolves the hostname to loopback or LAN addresses; only local owners' PIDs are meaningful.
-  const owner = target.slice(0, separator);
-  if (!localAddresses.has(owner)) return true;
-  // A `+` marks an fcntl-holding owner; the pid follows either way.
-  const pidText = target.slice(separator + 1).replace(/^\+/, "");
-  if (!/^\d+$/.test(pidText)) return true;
-  const pid = Number(pidText);
-  if (!Number.isSafeInteger(pid) || pid <= 0) return true;
-  return yield* isProcessAlive(pid);
-});
-
-/** Dock launches have a bare PATH; try the absolute interpreter before relying on shell discovery. */
-const FCNTL_PROBE_INTERPRETERS = ["/usr/bin/python3", "python3"] as const;
-
-/** Apple's python3 shim can fail with an install prompt before the probe script runs. */
-const FCNTL_PROBE_SCRIPT =
-  "import fcntl,os,sys\n" +
-  "fd=os.open(sys.argv[1],os.O_WRONLY)\n" +
-  "try:\n" +
-  "  fcntl.lockf(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)\n" +
-  "except BlockingIOError:\n" +
-  "  print('held')\n" +
-  "else:\n" +
-  "  print('free')";
-
-/**
- * A missing or refusing interpreter (Apple's shim without developer tools) means
- * the probe is unavailable, so report "not held": "held" would block Firefox import
- * forever, and the SQLite snapshot already copes with a live WAL.
- */
-const posixLockIsHeld = Effect.fnUntraced(function* (
-  path: string,
-  interpreters: ReadonlyArray<string> = FCNTL_PROBE_INTERPRETERS,
-) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const environment = yield* HostProcess.Environment;
-  for (const interpreter of interpreters) {
-    const verdict = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const handle = yield* spawner.spawn(
-          ChildProcess.make(interpreter, ["-c", FCNTL_PROBE_SCRIPT, path], {
-            stdin: "ignore",
-            env: environment,
-          }),
-        );
-        const [stdout] = yield* Effect.all(
-          [handle.stdout.pipe(Stream.decodeText(), Stream.mkString), handle.exitCode],
-          { concurrency: "unbounded" },
-        );
-        return stdout.trim();
-      }),
-    ).pipe(Effect.orElseSucceed(() => ""));
-    if (verdict === "held") return true;
-    if (verdict === "free") return false;
-  }
-  return false;
-});
-
-/** Firefox leaves regular lock files after exit; test the lock, not file existence. */
-const firefoxProfileIsHeld = Effect.fnUntraced(function* (
-  directory: string,
-  context: BrowserImportPathContext,
-  localAddresses: ReadonlySet<string>,
-) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  if (context.platform === "win32") {
-    return yield* windowsLockIsHeld(context.path.join(directory, "parent.lock"));
-  }
-  const symlinkHeld = yield* fileSystem.readLink(context.path.join(directory, "lock")).pipe(
-    Effect.flatMap((target) => firefoxSymlinkLockIsHeld(target, localAddresses, processIsAlive)),
-    Effect.orElseSucceed(() => false),
-  );
-  if (symlinkHeld) return true;
-  const parentLock = context.path.join(directory, ".parentlock");
-  const present = yield* fileSystem.stat(parentLock).pipe(
-    Effect.map((info) => info.type === "File"),
-    Effect.orElseSucceed(() => false),
-  );
-  if (!present) return false;
-  return yield* posixLockIsHeld(parentLock);
-});
-
 export const isSourceRunning = Effect.fn("BrowserImportSources.isSourceRunning")(function* (
   definition: BrowserImportSourceDefinition,
   context: BrowserImportPathContext,
-): Effect.fn.Return<
-  boolean,
-  never,
-  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
-> {
-  const fileSystem = yield* FileSystem.FileSystem;
+): Effect.fn.Return<boolean, never, FileSystem.FileSystem> {
   const root = definition.userDataDirectory(context);
   if (root === undefined) return false;
-  // Safari writes its jar atomically and needs no lock, even while running.
-  if (definition.engine === "safari") return false;
   if (definition.engine !== "firefox") {
-    if (context.platform === "win32") {
-      return yield* windowsChromiumCookiesAreHeld(definition, context);
-    }
-    const currentHost = yield* HostProcess.Hostname;
-    const lock = context.path.join(root, "SingletonLock");
-    return yield* fileSystem.readLink(lock).pipe(
-      Effect.flatMap((target) => chromiumSingletonLockIsHeld(target, currentHost, processIsAlive)),
-      Effect.catch((error) => Effect.succeed(error.reason._tag !== "NotFound")),
-    );
+    return yield* windowsChromiumCookiesAreHeld(definition, context);
   }
 
   const profiles = yield* listSourceProfiles(definition, context);
-  const localAddresses: ReadonlySet<string> =
-    context.platform === "win32" ? new Set() : yield* yield* HostProcess.Addresses;
   const found = yield* Effect.forEach(profiles, (profile) => {
     const directory = context.path.isAbsolute(profile.directory)
       ? profile.directory
       : context.path.join(root, profile.directory);
-    return firefoxProfileIsHeld(directory, context, localAddresses);
+    return windowsLockIsHeld(context.path.join(directory, "parent.lock"));
   });
   return found.some(Boolean);
 });
 
-/** Require a cookie database; installers create empty directories. Safari stat needs no Full Disk Access. */
+/** Require a cookie database; installers create empty directories. */
 export const isSourceInstalled = Effect.fn("BrowserImportSources.isSourceInstalled")(function* (
   definition: BrowserImportSourceDefinition,
   context: BrowserImportPathContext,

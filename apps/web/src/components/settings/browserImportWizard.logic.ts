@@ -57,13 +57,8 @@ export type ImportOutcome =
 
 export type WizardStep =
   | { readonly step: "quit" }
-  | {
-      readonly step: "fullDiskAccess";
-      readonly resume: "configure" | "import";
-      readonly checked?: boolean;
-    }
   | { readonly step: "configure" }
-  | { readonly step: "checking"; readonly check: "browser" | "fullDiskAccess" }
+  | { readonly step: "checking" }
   | { readonly step: "importing" }
   | {
       readonly step: "done";
@@ -84,9 +79,6 @@ export function canCloseWizard(step: WizardStep): boolean {
 
 export function initialWizardStep(source: BrowserImportSource): WizardStep {
   if (source.unavailable === "browserRunning") return { step: "quit" };
-  if (source.unavailable === "needsFullDiskAccess") {
-    return { step: "fullDiskAccess", resume: "configure" };
-  }
   if (source.unavailable !== undefined) return { step: "blocked", reason: source.unavailable };
   if (source.profiles.length === 0) return { step: "blocked", reason: "unknownSourceProfile" };
   return { step: "configure" };
@@ -103,9 +95,6 @@ export function outcomeToStep(outcome: ImportOutcome): WizardStep {
     };
   }
   if (outcome.reason === "browserRunning") return { step: "quit" };
-  if (outcome.reason === "needsFullDiskAccess") {
-    return { step: "fullDiskAccess", resume: "import", checked: true };
-  }
   return outcome.message === undefined
     ? { step: "blocked", reason: outcome.reason }
     : { step: "blocked", reason: outcome.reason, message: outcome.message };
@@ -114,11 +103,6 @@ export function outcomeToStep(outcome: ImportOutcome): WizardStep {
 export function refreshedSourceStep(source: BrowserImportSource | undefined): WizardStep {
   if (source === undefined) return { step: "blocked", reason: "unknownSource" };
   return initialWizardStep(source);
-}
-
-export function fullDiskAccessRecheckStep(source: BrowserImportSource | undefined): WizardStep {
-  const next = refreshedSourceStep(source);
-  return next.step === "fullDiskAccess" ? { ...next, checked: true } : next;
 }
 
 export function refreshedSourceProfileDirectory(
@@ -133,8 +117,6 @@ export function refreshedSourceProfileDirectory(
 
 export function isRetryableReason(reason: BrowserImportFailureReason): boolean {
   switch (reason) {
-    case "needsKeychainApproval":
-    case "keychainItemMissing":
     case "keychainUnavailable":
     case "readFailed":
     case "sessionUnavailable":

@@ -1,8 +1,6 @@
-import { PermissionChecklist, PermissionContinueButton } from "../permissions/PermissionChecklist";
-import { usePermissionStatus } from "../permissions/usePermissionStatus";
 import { browserImportFailureMessage } from "@t3tools/client-runtime/contract-labels";
 import type { BROWSER_IMPORT_FAILURE_COPY, BrowserImportSource } from "@t3tools/contracts";
-import { ArrowDownIcon, ArrowRightIcon, CheckIcon, HardDriveIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowRightIcon, CheckIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
 import type { MessageResolver } from "~/i18n/messages";
@@ -28,7 +26,6 @@ import {
   canCloseWizard,
   isRetryableReason,
   formatSkippedDomains,
-  fullDiskAccessRecheckStep,
   outcomeToStep,
   refreshedSourceProfileDirectory,
   refreshedSourceStep,
@@ -52,8 +49,6 @@ interface BrowserImportWizardProps {
     readonly target: WizardTarget;
   }) => Promise<ImportOutcome>;
   readonly onRefreshSource: () => Promise<BrowserImportSource | undefined>;
-  readonly onOpenFullDiskAccessSettings: () => void | Promise<void>;
-  readonly onCheckFullDiskAccess?: (() => Promise<boolean>) | undefined;
   readonly onClose: () => void;
 }
 
@@ -64,8 +59,6 @@ export function BrowserImportWizard({
   canCreateProfile,
   onImport,
   onRefreshSource,
-  onOpenFullDiskAccessSettings,
-  onCheckFullDiskAccess,
   onClose,
 }: BrowserImportWizardProps) {
   const gt = useGT();
@@ -103,11 +96,8 @@ export function BrowserImportWizard({
       });
   };
 
-  const recheckSource = (
-    check: "browser" | "fullDiskAccess",
-    nextStep: (refreshed: BrowserImportSource | undefined) => WizardStep,
-  ) => {
-    setStep({ step: "checking", check });
+  const recheckAfterQuit = () => {
+    setStep({ step: "checking" });
     void onRefreshSource()
       .then((refreshed) => {
         if (refreshed) {
@@ -116,37 +106,20 @@ export function BrowserImportWizard({
             refreshedSourceProfileDirectory(current, refreshed),
           );
         }
-        setStep(nextStep(refreshed));
+        setStep(refreshedSourceStep(refreshed));
       })
       .catch(() => setStep({ step: "blocked", reason: "readFailed" }));
   };
-  const recheckAfterQuit = () => recheckSource("browser", refreshedSourceStep);
-  const recheckFullDiskAccess = () => recheckSource("fullDiskAccess", fullDiskAccessRecheckStep);
 
   return (
     <Dialog open onOpenChange={(open) => (open || !canCloseWizard(step) ? undefined : onClose())}>
       <DialogPopup className="max-w-lg" showCloseButton={canCloseWizard(step)}>
         {step.step === "quit" ? (
           <QuitStep source={source} onCancel={onClose} onRechecked={recheckAfterQuit} />
-        ) : step.step === "fullDiskAccess" ? (
-          <FullDiskAccessStep
-            source={source}
-            onCancel={onClose}
-            onOpenSettings={onOpenFullDiskAccessSettings}
-            onCheck={
-              onCheckFullDiskAccess ??
-              (async () => {
-                const refreshed = await onRefreshSource();
-                return refreshed !== undefined && refreshed.unavailable === undefined;
-              })
-            }
-            onGranted={step.resume === "import" ? runImport : recheckFullDiskAccess}
-            stillRequired={step.checked === true}
-          />
         ) : step.step === "importing" ? (
           <ImportingStep />
         ) : step.step === "checking" ? (
-          <CheckingStep sourceName={source.name} check={step.check} />
+          <CheckingStep sourceName={source.name} />
         ) : step.step === "done" ? (
           <DoneStep
             {...step}
@@ -247,105 +220,6 @@ type ConfigureStepProps = {
   readonly onImport: () => void;
 };
 
-function FullDiskAccessStep({
-  source,
-  onCancel,
-  onOpenSettings,
-  onGranted,
-  stillRequired,
-  onCheck,
-}: {
-  readonly source: BrowserImportSource;
-  readonly onCancel: () => void;
-  readonly onOpenSettings: () => void | Promise<void>;
-  readonly onCheck: () => Promise<boolean>;
-  readonly onGranted: () => void;
-  readonly stillRequired: boolean;
-}) {
-  const gt = useGT();
-  const [opening, setOpening] = useState(false);
-  const [openingError, setOpeningError] = useState<string | null>(null);
-  const permission = usePermissionStatus(async () => ({ fullDiskAccess: await onCheck() }), {
-    fullDiskAccess: false,
-  });
-  const allow = () => {
-    if (opening) return;
-    setOpening(true);
-    setOpeningError(null);
-    void Promise.resolve()
-      .then(onOpenSettings)
-      .catch(() => setOpeningError(gt("Could not open System Settings. Try Allow again.")))
-      .finally(() => setOpening(false));
-  };
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle>
-          <T>
-            Let T3 Code read <Var>{source.name}</Var>&rsquo;s cookies
-          </T>
-        </DialogTitle>
-        <DialogDescription>
-          <T>
-            To import cookies from <Var>{source.name}</Var>, T3 Code needs Full Disk Access. Turn it
-            on in System Settings, then come back to finish the import. You can revoke it again once
-            the import is done.
-          </T>
-        </DialogDescription>
-      </DialogHeader>
-      <DialogPanel>
-        <PermissionChecklist
-          busy={opening}
-          permissions={[
-            {
-              id: "fullDiskAccess",
-              icon: (
-                <HardDriveIcon
-                  className="size-8 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
-              ),
-              title: gt("Full Disk Access"),
-              description: gt("Read {browser}''s cookies for this import.", {
-                browser: source.name,
-              }),
-              granted: permission.status.fullDiskAccess,
-              onAllow: () => void allow(),
-            },
-          ]}
-        />
-        {openingError || permission.error ? (
-          <p role="status" className="mt-3 text-xs text-muted-foreground">
-            {openingError ?? permission.error}
-          </p>
-        ) : null}
-        {!permission.isReady(["fullDiskAccess"]) ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            {stillRequired
-              ? gt(
-                  "Access is still required. Quit and reopen T3 Code if you just allowed it, then retry the import.",
-                )
-              : gt(
-                  "If access doesn't update after you allow it, quit and reopen T3 Code, then retry the import.",
-                )}
-          </p>
-        ) : null}
-      </DialogPanel>
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>
-          <T>Cancel</T>
-        </Button>
-        <PermissionContinueButton
-          ready={permission.isReady(["fullDiskAccess"])}
-          busy={opening}
-          onClick={onGranted}
-        >
-          <T>Continue</T>
-        </PermissionContinueButton>
-      </DialogFooter>
-    </>
-  );
-}
 function ConfigureStep({
   source,
   destinationEnvironmentName,
@@ -516,13 +390,7 @@ function ImportingStep() {
   );
 }
 
-function CheckingStep({
-  sourceName,
-  check,
-}: {
-  readonly sourceName: string;
-  readonly check: "browser" | "fullDiskAccess";
-}) {
+function CheckingStep({ sourceName }: { readonly sourceName: string }) {
   const gt = useGT();
   return (
     <>
@@ -532,18 +400,12 @@ function CheckingStep({
             Checking <Var>{sourceName}</Var>
           </T>
         </DialogTitle>
-        <DialogDescription>
-          {check === "fullDiskAccess"
-            ? gt("Checking Full Disk Access.")
-            : gt("Checking whether the browser has closed.")}
-        </DialogDescription>
+        <DialogDescription>{gt("Checking whether the browser has closed.")}</DialogDescription>
       </DialogHeader>
       <DialogPanel>
         <div className="flex items-center gap-3 py-2">
           <Spinner size="md" tone="muted" />
-          <span className="text-sm text-muted-foreground">
-            {check === "fullDiskAccess" ? gt("Checking access…") : gt("Checking…")}
-          </span>
+          <span className="text-sm text-muted-foreground">{gt("Checking…")}</span>
         </div>
       </DialogPanel>
     </>

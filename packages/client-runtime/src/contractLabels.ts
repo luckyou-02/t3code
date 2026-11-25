@@ -202,13 +202,6 @@ export function idleCompactionModeLabel(
 
 const BROWSER_IMPORT_FAILURE_MESSAGES: Record<BrowserImportFailureReason, string> = {
   notInstalled: msg("Not installed on this machine."),
-  needsKeychainApproval: msg("Needs Keychain access to read its cookies."),
-  keychainItemMissing: msg(
-    "No encryption key in your Keychain. Sign in to that browser once, then retry.",
-  ),
-  needsFullDiskAccess: msg(
-    "Give T3 Code Full Disk Access in System Settings → Privacy & Security, then retry.",
-  ),
   browserRunning: msg("Quit the browser first so its cookie database can be read."),
   unsupportedPlatform: msg("Importing from this browser isn't possible on this platform."),
   keychainUnavailable: msg(
