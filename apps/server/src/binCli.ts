@@ -33,20 +33,17 @@ import { runServiceLauncherCli } from "./cli/serviceLauncher.ts";
 import { speechWorkerCommand } from "./cli/speechWorker.ts";
 import { claudeHistoryCommand } from "./cli/claudeHistory.ts";
 import { sshHelperCommand } from "./cli/sshHelper.ts";
-import { serviceCommand } from "./cli/service.ts";
+import { serviceCommand, serviceStatusCommand } from "./cli/service.ts";
 import { servicePreflightCommand } from "./cli/servicePreflight.ts";
 import { themeCommand } from "./cli/theme.ts";
 import { traceCommand } from "./cli/trace.ts";
 import { triageCommand } from "./cli/triage.ts";
-import { statusCommand, upCommand } from "./cli/up.ts";
 
 const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, NetService.layer);
 
 export const makeCli = () =>
   Command.make("t3", { ...sharedServerCommandFlags }).pipe(
-    Command.withDescription(
-      "Run T3 Code in this terminal and open it in your browser. To use it from your other devices, run `t3 up`.",
-    ),
+    Command.withDescription("Run T3 Code in this terminal and open it in your browser."),
     Command.withHandler(runDefaultServerCommand),
     Command.withSubcommands([
       Command.make("help").pipe(
@@ -66,8 +63,7 @@ export const makeCli = () =>
       projectCommand,
       threadCommand,
       workflowCommand,
-      upCommand,
-      statusCommand,
+      serviceStatusCommand,
       serviceCommand,
       updateCommand,
       installCommand,

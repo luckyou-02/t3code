@@ -28,7 +28,6 @@ import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopCliShim from "../app/DesktopCliShim.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopState from "../app/DesktopState.ts";
-import * as DesktopServerExposure from "./DesktopServerExposure.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
@@ -61,6 +60,8 @@ export class DesktopBackendConfiguration extends Context.Service<
       PlatformError.PlatformError
     >;
     readonly resolvePrimaryLabel: Effect.Effect<string>;
+    readonly primaryPort: Effect.Effect<number>;
+    readonly setPrimaryPort: (port: number) => Effect.Effect<void>;
     readonly currentBootstrapToken: Effect.Effect<string, PlatformError.PlatformError>;
   }
 >()("@t3tools/desktop/backend/DesktopBackendConfiguration") {}
@@ -83,10 +84,6 @@ const DESKTOP_BACKEND_ENV_NAMES = [
   "T3CODE_NO_BROWSER",
   "T3CODE_HOST",
   "T3CODE_DESKTOP_WS_URL",
-  "T3CODE_DESKTOP_LAN_HOST",
-  "T3CODE_DESKTOP_HTTPS_ENDPOINTS",
-  "T3CODE_TAILSCALE_SERVE",
-  "T3CODE_TAILSCALE_SERVE_PORT",
 ] as const;
 
 // Windows forwards these variables into WSL only through WSLENV.
@@ -525,6 +522,7 @@ const buildObservabilityFragment = (observabilitySettings: BackendObservabilityS
 const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolvePrimary")(
   function* (
     input: SharedBootstrapInput & {
+      readonly port: number;
       readonly resourceMonitorPath: Option.Option<string>;
       readonly cliPath: Option.Option<string>;
       readonly shellEnvironmentPrepared: boolean;
@@ -533,23 +531,20 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
   ): Effect.fn.Return<
     DesktopBackendManager.DesktopBackendStartConfig,
     never,
-    DesktopEnvironment.DesktopEnvironment | DesktopServerExposure.DesktopServerExposure
+    DesktopEnvironment.DesktopEnvironment
   > {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
-    const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
-    const backendExposure = yield* serverExposure.backendConfig;
+    const httpBaseUrl = new URL(`http://127.0.0.1:${input.port}`);
 
     const bootstrap = {
       mode: "desktop" as const,
       noBrowser: true,
-      port: backendExposure.port,
+      port: input.port,
       t3Home: environment.baseDir,
-      host: backendExposure.bindHost,
+      host: "127.0.0.1",
       desktopBootstrapToken: input.bootstrapToken,
       desktopBootstrapSecret: input.bootstrapSecret,
       shellEnvironmentPrepared: input.shellEnvironmentPrepared,
-      tailscaleServeEnabled: backendExposure.tailscaleServeEnabled,
-      tailscaleServePort: backendExposure.tailscaleServePort,
       desktopTelemetryFd: 4,
       desktopTelemetryControlFd: 5,
       desktopAppUpdate: input.desktopAppUpdate,
@@ -583,7 +578,7 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       extendEnv: true,
       bootstrap,
       bootstrapDelivery: "fd3",
-      httpBaseUrl: backendExposure.httpBaseUrl,
+      httpBaseUrl,
       captureOutput: true,
       preflightFailure: Option.none(),
     } satisfies DesktopBackendManager.DesktopBackendStartConfig;
@@ -626,9 +621,6 @@ const resolveWslStartConfig = Effect.fn("desktop.backendConfiguration.resolveWsl
     desktopBootstrapToken: input.bootstrapToken,
     desktopBootstrapSecret: input.bootstrapSecret,
     desktopReadinessSecret: input.readiness.secret,
-    // PortSchema rejects 0 even when Tailscale Serve is disabled.
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
     ...buildObservabilityFragment(input.observabilitySettings),
   };
 
@@ -780,7 +772,7 @@ export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const shellEnvironment = yield* DesktopShellEnvironment.DesktopShellEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
-  const serverExposure = yield* DesktopServerExposure.DesktopServerExposure;
+  const primaryPortRef = yield* Ref.make(3773);
   const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const wslServerTree = yield* DesktopWslServerTree.DesktopWslServerTree;
   const settings = yield* DesktopAppSettings.DesktopAppSettings;
@@ -844,13 +836,13 @@ export const make = Effect.gen(function* () {
   });
 
   const buildWslPrimaryConfig = Effect.gen(function* () {
-    const backendExposure = yield* serverExposure.backendConfig;
+    const port = yield* Ref.get(primaryPortRef);
     const persistedSettings = yield* settings.get;
     const shared = yield* sharedInputs;
     yield* wslEnvironment.preWarm(persistedSettings.wslDistro);
     return yield* resolveWslStartConfig({
       ...shared,
-      port: backendExposure.port,
+      port,
       distro: persistedSettings.wslDistro,
       readiness: yield* makeLaunchReadiness,
     }).pipe(
@@ -874,14 +866,12 @@ export const make = Effect.gen(function* () {
     const shellEnvironmentPrepared = yield* shellEnvironment.installIntoProcess;
     return yield* resolvePrimaryStartConfig({
       ...shared,
+      port: yield* Ref.get(primaryPortRef),
       resourceMonitorPath,
       cliPath,
       shellEnvironmentPrepared,
       desktopAppUpdate: yield* Ref.get(desktopState.canInstallUpdates),
-    }).pipe(
-      Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
-      Effect.provideService(DesktopServerExposure.DesktopServerExposure, serverExposure),
-    );
+    }).pipe(Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment));
   });
 
   // Resolve on each restart so toggling wsl-only takes effect without recreating the pool.
@@ -902,6 +892,10 @@ export const make = Effect.gen(function* () {
 
   return DesktopBackendConfiguration.of({
     currentBootstrapToken,
+    primaryPort: Ref.get(primaryPortRef),
+    setPrimaryPort: Effect.fn("DesktopBackendConfiguration.setPrimaryPort")((port) =>
+      Ref.set(primaryPortRef, port),
+    ),
     resolvePrimary: Effect.gen(function* () {
       const { useWsl, wslRequested } = yield* describePrimary;
       if (useWsl) {

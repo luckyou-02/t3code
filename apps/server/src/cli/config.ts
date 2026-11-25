@@ -22,8 +22,8 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 import { Argument, Flag } from "effect/cli";
 import * as CliError from "effect/cli/CliError";
 
+import { loopbackBindAddress } from "../auth/utils.ts";
 import { readBootstrapEnvelope } from "../bootstrap.ts";
-import { resolveServiceLauncherMode } from "../cloud/serviceLauncherClient.ts";
 import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
 import { isProcessAlive, readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
@@ -40,7 +40,7 @@ const portFlag = Flag.Int("port").pipe(
   Flag.optional,
 );
 const hostFlag = Flag.String("host").pipe(
-  Flag.withDescription("Host/interface to bind (for example 127.0.0.1, 0.0.0.0, or a Tailnet IP)."),
+  Flag.withDescription("Loopback address to bind (for example 127.0.0.1 or ::1)."),
   Flag.optional,
 );
 export const baseDirFlag = Flag.String("base-dir").pipe(
@@ -76,24 +76,6 @@ const logWebSocketEventsFlag = Flag.Boolean("log-websocket-events").pipe(
   Flag.withAlias("log-ws-events"),
   Flag.optional,
 );
-const tailscaleServeFlag = Flag.Boolean("tailscale-serve").pipe(
-  Flag.withDescription(
-    "Configure Tailscale Serve to expose this backend over HTTPS on the Tailnet.",
-  ),
-  Flag.optional,
-);
-const tailscaleServePortFlag = Flag.Int("tailscale-serve-port").pipe(
-  Flag.withSchema(PortSchema),
-  Flag.withDescription("HTTPS port for Tailscale Serve when --tailscale-serve is enabled."),
-  Flag.optional,
-);
-const lanFlag = Flag.Boolean("lan").pipe(
-  Flag.withDescription(
-    "Accept connections from your local network and tailnet, not only this machine (equivalent to T3CODE_LAN).",
-  ),
-  Flag.optional,
-);
-
 export const traceFileConfig = Config.String("T3CODE_TRACE_FILE").pipe(
   Config.option,
   Config.map(Option.getOrUndefined),
@@ -165,15 +147,6 @@ const EnvServerConfig = Config.all({
     Config.option,
     Config.map(Option.getOrUndefined),
   ),
-  tailscaleServeEnabled: Config.Boolean("T3CODE_TAILSCALE_SERVE").pipe(
-    Config.option,
-    Config.map(Option.getOrUndefined),
-  ),
-  tailscaleServePort: Config.Port("T3CODE_TAILSCALE_SERVE_PORT").pipe(
-    Config.option,
-    Config.map(Option.getOrUndefined),
-  ),
-  lan: Config.Boolean("T3CODE_LAN").pipe(Config.option, Config.map(Option.getOrUndefined)),
 });
 
 const DevAuthTokenConfig = Config.Redacted("T3CODE_DEV_AUTH_TOKEN").pipe(
@@ -207,9 +180,6 @@ export interface CliServerFlags {
   readonly bootstrapFd: Option.Option<number>;
   readonly autoBootstrapProjectFromCwd: Option.Option<boolean>;
   readonly logWebSocketEvents: Option.Option<boolean>;
-  readonly tailscaleServeEnabled: Option.Option<boolean>;
-  readonly tailscaleServePort: Option.Option<number>;
-  readonly lan: Option.Option<boolean>;
 }
 
 export interface CliAuthLocationFlags {
@@ -242,9 +212,6 @@ export const sharedServerCommandFlags = {
   bootstrapFd: bootstrapFdFlag,
   autoBootstrapProjectFromCwd: autoBootstrapProjectFromCwdFlag,
   logWebSocketEvents: logWebSocketEventsFlag,
-  tailscaleServeEnabled: tailscaleServeFlag,
-  tailscaleServePort: tailscaleServePortFlag,
-  lan: lanFlag,
 } as const;
 
 const resolveOptionPrecedence = <Value>(
@@ -291,9 +258,6 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
     bootstrapFd: flags.bootstrapFd ?? Option.none(),
     autoBootstrapProjectFromCwd: flags.autoBootstrapProjectFromCwd ?? Option.none(),
     logWebSocketEvents: flags.logWebSocketEvents ?? Option.none(),
-    tailscaleServeEnabled: flags.tailscaleServeEnabled ?? Option.none(),
-    tailscaleServePort: flags.tailscaleServePort ?? Option.none(),
-    lan: flags.lan ?? Option.none(),
   } satisfies CliServerFlags;
   const bootstrapFd = Option.getOrUndefined(normalizedFlags.bootstrapFd) ?? env.bootstrapFd;
   const bootstrapEnvelope =
@@ -399,44 +363,17 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
     ),
     () => Boolean(devUrl),
   );
-  const tailscaleServeEnabled = Option.getOrElse(
-    resolveOptionPrecedence(
-      normalizedFlags.tailscaleServeEnabled,
-      Option.fromUndefinedOr(env.tailscaleServeEnabled),
-      Option.fromUndefinedOr(bootstrap?.tailscaleServeEnabled),
-    ),
-    () => false,
-  );
-  const tailscaleServePort = Option.getOrElse(
-    resolveOptionPrecedence(
-      normalizedFlags.tailscaleServePort,
-      Option.fromUndefinedOr(env.tailscaleServePort),
-      Option.fromUndefinedOr(bootstrap?.tailscaleServePort),
-    ),
-    () => 443,
-  );
   const staticDir = devUrl ? undefined : yield* ServerConfig.resolveStaticDir();
-  const explicitHost = resolveOptionPrecedence(
-    normalizedFlags.host,
-    Option.fromUndefinedOr(env.host),
-    Option.fromUndefinedOr(bootstrap?.host),
-  );
-  // Private networks only, so clients learn a LAN address and prefer it over
-  // T3 Connect. `t3 service install` writes T3CODE_LAN=false for a new
-  // service; one installed before T3CODE_LAN existed keeps listening.
-  const lan = resolveOptionPrecedence(normalizedFlags.lan, Option.fromUndefinedOr(env.lan));
-  const privateNetworkOnly =
-    Option.isNone(explicitHost) &&
-    mode === "web" &&
-    (Option.isSome(lan)
-      ? lan.value
-      : yield* resolveServiceLauncherMode().pipe(
-          Effect.map((launcher) => launcher.managed),
-          Effect.orElseSucceed(() => false),
-        ));
-  const host = Option.getOrElse(explicitHost, () =>
-    privateNetworkOnly ? "0.0.0.0" : mode === "desktop" ? "127.0.0.1" : undefined,
-  );
+  const requestedHost = Option.getOrElse(normalizedFlags.host, () => env.host);
+  const localHost = requestedHost === undefined ? undefined : loopbackBindAddress(requestedHost);
+  if (Option.isSome(normalizedFlags.host) && localHost === undefined) {
+    return yield* new CliError.UserError({
+      cause: requestedHost,
+      userMessage: "--host must be a loopback address.",
+    });
+  }
+  // The desktop launcher supplies the address needed by WSL's local host forwarding.
+  const host = localHost ?? bootstrap?.host ?? "127.0.0.1";
   const port = yield* Option.match(
     resolveOptionPrecedence(
       normalizedFlags.port,
@@ -517,7 +454,6 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
     ...derivedPaths,
     serverTracePath,
     host,
-    ...(privateNetworkOnly ? { privateNetworkOnly } : {}),
     staticDir,
     devUrl,
     ...(devAuthToken === undefined ? {} : { devAuthToken }),
@@ -536,8 +472,6 @@ export const resolveServerConfig = Effect.fn("config.resolveServerConfig")(funct
     resourceMonitorPath,
     autoBootstrapProjectFromCwd,
     logWebSocketEvents,
-    tailscaleServeEnabled,
-    tailscaleServePort,
   };
 
   return config;
@@ -560,9 +494,6 @@ export const resolveCliAuthConfig = (
       bootstrapFd: Option.none(),
       autoBootstrapProjectFromCwd: Option.none(),
       logWebSocketEvents: Option.none(),
-      tailscaleServeEnabled: Option.none(),
-      tailscaleServePort: Option.none(),
-      lan: Option.none(),
     },
     cliLogLevel,
   );

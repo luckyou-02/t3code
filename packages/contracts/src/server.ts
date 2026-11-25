@@ -679,15 +679,6 @@ export function environmentThemeFileHasColors(file: EnvironmentThemeFile): boole
 }
 
 /** tailnet means this machine's Tailscale interface; other private addresses are lan. */
-export const ServerDirectEndpointKind = Schema.Literals(["lan", "tailnet"]);
-export type ServerDirectEndpointKind = typeof ServerDirectEndpointKind.Type;
-
-export const ServerDirectEndpoint = Schema.Struct({
-  kind: ServerDirectEndpointKind,
-  httpBaseUrl: TrimmedNonEmptyString,
-});
-export type ServerDirectEndpoint = typeof ServerDirectEndpoint.Type;
-
 /**
  * A stretch where the server's event loop could not run, so it answered
  * nothing and clients may have dropped the connection.
@@ -721,7 +712,6 @@ export const ServerConfig = Schema.Struct({
   availableEditors: ForwardCompatibleArray(EditorId),
   remoteOpenTargets: Schema.optionalKey(ForwardCompatibleArray(RemoteOpenTarget)),
   /** Hints only; verify each address answers as this environment. */
-  directEndpoints: Schema.optionalKey(ForwardCompatibleArray(ServerDirectEndpoint)),
   observability: ServerObservability,
   settings: ServerSettings,
   /** Present when an administrator's policy file manages this environment. */

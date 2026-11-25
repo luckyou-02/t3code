@@ -70,7 +70,7 @@ export const loadedPolicy = Effect.fn("ManagedPolicy.loadedPolicy")(function* (
  */
 export function deniedBy(
   policy: Pick<ManagedPolicy["Service"], "document">,
-  capability: "webhookTasks" | "telemetry" | "previewTunnel" | "worktreeLayoutCommands",
+  capability: "webhookTasks" | "telemetry" | "worktreeLayoutCommands",
 ): string | undefined {
   return policy.document?.limits?.[capability] === false ? policy.document.organization : undefined;
 }
@@ -90,7 +90,8 @@ export const fromDocument = Effect.fn("ManagedPolicy.fromDocument")(function* (
     });
   }
   const maxRuntimeMode = document.limits?.maxRuntimeMode;
-  const settings = ManagedSettings.makeManagedSettings(document.settings ?? {}, maxRuntimeMode);
+  const { enablePreviewTunnel: _legacyPreviewTunnel, ...activeSettings } = document.settings ?? {};
+  const settings = ManagedSettings.makeManagedSettings(activeSettings, maxRuntimeMode);
   if (settings._tag === "Invalid") {
     return yield* new ManagedPolicyFileError({ path, reason: settings.reason });
   }
@@ -135,7 +136,6 @@ function summarizeLimits(
     webhookTasks,
     telemetry,
     browserCookieImport,
-    previewTunnel,
     worktreeLayoutCommands,
     providers,
     updates,
@@ -148,7 +148,6 @@ function summarizeLimits(
     ...(webhookTasks === undefined ? {} : { webhookTasks }),
     ...(telemetry === undefined ? {} : { telemetry }),
     ...(browserCookieImport === undefined ? {} : { browserCookieImport }),
-    ...(previewTunnel === undefined ? {} : { previewTunnel }),
     ...(worktreeLayoutCommands === undefined ? {} : { worktreeLayoutCommands }),
     ...(providers?.allowedDrivers === undefined && Object.keys(lockedInstanceFields).length === 0
       ? {}

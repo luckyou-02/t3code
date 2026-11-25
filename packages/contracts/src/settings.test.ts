@@ -566,4 +566,9 @@ describe("legacy pruned settings compatibility", () => {
     const decoded = decodeServerSettings({ linkedEnvironmentsEnabled: true });
     expect(decoded).not.toHaveProperty("linkedEnvironmentsEnabled");
   });
+
+  it("ignores removed enablePreviewTunnel when decoding persisted settings", () => {
+    const decoded = decodeServerSettings({ enablePreviewTunnel: false });
+    expect(decoded).not.toHaveProperty("enablePreviewTunnel");
+  });
 });

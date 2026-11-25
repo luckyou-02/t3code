@@ -130,7 +130,6 @@ export type ManagedCapability =
   | "connect"
   | "webhookTasks"
   | "browserCookieImport"
-  | "previewTunnel"
   | "worktreeLayoutCommands";
 
 function managedCapabilityDeniedMessage(
@@ -156,13 +155,6 @@ function managedCapabilityDeniedMessage(
         msg("{organization}'s policy does not allow importing browser cookies.", {
           organization,
         }),
-      );
-    case "previewTunnel":
-      return resolve(
-        msg(
-          "{organization}'s policy does not allow opening this machine's local servers on other devices.",
-          { organization },
-        ),
       );
     case "worktreeLayoutCommands":
       return resolve(

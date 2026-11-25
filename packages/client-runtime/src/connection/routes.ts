@@ -7,12 +7,8 @@ import {
 import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 
-import {
-  BearerConnectionProfile,
-  type ConnectionCatalogEntry,
-  type ConnectionRoute,
-} from "./catalog.ts";
-import { BearerConnectionTarget, type ConnectionTarget } from "./model.ts";
+import { type ConnectionCatalogEntry, type ConnectionRoute } from "./catalog.ts";
+import { type ConnectionTarget } from "./model.ts";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
@@ -233,14 +229,6 @@ export function connectionRouteLabelText(
   }
 }
 
-export function connectionRouteAddress(route: ConnectionRoute): string | null {
-  if (route.target._tag === "SshConnectionTarget") {
-    const profile = Option.getOrNull(route.profile);
-    return profile?._tag === "SshConnectionProfile" ? profile.target.alias : null;
-  }
-  return routeHttpBaseUrl(route);
-}
-
 /** Learned routes alone must not make relay environments manually retryable. */
 export const hasSavedBearerRoute = (entry: ConnectionCatalogEntry) =>
   connectionRoutes(entry).some((r) => !isLearned(r) && r.target._tag === "BearerConnectionTarget");
@@ -251,114 +239,6 @@ export function hasRelayRoute(
   return [entry.target, ...(entry.alternateRoutes ?? []).map((route) => route.target)].some(
     (target) => target._tag === "RelayConnectionTarget",
   );
-}
-
-export function mergeLearnedRoutes(input: {
-  readonly entry: ConnectionCatalogEntry;
-  readonly activeRoute: ConnectionRoute;
-  readonly reported: ReadonlyArray<ReportedEndpoint>;
-  /** Plain HTTP routes are unusable from an HTTPS page (mixed content). */
-  readonly allowInsecure: boolean;
-}): ReadonlyArray<ConnectionRoute> | null {
-  const { entry } = input;
-  const active = input.activeRoute.target;
-  const saved = connectionRoutes(entry);
-  if (active._tag !== "RelayConnectionTarget" && active._tag !== "BearerConnectionTarget") {
-    return null;
-  }
-  const activeProfile = Option.getOrNull(input.activeRoute.profile);
-  const authorization =
-    active._tag === "RelayConnectionTarget" ||
-    (activeProfile?._tag === "BearerConnectionProfile" &&
-      activeProfile.authorization === "t3-connect")
-      ? ("t3-connect" as const)
-      : undefined;
-  const sharedCredential =
-    authorization === undefined && active._tag === "BearerConnectionTarget"
-      ? credentialConnectionId(active.connectionId)
-      : undefined;
-  const reported = new Map<string, URL>();
-  const tailscaleOrigins = new Set<string>();
-  for (const endpoint of input.reported) {
-    let url: URL;
-    try {
-      url = new URL(endpoint.httpBaseUrl);
-    } catch {
-      continue;
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
-    if (url.protocol === "http:" && !input.allowInsecure) continue;
-    // A loopback address names whichever device opens it, never the server.
-    if (isLocalLoopbackHost(url.hostname)) continue;
-    reported.set(url.origin, url);
-    if (endpoint.kind === "tailnet") tailscaleOrigins.add(url.origin);
-  }
-  const normalized = (url: string) => url.replace(/\/+$/, "");
-  const known = new Set(
-    saved.flatMap((route) => {
-      const url = routeHttpBaseUrl(route);
-      return url === null || isLearned(route) ? [] : [normalized(url)];
-    }),
-  );
-  const kept = saved.flatMap((route): ReadonlyArray<ConnectionRoute> => {
-    const url = routeHttpBaseUrl(route);
-    if (!isLearned(route)) {
-      return [
-        url === null || !reported.has(normalized(url))
-          ? route
-          : withNetwork(route, tailscaleOrigins.has(normalized(url))),
-      ];
-    }
-    if (url === null || !reported.has(normalized(url)) || known.has(normalized(url))) return [];
-    if (sendsTokenInClear(saved, route, tailscaleOrigins.has(normalized(url)))) return [];
-    known.add(normalized(url));
-    return [withNetwork(route, tailscaleOrigins.has(normalized(url)))];
-  });
-  let next: ReadonlyArray<ConnectionRoute> = kept;
-  for (const url of reported.values()) {
-    if (known.has(url.origin)) continue;
-    if (
-      url.protocol === "http:" &&
-      sharedCredential !== undefined &&
-      !tailscaleOrigins.has(url.origin) &&
-      !tokenAllowsPlainHttp(saved, sharedCredential)
-    ) {
-      continue;
-    }
-    const httpBaseUrl = `${url.origin}/`;
-    const connectionId = learnedConnectionId(
-      entry.target.environmentId,
-      url.origin,
-      sharedCredential,
-    );
-    next = insertRoute(next, {
-      target: new BearerConnectionTarget({
-        environmentId: entry.target.environmentId,
-        label: entry.target.label,
-        connectionId,
-      }),
-      profile: Option.some(
-        new BearerConnectionProfile({
-          connectionId,
-          environmentId: entry.target.environmentId,
-          label: entry.target.label,
-          httpBaseUrl,
-          wsBaseUrl: `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/`,
-          learned: true,
-          ...(authorization === undefined ? {} : { authorization }),
-          ...(tailscaleOrigins.has(url.origin) ? { network: "tailscale" as const } : {}),
-        }),
-      ),
-    });
-  }
-  const signature = (routes: ReadonlyArray<ConnectionRoute>) =>
-    routes
-      .map(
-        (route) =>
-          `${connectionRouteId(route.target)} ${routeHttpBaseUrl(route) ?? ""} ${connectionRouteKind(route)}`,
-      )
-      .join("\n");
-  return signature(saved) === signature(next) ? null : next;
 }
 
 // A paired token goes to a plain HTTP address outside the tailnet only when
@@ -406,42 +286,6 @@ export function usableRoutes(entry: ConnectionCatalogEntry): ReadonlyArray<Conne
   return routes.filter((route) => !sendsTokenInClear(routes, route));
 }
 
-export interface ReportedEndpoint {
-  readonly httpBaseUrl: string;
-  readonly kind?: string;
-}
-
-function withNetwork(route: ConnectionRoute, tailscale: boolean): ConnectionRoute {
-  const profile = Option.getOrNull(route.profile);
-  if (profile?._tag !== "BearerConnectionProfile") return route;
-  if ((profile.network === "tailscale") === tailscale) return route;
-  return {
-    target: route.target,
-    profile: Option.some(
-      new BearerConnectionProfile({
-        connectionId: profile.connectionId,
-        environmentId: profile.environmentId,
-        label: profile.label,
-        httpBaseUrl: profile.httpBaseUrl,
-        wsBaseUrl: profile.wsBaseUrl,
-        ...(profile.learned === undefined ? {} : { learned: profile.learned }),
-        ...(profile.authorization === undefined ? {} : { authorization: profile.authorization }),
-        ...(tailscale ? { network: "tailscale" as const } : {}),
-      }),
-    ),
-  };
-}
-
-function learnedConnectionId(
-  environmentId: string,
-  origin: string,
-  sharedCredential: string | undefined,
-): string {
-  return sharedCredential === undefined
-    ? `learned:${environmentId}:${origin}`
-    : `learned:${environmentId}:${origin}@${sharedCredential}`;
-}
-
 export function credentialConnectionId(connectionId: string): string {
   const at = connectionId.indexOf("@");
   return connectionId.startsWith("learned:") && at !== -1
@@ -449,7 +293,7 @@ export function credentialConnectionId(connectionId: string): string {
     : connectionId;
 }
 
-export function isLearned(route: ConnectionRoute): boolean {
+function isLearned(route: ConnectionRoute): boolean {
   const profile = Option.getOrNull(route.profile);
   return profile?._tag === "BearerConnectionProfile" && profile.learned === true;
 }
@@ -482,21 +326,6 @@ export function routesAfterRemoving(
  * A learned route would be learned again, and the last route a learned route
  * borrows from would take the whole environment with it.
  */
-export function canRemoveRoute(
-  routes: ReadonlyArray<ConnectionRoute>,
-  route: ConnectionRoute,
-): boolean {
-  return (
-    !isLearned(route) && routesAfterRemoving(routes, connectionRouteId(route.target)).length > 0
-  );
-}
-
-/**
- * A dragged route order shows until the saved routes catch up with it. It is
- * stale, and returns null, once the saved order matches it or the saved routes
- * are no longer the same set: kept any longer, it would hide a route added
- * later whenever the count happened to match again.
- */
 export function pendingRouteOrder(
   pending: ReadonlyArray<string> | null,
   savedIds: ReadonlyArray<string>,
@@ -505,10 +334,6 @@ export function pendingRouteOrder(
   const saved = new Set(savedIds);
   if (!pending.every((id) => saved.has(id))) return null;
   return pending.some((id, index) => id !== savedIds[index]) ? pending : null;
-}
-
-export function removedWithRelay(entry: ConnectionCatalogEntry): boolean {
-  return routesAfterRemoving(connectionRoutes(entry), RELAY_ROUTE_ID).length === 0;
 }
 
 export function sshTargetKey(target: DesktopSshEnvironmentTarget): string {

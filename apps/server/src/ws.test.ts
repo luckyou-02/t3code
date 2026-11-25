@@ -93,7 +93,6 @@ import * as ThreadViewers from "./orchestration-v2/ThreadViewers.ts";
 import * as CodexInstallation from "./provider/CodexInstallation.ts";
 import * as DeviceService from "./device/DeviceService.ts";
 import * as DocumentText from "./provider/DocumentText.ts";
-import * as DirectEndpoints from "./environment/DirectEndpoints.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as GitWorkflowService from "./git/GitWorkflowService.ts";
@@ -217,7 +216,6 @@ it.effect("resends late editors without rolling back updates already sent", () =
           Deferred.await(settingsSent).pipe(Effect.as("file-explorer" as const)),
       },
       { resolveTargets: () => Effect.succeed([]) },
-      { resolve: () => Effect.succeed([]) },
     ).pipe(
       Stream.tap((event) =>
         event.type === "settingsUpdated" ? Deferred.succeed(settingsSent, undefined) : Effect.void,
@@ -249,7 +247,6 @@ it.effect("resends a reveal kind and remote targets that outlast the snapshot ti
         resolveFileManagerRevealKind: () => Effect.succeed("file-explorer"),
       },
       { resolveTargets: () => Deferred.await(finishDiscovery) },
-      { resolve: () => Effect.succeed([]) },
     ).pipe(Stream.runCollect, Effect.forkScoped({ startImmediately: true }));
     yield* TestClock.adjust("6 seconds");
     yield* Deferred.succeed(finishDiscovery, targets);
@@ -269,18 +266,15 @@ it.effect("resends a reveal kind and remote targets that outlast the snapshot ti
   }),
 );
 
-it.effect("runs editor, remote open target and direct endpoint discovery side by side", () =>
+it.effect("runs editor and remote open target discovery side by side", () =>
   Effect.gen(function* () {
-    // Each discovery finishes only once the other two have started, so a
+    // Each discovery finishes only once both have started, so a
     // config that ran them one after another would never resolve.
     const editorsStarted = yield* Deferred.make<void>();
     const targetsStarted = yield* Deferred.make<void>();
-    const endpointsStarted = yield* Deferred.make<void>();
     const startThenAwait = <A>(started: Deferred.Deferred<void>, value: A) =>
       Deferred.succeed(started, undefined).pipe(
-        Effect.andThen(
-          Effect.forEach([editorsStarted, targetsStarted, endpointsStarted], Deferred.await),
-        ),
+        Effect.andThen(Effect.forEach([editorsStarted, targetsStarted], Deferred.await)),
         Effect.as(value),
       );
 
@@ -288,7 +282,6 @@ it.effect("runs editor, remote open target and direct endpoint discovery side by
       editors: startThenAwait(editorsStarted, ["file-manager" as const]),
       fileManagerRevealKind: Effect.succeed("finder" as const),
       remoteOpenTargets: startThenAwait(targetsStarted, []),
-      directEndpoints: startThenAwait(endpointsStarted, []),
     });
 
     assert.deepEqual(discovery, {
@@ -296,7 +289,6 @@ it.effect("runs editor, remote open target and direct endpoint discovery side by
       shellRevealInFileManager: true,
       shellRevealInFileManagerKind: "finder",
       remoteOpenTargets: [],
-      directEndpoints: [],
     });
   }),
 );
@@ -965,7 +957,6 @@ it.live.each([
         Layer.mock(UsageLimitSources.UsageLimitSources)({}),
         Layer.mock(ExternalLauncher.ExternalLauncher)({}),
         Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-        Layer.mock(DirectEndpoints.DirectEndpoints)({}),
         Layer.mock(ServerEnvironment.ServerEnvironment)({}),
         Layer.mock(VcsProcess.VcsProcess)({
           run: (input) =>
@@ -1019,14 +1010,7 @@ it.live.each([
     }).pipe(Effect.scoped),
 );
 
-it.effect.each([
-  "pending",
-  "cached",
-  "direct-pending",
-  "direct-cached",
-  "direct-failed",
-  "direct-interrupted",
-] as const)(
+it.effect.each(["pending", "cached"] as const)(
   "%s endpoint discovery preserves initial config and updates through discovery and ACK",
   (discovery) =>
     Effect.gen(function* () {
@@ -1046,15 +1030,6 @@ it.effect.each([
       const remoteDiscoveryStarted = yield* Deferred.make<void>();
       const finishRemoteDiscovery = yield* Deferred.make<void>();
       const targets = [{ kind: "mdns" as const, host: "test.local" }];
-      const direct = discovery.startsWith("direct-");
-      const bound = [{ kind: "lan" as const, httpBaseUrl: "http://192.168.1.10:3773/" }];
-      const endpoints = [
-        ...bound,
-        { kind: "tailnet" as const, httpBaseUrl: "https://test.ts.net/" },
-      ];
-      const directStarted = yield* Deferred.make<void>();
-      const finishDirect = yield* Deferred.make<void>();
-      const directStopped = yield* Deferred.make<void>();
       const responses = yield* Queue.unbounded<ServerConfigStreamEvent>();
       const configRpcServices = Layer.mergeAll(
         layerUnusedConfigRpcServices,
@@ -1075,29 +1050,10 @@ it.effect.each([
           resolveTargets: () =>
             Deferred.succeed(remoteDiscoveryStarted, undefined).pipe(
               Effect.andThen(
-                discovery === "cached" || direct
-                  ? Effect.void
-                  : Deferred.await(finishRemoteDiscovery),
+                discovery === "cached" ? Effect.void : Deferred.await(finishRemoteDiscovery),
               ),
               Effect.as(targets),
             ),
-        }),
-        Layer.mock(DirectEndpoints.DirectEndpoints)({
-          resolveAvailable: () => Effect.succeed(discovery === "direct-cached" ? endpoints : bound),
-          resolve: () =>
-            direct
-              ? Deferred.succeed(directStarted, undefined).pipe(
-                  Effect.andThen(
-                    discovery === "direct-cached" ? Effect.void : Deferred.await(finishDirect),
-                  ),
-                  Effect.andThen(
-                    discovery === "direct-failed"
-                      ? Effect.die("probe failed")
-                      : Effect.succeed(endpoints),
-                  ),
-                  Effect.onExit(() => Deferred.succeed(directStopped, undefined)),
-                )
-              : Effect.succeed(bound),
         }),
         Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
           scratchRoot: Effect.succeedNone,
@@ -1178,14 +1134,7 @@ it.effect.each([
       const snapshot = yield* Queue.take(responses);
       assert.equal(snapshot.type, "snapshot");
       if (snapshot.type !== "snapshot") return yield* Effect.die("Missing initial snapshot");
-      assert.deepEqual(
-        snapshot.config.remoteOpenTargets,
-        discovery === "cached" || direct ? targets : [],
-      );
-      assert.deepEqual(
-        snapshot.config.directEndpoints,
-        discovery === "direct-cached" ? endpoints : bound,
-      );
+      assert.deepEqual(snapshot.config.remoteOpenTargets, discovery === "cached" ? targets : []);
       assert.isFalse(snapshot.config.settings.defaultAutoPull);
       assert.deepEqual(snapshot.config.keybindings, initialKeybindings);
       const duringAck = yield* keybindings.upsertKeybindingRule({
@@ -1236,33 +1185,7 @@ it.effect.each([
         assert.deepEqual(resolved.config.keybindings, latestKeybindings.keybindings);
         yield* acknowledge;
       }
-      if (direct) {
-        yield* Deferred.await(directStarted);
-        if (discovery === "direct-pending") {
-          yield* Deferred.succeed(finishDirect, undefined);
-          const resolved = yield* Queue.take(responses);
-          assert.equal(resolved.type, "snapshot");
-          if (resolved.type !== "snapshot") return yield* Effect.die("Missing direct endpoints");
-          assert.deepEqual(resolved.config.directEndpoints, endpoints);
-          assert.deepEqual(
-            resolved.config.settings,
-            ServerSettings.redactServerSettingsForClient(latestSettings, {
-              secretReferences: true,
-            }),
-          );
-          assert.deepEqual(resolved.config.keybindings, latestKeybindings.keybindings);
-          yield* acknowledge;
-        } else if (discovery === "direct-failed") {
-          yield* Deferred.succeed(finishDirect, undefined);
-          yield* Deferred.await(directStopped);
-          yield* settings.updateSettings({ defaultAutoPull: false });
-          const event = yield* Queue.take(responses);
-          assert.equal(event.type, "settingsUpdated");
-          yield* acknowledge;
-        }
-      }
       yield* server.write(0, { _tag: "Interrupt", requestId, interruptors: [] });
-      if (direct) yield* Deferred.await(directStopped);
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
@@ -1321,7 +1244,6 @@ it.effect("access changes made while the snapshot loads reach the client after i
               Layer.mock(ProviderRegistry.ProviderRegistry)({}),
               Layer.mock(UsageLimitSources.UsageLimitSources)({}),
               Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-              Layer.mock(DirectEndpoints.DirectEndpoints)({}),
               Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
                 namedProjectsRoot: "/unused",
               }),
@@ -1473,10 +1395,6 @@ it.effect("on-demand clients get provider config without workspace snapshots", (
       }),
       Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({
         resolveTargets: () => Effect.succeed([]),
-      }),
-      Layer.mock(DirectEndpoints.DirectEndpoints)({
-        resolve: () => Effect.succeed([]),
-        resolveAvailable: () => Effect.succeed([]),
       }),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         scratchRoot: Effect.succeedNone,
@@ -1855,7 +1773,6 @@ it.effect("a missing thread worktree gets its project's skills in the cwd snapsh
       Layer.mock(UsageLimitSources.UsageLimitSources)({ current: Effect.succeed([]) }),
       Layer.mock(ExternalLauncher.ExternalLauncher)({}),
       Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-      Layer.mock(DirectEndpoints.DirectEndpoints)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({
         scratchRoot: Effect.succeedNone,
         namedProjectsRoot: process.cwd(),
@@ -1945,7 +1862,6 @@ it.effect(
           Layer.mock(ProviderRegistry.ProviderRegistry)({}),
           Layer.mock(UsageLimitSources.UsageLimitSources)({}),
           Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-          Layer.mock(DirectEndpoints.DirectEndpoints)({}),
           Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
           Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
           Layer.mock(ServerEnvironment.ServerEnvironment)({}),
@@ -2035,7 +1951,6 @@ it.effect(
           Layer.mock(ProviderRegistry.ProviderRegistry)({}),
           Layer.mock(UsageLimitSources.UsageLimitSources)({}),
           Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-          Layer.mock(DirectEndpoints.DirectEndpoints)({}),
           Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
           Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
           Layer.mock(ServerEnvironment.ServerEnvironment)({}),
@@ -2119,7 +2034,6 @@ it.effect("a git action that fails partway still refreshes the repository status
       Layer.mock(ProviderRegistry.ProviderRegistry)({}),
       Layer.mock(UsageLimitSources.UsageLimitSources)({}),
       Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-      Layer.mock(DirectEndpoints.DirectEndpoints)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
       Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
       Layer.mock(ServerEnvironment.ServerEnvironment)({}),
@@ -2198,7 +2112,6 @@ it.effect("a publish whose push fails still refreshes the new remote", () =>
       Layer.mock(ProviderRegistry.ProviderRegistry)({}),
       Layer.mock(UsageLimitSources.UsageLimitSources)({}),
       Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-      Layer.mock(DirectEndpoints.DirectEndpoints)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
       Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
       Layer.mock(ServerEnvironment.ServerEnvironment)({}),
@@ -2755,7 +2668,6 @@ it.effect("ACP session RPCs list a thread missing its history and repair it on i
       Layer.mock(ProviderRegistry.ProviderRegistry)({}),
       Layer.mock(UsageLimitSources.UsageLimitSources)({}),
       Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-      Layer.mock(DirectEndpoints.DirectEndpoints)({}),
       Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
       Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
       Layer.mock(ServerEnvironment.ServerEnvironment)({}),
@@ -2928,7 +2840,6 @@ const makeWorkflowClient = Effect.fn("test.makeWorkflowClient")(function* (
     Layer.mock(ProviderRegistry.ProviderRegistry)({}),
     Layer.mock(UsageLimitSources.UsageLimitSources)({}),
     Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-    Layer.mock(DirectEndpoints.DirectEndpoints)({}),
     Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
     Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
     Layer.mock(ServerEnvironment.ServerEnvironment)({}),
@@ -2992,7 +2903,6 @@ const makeAcpRegistryClient = Effect.fn("test.makeAcpRegistryClient")(function* 
     Layer.mock(ProviderRegistry.ProviderRegistry)({}),
     Layer.mock(UsageLimitSources.UsageLimitSources)({}),
     Layer.mock(RemoteOpenTargets.RemoteOpenTargets)({}),
-    Layer.mock(DirectEndpoints.DirectEndpoints)({}),
     Layer.mock(ManagedProjectFolders.ManagedProjectFolders)({ namedProjectsRoot: "/unused" }),
     Layer.mock(ScratchThreadPromotion.ScratchThreadPromotion)({}),
     Layer.mock(ServerEnvironment.ServerEnvironment)({}),

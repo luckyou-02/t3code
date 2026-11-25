@@ -24,9 +24,6 @@ const DesktopSettingsPatch = Schema.Struct({
     ),
   ),
   mainWindowMaximized: Schema.optionalKey(Schema.Boolean),
-  serverExposureMode: Schema.optionalKey(Schema.Literals(["local-only", "network-accessible"])),
-  tailscaleServeEnabled: Schema.optionalKey(Schema.Boolean),
-  tailscaleServePort: Schema.optionalKey(Schema.Number),
   updateChannel: Schema.optionalKey(Schema.Literals(["latest", "nightly"])),
   updateChannelConfiguredByUser: Schema.optionalKey(Schema.Boolean),
   wslBackendEnabled: Schema.optionalKey(Schema.Boolean),
@@ -125,25 +122,6 @@ describe("DesktopSettings", () => {
     }),
   );
 
-  it.effect(
-    "persists disabling and re-enabling local execution without clearing backend settings",
-    () =>
-      withSettings(
-        Effect.gen(function* () {
-          const settings = yield* DesktopAppSettings.DesktopAppSettings;
-          yield* settings.setWslBackendEnabled(true);
-          yield* settings.setWslDistro("Ubuntu");
-          yield* settings.setServerExposureMode("network-accessible");
-          const before = yield* settings.get;
-          assert.isTrue((yield* settings.setLocalEnvironmentEnabled(false)).changed);
-          assert.deepEqual(yield* settings.load, { ...before, localEnvironmentEnabled: false });
-          assert.isFalse((yield* settings.setLocalEnvironmentEnabled(false)).changed);
-          yield* settings.setLocalEnvironmentEnabled(true);
-          assert.deepEqual(yield* settings.load, before);
-        }),
-      ),
-  );
-
   it.effect("falls back to defaults when the settings file is malformed", () =>
     withSettings(
       Effect.gen(function* () {
@@ -163,7 +141,7 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
         const fileSystem = yield* FileSystem.FileSystem;
-        yield* writeSettingsPatch({ serverExposureMode: "network-accessible" });
+        yield* writeSettingsPatch({ wslBackendEnabled: true });
         const cause = PlatformError.systemError({
           _tag: "PermissionDenied",
           module: "FileSystem",
@@ -196,7 +174,7 @@ describe("DesktopSettings", () => {
         const persisted = yield* decodeDesktopSettingsPatch(
           yield* fileSystem.readFileString(environment.desktopSettingsPath),
         );
-        assert.equal(persisted.serverExposureMode, "network-accessible");
+        assert.equal(persisted.wslBackendEnabled, true);
       }),
     ),
   );
@@ -223,9 +201,6 @@ describe("DesktopSettings", () => {
           localEnvironmentEnabled: true,
           mainWindowBounds: { x: 120, y: 80, width: 1280, height: 900 },
           mainWindowMaximized: false,
-          serverExposureMode: "network-accessible",
-          tailscaleServeEnabled: true,
-          tailscaleServePort: 8443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
@@ -236,7 +211,7 @@ describe("DesktopSettings", () => {
     ),
   );
 
-  it.effect("keeps Local environment off when another value in the file is unreadable", () =>
+  it.effect("ignores the old remote-only mode when loading and saving settings", () =>
     withSettings(
       Effect.gen(function* () {
         const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -248,11 +223,11 @@ describe("DesktopSettings", () => {
           `{ "localEnvironmentEnabled": false, "serverExposureMode": "tailnet" }\n`,
         );
 
-        assert.isFalse((yield* settings.load).localEnvironmentEnabled);
+        assert.isTrue((yield* settings.load).localEnvironmentEnabled);
         yield* settings.setMainWindowBounds({ x: 10, y: 20, width: 800, height: 600 }, false);
-        assert.include(
+        assert.notInclude(
           yield* fileSystem.readFileString(environment.desktopSettingsPath),
-          `"localEnvironmentEnabled":false`,
+          `"localEnvironmentEnabled"`,
         );
       }),
     ),
@@ -270,13 +245,13 @@ describe("DesktopSettings", () => {
           yield* writeSettingsPatch({
             mainWindowBounds: bounds,
             mainWindowMaximized: true,
-            serverExposureMode: "network-accessible",
+            wslBackendEnabled: true,
           });
 
           const loaded = yield* settings.load;
           assert.isNull(loaded.mainWindowBounds);
           assert.isFalse(loaded.mainWindowMaximized);
-          assert.equal(loaded.serverExposureMode, "network-accessible");
+          assert.equal(loaded.wslBackendEnabled, true);
         }
       }),
     ),
@@ -290,7 +265,7 @@ describe("DesktopSettings", () => {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
 
         yield* settings.setMainWindowBounds({ x: -1200, y: 40, width: 400, height: 360 }, true);
-        yield* settings.setServerExposureMode("network-accessible");
+        yield* settings.setWslBackendEnabled(true);
 
         const persisted = yield* decodeDesktopSettingsPatch(
           yield* fileSystem.readFileString(environment.desktopSettingsPath),
@@ -298,7 +273,7 @@ describe("DesktopSettings", () => {
         assert.deepEqual(persisted, {
           mainWindowBounds: { x: -1200, y: 40, width: 400, height: 360 },
           mainWindowMaximized: true,
-          serverExposureMode: "network-accessible",
+          wslBackendEnabled: true,
         } satisfies typeof DesktopSettingsPatch.Type);
 
         const restored = yield* Effect.gen(function* () {
@@ -325,7 +300,7 @@ describe("DesktopSettings", () => {
         yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
         yield* fileSystem.symlink(linkedSettingsPath, environment.desktopSettingsPath);
 
-        yield* settings.setServerExposureMode("network-accessible");
+        yield* settings.setWslBackendEnabled(true);
 
         assert.equal(
           yield* fileSystem.readLink(environment.desktopSettingsPath),
@@ -334,7 +309,7 @@ describe("DesktopSettings", () => {
         const persisted = yield* decodeDesktopSettingsPatch(
           yield* fileSystem.readFileString(linkedSettingsPath),
         );
-        assert.equal(persisted.serverExposureMode, "network-accessible");
+        assert.equal(persisted.wslBackendEnabled, true);
       }),
     ),
   );
@@ -349,7 +324,7 @@ describe("DesktopSettings", () => {
           recursive: true,
         });
 
-        const error = yield* settings.setServerExposureMode("network-accessible").pipe(Effect.flip);
+        const error = yield* settings.setWslBackendEnabled(true).pipe(Effect.flip);
 
         assert.equal(error.operation, "replace-settings-file");
         assert.deepEqual(
@@ -367,7 +342,6 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
-          serverExposureMode: "local-only",
           updateChannel: "latest",
         });
 
@@ -375,9 +349,6 @@ describe("DesktopSettings", () => {
           localEnvironmentEnabled: true,
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
           updateChannel: "nightly",
           updateChannelConfiguredByUser: false,
           wslBackendEnabled: false,
@@ -394,7 +365,6 @@ describe("DesktopSettings", () => {
       Effect.gen(function* () {
         const settings = yield* DesktopAppSettings.DesktopAppSettings;
         yield* writeSettingsPatch({
-          serverExposureMode: "local-only",
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
         });
@@ -403,9 +373,6 @@ describe("DesktopSettings", () => {
           localEnvironmentEnabled: true,
           mainWindowBounds: null,
           mainWindowMaximized: false,
-          serverExposureMode: "local-only",
-          tailscaleServeEnabled: false,
-          tailscaleServePort: 443,
           updateChannel: "latest",
           updateChannelConfiguredByUser: true,
           wslBackendEnabled: false,

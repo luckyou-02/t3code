@@ -52,10 +52,8 @@ import {
   entryWithRoutes,
   findRouteToSameAddress,
   hasSavedBearerRoute,
-  mergeLearnedRoutes,
   routesAfterRemoving,
   upsertRoute,
-  type ReportedEndpoint,
 } from "./routes.ts";
 
 const isSshConnectionProfile = Schema.is(SshConnectionProfile);
@@ -369,7 +367,6 @@ export const make = Effect.gen(function* () {
             // Seed the intent to avoid publishing a false switched-off state
             // before an enabled, compatible environment starts connecting.
             initiallyDesired: entry.enabled && entry.unsupportedReason === undefined,
-            learnRoutes: (input) => learnRoutes({ environmentId, ...input }),
           }).pipe(
             Effect.provideService(Connectivity.Connectivity, connectivity),
             Effect.provideService(ConnectionDriver.ConnectionDriver, driver),
@@ -921,73 +918,6 @@ export const make = Effect.gen(function* () {
       ),
       Effect.ignore,
     );
-
-  // Plain HTTP routes are unusable from an HTTPS page, which blocks mixed content.
-  const allowInsecureRoutes =
-    typeof globalThis.location === "undefined" || globalThis.location.protocol !== "https:";
-
-  /**
-   * Learned routes reuse the active route's credential, so they do not revoke pull request routing
-   * trust the way a newly paired address does.
-   */
-  const learnRoutes = Effect.fn("EnvironmentRegistry.learnRoutes")(function* (input: {
-    readonly environmentId: EnvironmentId;
-    readonly activeRoute: ConnectionRoute;
-    readonly reported: ReadonlyArray<ReportedEndpoint>;
-  }) {
-    return yield* withLeaseLock(
-      input.environmentId,
-      Effect.gen(function* () {
-        if ((yield* Ref.get(platformEnvironmentIds)).has(input.environmentId)) {
-          return Option.none<ConnectionCatalogEntry>();
-        }
-        const entry = (yield* SubscriptionRef.get(entries)).get(input.environmentId);
-        if (entry === undefined) return Option.none<ConnectionCatalogEntry>();
-        const routes = mergeLearnedRoutes({
-          entry,
-          activeRoute: input.activeRoute,
-          reported: input.reported,
-          allowInsecure: allowInsecureRoutes,
-        });
-        if (routes === null) return Option.none<ConnectionCatalogEntry>();
-        const next = entryWithRoutes(entry, routes);
-        const previousProfiles = new Map(
-          connectionRoutes(entry).map((route) => [
-            connectionRouteId(route.target),
-            Option.getOrNull(route.profile),
-          ]),
-        );
-        for (const route of routes) {
-          const profile = Option.getOrNull(route.profile);
-          if (
-            profile === null ||
-            previousProfiles.get(connectionRouteId(route.target)) === profile
-          ) {
-            continue;
-          }
-          yield* profiles.put(profile);
-        }
-        yield* registrations.setRoutes(input.environmentId, persistedRoutes(next));
-        const lease = (yield* SubscriptionRef.get(serviceScopes)).get(input.environmentId);
-        if (lease !== undefined) {
-          yield* SubscriptionRef.update(serviceScopes, (current) =>
-            new Map(current).set(input.environmentId, { ...lease, entry: next }),
-          );
-        }
-        yield* SubscriptionRef.update(entries, (current) =>
-          new Map(current).set(input.environmentId, next),
-        );
-        return Option.some(next);
-      }),
-    ).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning("Could not save routes learned from the environment.", {
-          environmentId: input.environmentId,
-          error,
-        }).pipe(Effect.as(Option.none<ConnectionCatalogEntry>())),
-      ),
-    );
-  });
 
   const removeRoute = Effect.fn("EnvironmentRegistry.removeRoute")(function* (
     environmentId: EnvironmentId,

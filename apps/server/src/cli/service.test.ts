@@ -106,59 +106,6 @@ it.layer(Layer.mergeAll(NodeServices.layer, NetService.layer))("service commands
       }),
   );
 
-  it.effect.each([
-    { label: "a new service", installed: false, env: "", expected: "T3CODE_LAN=false\n" },
-    // Services installed before T3CODE_LAN existed keep listening on the local network.
-    { label: "an older service", installed: true, env: "", expected: "" },
-    {
-      label: "a set host",
-      installed: false,
-      env: "T3CODE_HOST=::\n",
-      expected: "T3CODE_HOST=::\n",
-    },
-    {
-      label: "a quoted multiline value",
-      installed: false,
-      env: 'CUSTOM="first\nT3CODE_LAN=example\nlast"\n',
-      expected: 'CUSTOM="first\nT3CODE_LAN=example\nlast"\nT3CODE_LAN=false\n',
-    },
-  ])("install keeps $label off the local network only when it is new", (input) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-service-cli-test-" });
-      yield* fs.writeFileString(`${baseDir}/service.env`, input.env);
-      const { service } = makeTestService({
-        ...status,
-        installed: input.installed,
-        current: false,
-      });
-      vi.spyOn(BootService, "layer").mockReturnValue(
-        Layer.succeed(BootService.BootService, service),
-      );
-
-      const [lines, up] = yield* Command.runWith(serviceCommand, { version: packageJson.version })([
-        "install",
-        "--base-dir",
-        baseDir,
-      ]).pipe(
-        Effect.andThen(
-          Effect.all([TestConsole.logLines, resolveHostCliCommand("up", ["--base-dir", baseDir])]),
-        ),
-        Effect.provideService(HostProcess.Environment, {}),
-        Effect.provide(
-          Layer.mergeAll(
-            ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
-            Layer.fresh(TestConsole.layer),
-          ),
-        ),
-      );
-      expect(yield* fs.readFileString(`${baseDir}/service.env`)).toBe(input.expected);
-      expect(lines.map(String).filter((line) => line.includes("other devices"))).toEqual(
-        input.installed ? [] : [`Run \`${up.command}\` to choose how your other devices reach it.`],
-      );
-    }),
-  );
-
   it.effect("protect refuses root before creating any T3 directories", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

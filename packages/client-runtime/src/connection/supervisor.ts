@@ -40,7 +40,6 @@ import {
   type ConnectionRouteKind,
   entryWithRoutes,
   insertRoute,
-  type ReportedEndpoint,
 } from "./routes.ts";
 
 const RETRY_BASE_DELAY_MS = 1_000;
@@ -151,10 +150,6 @@ type EstablishmentEvent =
 
 export interface EnvironmentSupervisorOptions {
   readonly initiallyDesired?: boolean;
-  readonly learnRoutes?: (input: {
-    readonly activeRoute: ConnectionRoute;
-    readonly reported: ReadonlyArray<ReportedEndpoint>;
-  }) => Effect.Effect<Option.Option<ConnectionCatalogEntry>>;
 }
 
 function retryDelayMs(failureCount: number, random: number): number {
@@ -352,30 +347,6 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
     return route === undefined
       ? latest
       : entryWithRoutes(latest, [route, ...routes.filter((candidate) => candidate !== route)]);
-  });
-
-  const learnRoutesFrom = Effect.fnUntraced(function* (
-    learn: NonNullable<EnvironmentSupervisorOptions["learnRoutes"]>,
-    lease: ConnectedLease,
-  ) {
-    const activeRoute = lease.activeRoute;
-    if (activeRoute === undefined) return;
-    yield* lease.session.subscribeServerConfig().pipe(
-      Stream.filter((event) => event.type === "snapshot"),
-      Stream.map((event) => event.config.directEndpoints),
-      Stream.filter((reported) => reported !== undefined),
-      Stream.changesWith((previous, next) => JSON.stringify(previous) === JSON.stringify(next)),
-      Stream.runForEach((reported) =>
-        Effect.gen(function* () {
-          const updated = yield* learn({ activeRoute, reported });
-          if (Option.isSome(updated)) {
-            yield* Ref.set(currentEntry, updated.value);
-            yield* requestBetterRouteCheck(lease);
-          }
-        }),
-      ),
-      Effect.ignoreCause({ log: true }),
-    );
   });
 
   const routeIndex = (lease: ConnectedLease) =>
@@ -1080,9 +1051,6 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
     generation = nextGeneration;
     yield* SubscriptionRef.set(prepared, Option.some(connectedLease.prepared));
     yield* SubscriptionRef.set(session, Option.some(connectedLease.session));
-    if (options?.learnRoutes !== undefined) {
-      yield* learnRoutesFrom(options.learnRoutes, connectedLease).pipe(Effect.forkScoped);
-    }
     yield* setState({
       desired: true,
       network: currentIntent.network,

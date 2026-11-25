@@ -51,8 +51,6 @@ const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
     port: 3774,
     host: "0.0.0.0",
     desktopBootstrapToken: "bootstrap-token",
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
   },
   bootstrapDelivery: "stdin",
   httpBaseUrl: new URL("http://127.0.0.1:3774"),
@@ -83,6 +81,8 @@ const backendConfigurationLayer = Layer.succeed(
     resolvePrimary: Effect.die("unexpected resolvePrimary"),
     resolvePrimaryLabel: Effect.succeed("Windows"),
     resolveWsl: () => Effect.die("unexpected resolveWsl"),
+    primaryPort: Effect.succeed(3773),
+    setPrimaryPort: () => Effect.void,
     currentBootstrapToken: Effect.succeed("current-window-token"),
   } satisfies DesktopBackendConfiguration.DesktopBackendConfiguration["Service"],
 );

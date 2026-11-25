@@ -33,7 +33,7 @@ const DOC_RULES = [
   {
     files: "docs/internals/05_remote.md",
     applyTo:
-      "{apps/server/src/peer,apps/server/src/environment,packages/ssh,packages/tailscale,apps/desktop/src/preview,apps/desktop/src/ssh}/**/*.ts",
+      "{apps/server/src/peer,apps/server/src/environment,packages/ssh,apps/desktop/src/preview,apps/desktop/src/ssh}/**/*.ts",
     instructions:
       "Hold remote route, peer link, SSH, and preview tunnel changes to docs/internals/05_remote.md.",
   },

@@ -28,7 +28,7 @@ export interface HeadlessServeAccessInfo {
 
 type NetworkInterfacesMap = ReturnType<typeof NodeOS.networkInterfaces>;
 
-export const isLoopbackHost = (host: string | undefined): boolean => {
+const isLoopbackHost = (host: string | undefined): boolean => {
   if (!host || host.length === 0) {
     return true;
   }
@@ -52,7 +52,7 @@ const VIRTUAL_INTERFACE =
   /^(docker|br-|veth|virbr|vmnet|vboxnet|vEthernet|podman|cni|flannel|cali|lxcbr|lxdbr|bridge[1-9]\d\d)/;
 
 // VirtualBox and VMware host-only adapters on Windows. Their names are mutable; Linux bridges can inherit these MACs.
-export const WINDOWS_HOST_ADAPTER_MAC = /^(0a:00:27|00:50:56:c0:00):/i;
+const WINDOWS_HOST_ADAPTER_MAC = /^(0a:00:27|00:50:56:c0:00):/i;
 
 /**
  * systemd-nspawn's `ve-*`/`vz-*` and NixOS containers' `vb-*` name host-side
@@ -61,14 +61,14 @@ export const WINDOWS_HOST_ADAPTER_MAC = /^(0a:00:27|00:50:56:c0:00):/i;
  */
 const LINUX_CONTAINER_INTERFACE = /^(ve-|vb-|vz-)/;
 
-export const isVirtualInterface = (name: string, platform: NodeJS.Platform): boolean =>
+const isVirtualInterface = (name: string, platform: NodeJS.Platform): boolean =>
   VIRTUAL_INTERFACE.test(name) || (platform === "linux" && LINUX_CONTAINER_INTERFACE.test(name));
 
 /**
  * Loopback or private-range IPv4 (LAN, tailnet, CGNAT), not link-local, in
  * plain or IPv4-mapped IPv6 form.
  */
-export const isPrivateNetworkAddress = (address: string): boolean => {
+const isPrivateNetworkAddress = (address: string): boolean => {
   const ipv4 = address.replace(/^::ffff:/i, "");
   return NodeNet.isIPv4(ipv4) && !ipv4.startsWith("169.254.") && isPrivateNetworkHost(ipv4);
 };

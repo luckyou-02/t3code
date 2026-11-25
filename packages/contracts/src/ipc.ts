@@ -3,7 +3,7 @@ import type { DatabaseMigrationProgress } from "./server.ts";
 import type { PreviewCaptureFailureEncoded } from "./previewCapture.ts";
 
 import { SnapShotSource } from "./chatAttachment.ts";
-import { EnvironmentId, PortSchema, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { EnvironmentId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { BrowserProfileId } from "./browserProfile.ts";
 import type {
   BrowserImportResult,
@@ -11,7 +11,6 @@ import type {
   BrowserImportSourceId,
 } from "./browserImport.ts";
 import { AuthAccessTokenResult, AuthSessionState } from "./auth.ts";
-import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { ExecutionEnvironmentDescriptor } from "./environment.ts";
 import { type ClientSettings, type QuitConfirmationMode, SnapShotShortcut } from "./settings.ts";
 import type { EditorId } from "./editor.ts";
@@ -427,29 +426,6 @@ export const PersistedSavedEnvironmentRecordSchema = Schema.Struct({
   ),
 });
 export type PersistedSavedEnvironmentRecord = typeof PersistedSavedEnvironmentRecordSchema.Type;
-
-export type DesktopServerExposureMode = "local-only" | "network-accessible";
-
-export const DesktopServerExposureModeSchema = Schema.Literals([
-  "local-only",
-  "network-accessible",
-]);
-
-export interface DesktopServerExposureState {
-  mode: DesktopServerExposureMode;
-  endpointUrl: string | null;
-  advertisedHost: string | null;
-  tailscaleServeEnabled: boolean;
-  tailscaleServePort: number;
-}
-
-export const DesktopServerExposureStateSchema = Schema.Struct({
-  mode: DesktopServerExposureModeSchema,
-  endpointUrl: Schema.NullOr(Schema.String),
-  advertisedHost: Schema.NullOr(Schema.String),
-  tailscaleServeEnabled: Schema.Boolean,
-  tailscaleServePort: Schema.Number,
-});
 
 export interface PickFolderOptions {
   initialPath?: string | null;
@@ -917,34 +893,6 @@ export const DesktopPreviewConfigInputSchema = Schema.Struct({
   /** Main must derive the partition to ensure its session has UA rewrites and permission handlers. */
   profileId: Schema.optional(BrowserProfileId),
   /** Carry the partition's loopback traffic to the environment instead of this machine. */
-  tunnelLoopback: Schema.optional(Schema.Boolean),
-});
-
-export interface DesktopPreviewTunnelAccessRequest {
-  readonly requestId: string;
-  readonly environmentId: EnvironmentId;
-}
-
-export const DesktopPreviewTunnelAccessResolutionInputSchema = Schema.Struct({
-  requestId: Schema.String,
-  /** The environment's tunnel WebSocket URL with its ticket, or null when it cannot be reached. */
-  url: Schema.NullOr(Schema.String),
-});
-
-/** A loopback port of another environment, reachable on this machine's 127.0.0.1. */
-export const DesktopPortForwardSchema = Schema.Struct({
-  environmentId: EnvironmentId,
-  remotePort: PortSchema,
-  /** The same as `remotePort` unless that port was taken here. */
-  localPort: PortSchema,
-});
-export type DesktopPortForward = typeof DesktopPortForwardSchema.Type;
-
-export const DesktopSharesLoopbackInputSchema = Schema.Struct({ environmentId: EnvironmentId });
-
-export const DesktopPortForwardInputSchema = Schema.Struct({
-  environmentId: EnvironmentId,
-  remotePort: PortSchema,
 });
 
 export const DesktopPreviewClearDataInputSchema = Schema.Struct({
@@ -1040,7 +988,6 @@ export interface DesktopBridge {
   getPrimaryPasteEnabled?: () => boolean;
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
   getLocalEnvironmentEnabled: () => boolean;
-  setLocalEnvironmentEnabled: (enabled: boolean) => Promise<void>;
   /** The environment ID recorded in this app's T3 home, such as its own machine's background service. */
   getHostEnvironmentId?: () => Promise<string | null>;
   getLocalEnvironmentBearerToken: () => Promise<string>;
@@ -1077,13 +1024,6 @@ export interface DesktopBridge {
   /** Fires with a prompt's request id once it is answered, cancelled, expired or abandoned. */
   onSshPasswordPromptSettled: (listener: (requestId: string) => void) => () => void;
   resolveSshPasswordPrompt: (requestId: string, password: string | null) => Promise<void>;
-  getServerExposureState: () => Promise<DesktopServerExposureState>;
-  setServerExposureMode: (mode: DesktopServerExposureMode) => Promise<DesktopServerExposureState>;
-  setTailscaleServeEnabled: (input: {
-    readonly enabled: boolean;
-    readonly port?: number;
-  }) => Promise<DesktopServerExposureState>;
-  getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   getWslState: () => Promise<DesktopWslState>;
   setWslBackendEnabled: (enabled: boolean) => Promise<DesktopWslState>;
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
@@ -1251,20 +1191,7 @@ export interface DesktopPreviewBridge {
   getPreviewConfig: (
     environmentId: EnvironmentId,
     profileId?: string,
-    tunnelLoopback?: boolean,
   ) => Promise<DesktopPreviewWebviewConfig>;
-  /** Main asks for an environment's tunnel URL once per connection a tunnelled page opens. */
-  onTunnelAccessRequest: (
-    listener: (request: DesktopPreviewTunnelAccessRequest) => void,
-  ) => () => void;
-  resolveTunnelAccess: (requestId: string, url: string | null) => Promise<void>;
-  /** Forwards an environment's loopback port to this machine until stopped or the app quits. */
-  forwardPort: (environmentId: EnvironmentId, remotePort: number) => Promise<DesktopPortForward>;
-  stopPortForward: (environmentId: EnvironmentId, remotePort: number) => Promise<void>;
-  listPortForwards: () => Promise<ReadonlyArray<DesktopPortForward>>;
-  /** Whether the environment runs on this machine, where its ports need no forward. */
-  sharesLoopback: (environmentId: EnvironmentId) => Promise<boolean>;
-  onPortForwards: (listener: (forwards: ReadonlyArray<DesktopPortForward>) => void) => () => void;
   listBrowserImportSources: () => Promise<ReadonlyArray<BrowserImportSource>>;
   importBrowserCookies: (input: {
     readonly environmentId: EnvironmentId;

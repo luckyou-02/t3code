@@ -21,7 +21,7 @@ export { type DeviceHubAccess, withDeviceHubQuery } from "../device/hubAccess.ts
 const TICKET_TIMEOUT_MS = 8_000;
 
 /** Reusable across media requests until it expires; only for connections that send credentials. */
-export const mintMediaTicket = Effect.fn("clientRuntime.state.mintMediaTicket")(function* (
+const mintMediaTicket = Effect.fn("clientRuntime.state.mintMediaTicket")(function* (
   prepared: PreparedConnection,
 ) {
   const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);

@@ -12,7 +12,6 @@ import type {
   DesktopBackendSnapshot,
   DesktopBackendStartConfig,
 } from "../backend/DesktopBackendManager.ts";
-import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopWslEnvironment from "./DesktopWslEnvironment.ts";
 import * as DesktopWslBackend from "./DesktopWslBackend.ts";
@@ -50,27 +49,14 @@ const primarySnapshot: DesktopBackendSnapshot = {
   restartScheduled: false,
 };
 
-const layerServerExposure = Layer.succeed(DesktopServerExposure.DesktopServerExposure, {
-  getState: Effect.die("unexpected getState"),
-  backendConfig: Effect.succeed({
-    port: 3773,
-    bindHost: "127.0.0.1",
-    httpBaseUrl: new URL("http://127.0.0.1:3773"),
-    tailscaleServeEnabled: false,
-    tailscaleServePort: 443,
-  }),
-  configureFromSettings: () => Effect.die("unexpected configureFromSettings"),
-  setMode: () => Effect.die("unexpected setMode"),
-  setTailscaleServeEnabled: () => Effect.die("unexpected setTailscaleServeEnabled"),
-  getAdvertisedEndpoints: Effect.succeed([]),
-} satisfies DesktopServerExposure.DesktopServerExposure["Service"]);
-
 const layerBackendConfiguration = Layer.succeed(
   DesktopBackendConfiguration.DesktopBackendConfiguration,
   {
     resolvePrimary: Effect.die("unexpected resolvePrimary"),
     resolvePrimaryLabel: Effect.succeed("Windows"),
     resolveWsl: () => Effect.die("unexpected resolveWsl"),
+    primaryPort: Effect.succeed(3773),
+    setPrimaryPort: () => Effect.void,
     currentBootstrapToken: Effect.die("unexpected currentBootstrapToken"),
   } satisfies DesktopBackendConfiguration.DesktopBackendConfiguration["Service"],
 );
@@ -176,7 +162,6 @@ describe("DesktopWslBackend", () => {
         DesktopWslBackend.layer.pipe(
           Layer.provideMerge(layerPool),
           Layer.provideMerge(layerBackendConfiguration),
-          Layer.provideMerge(layerServerExposure),
           Layer.provideMerge(layerNet),
           Layer.provideMerge(
             DesktopAppSettings.layerTest({

@@ -65,8 +65,6 @@ const devServerInput = {
   port: 13_773,
   devUrl: undefined,
   dryRun: false,
-  share: false,
-  built: false,
   runArgs: ["--inspect", "secret-token-value"],
 } as const;
 
@@ -524,6 +522,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
     it.effect("expands a home-relative T3 home the way the server does", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
+        const homeDir = path.resolve("/home/dev");
         const homeFor = (t3Home: string) =>
           createDevRunnerEnv({
             mode: "dev",
@@ -538,20 +537,20 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
             port: undefined,
             devUrl: undefined,
           }).pipe(
-            Effect.provideService(HostProcess.HomeDirectory, "/home/dev"),
+            Effect.provideService(HostProcess.HomeDirectory, homeDir),
             Effect.map((env) => env.T3CODE_HOME),
           );
 
-        assert.equal(yield* homeFor("~/t3-dev"), path.join("/home/dev", "t3-dev"));
-        assert.equal(yield* homeFor("~"), "/home/dev");
-        assert.equal(yield* homeFor("~\\t3-dev"), path.join("/home/dev", "t3-dev"));
-        assert.equal(yield* homeFor("  ~/t3-dev  "), path.join("/home/dev", "t3-dev"));
+        assert.equal(yield* homeFor("~/t3-dev"), path.join(homeDir, "t3-dev"));
+        assert.equal(yield* homeFor("~"), homeDir);
+        assert.equal(yield* homeFor("~\\t3-dev"), path.join(homeDir, "t3-dev"));
+        assert.equal(yield* homeFor("  ~/t3-dev  "), path.join(homeDir, "t3-dev"));
         assert.equal(yield* homeFor("~someone/t3-dev"), path.resolve("~someone/t3-dev"));
         assert.equal(yield* homeFor("relative/t3-dev"), path.resolve("relative/t3-dev"));
         assert.equal(yield* homeFor("/tmp/t3-dev"), path.resolve("/tmp/t3-dev"));
         // An explicit ~/.t3 would put state in the live userdata; leaving it implicit selects ~/.t3/dev.
         assert.equal(yield* homeFor("~/.t3"), undefined);
-        assert.equal(yield* homeFor("/home/dev/.t3/"), undefined);
+        assert.equal(yield* homeFor(path.join(homeDir, ".t3")), undefined);
       }),
     );
 
@@ -578,159 +577,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         }
         assert.equal(error.mode, "dev");
         assert.equal(error.host, "192.168.1.10");
-        assert.include(error.message, "0.0.0.0");
-        assert.include(error.message, "--share");
-      });
-    });
-
-    // A shared origin means a remote browser, where unbundled dev's
-    // per-module waterfall pays a tailnet round trip per import level. The
-    // runner defaults bundled dev on for the spawned stack, but only
-    // defaults: an explicit T3CODE_BUNDLED_DEV (even "0") must pass through.
-    describe("--share spawn wiring", () => {
-      const shareSpawned = (input: {
-        readonly ambientBundledDev?: string | undefined;
-        readonly built?: boolean;
-        readonly host?: string;
-      }) =>
-        Effect.gen(function* () {
-          let captured: Record<string, string | undefined> | undefined;
-          let vpArgs: ReadonlyArray<string> = [];
-          const tailscaleCalls: Array<ReadonlyArray<string>> = [];
-          const spawnerLayer = Layer.succeed(
-            ChildProcessSpawner.ChildProcessSpawner,
-            ChildProcessSpawner.make((command) => {
-              const spawned = command as unknown as {
-                readonly command: string;
-                readonly args: ReadonlyArray<string>;
-                readonly options?: { readonly env?: Record<string, string | undefined> };
-              };
-              if (spawned.command === "vp") {
-                captured = spawned.options?.env;
-                vpArgs = spawned.args;
-                return Effect.succeed(mockProcess(0));
-              }
-              tailscaleCalls.push(spawned.args);
-              return Effect.succeed(
-                ChildProcessSpawner.makeHandle({
-                  pid: ChildProcessSpawner.ProcessId(2),
-                  exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
-                  isRunning: Effect.succeed(false),
-                  kill: () => Effect.void,
-                  unref: Effect.succeed(Effect.void),
-                  stdin: Sink.drain,
-                  stdout: spawned.args.includes("status")
-                    ? Stream.make(
-                        new TextEncoder().encode(
-                          JSON.stringify({ Self: { DNSName: "host.example.ts.net." } }),
-                        ),
-                      )
-                    : Stream.empty,
-                  stderr: Stream.empty,
-                  all: Stream.empty,
-                  getInputFd: () => Sink.drain,
-                  getOutputFd: () => Stream.empty,
-                }),
-              );
-            }),
-          );
-
-          yield* runDevRunnerWithInput({
-            ...devServerInput,
-            mode: "dev",
-            port: undefined,
-            share: true,
-            built: input.built ?? false,
-            host: input.host,
-          }).pipe(
-            Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)),
-            Effect.provideService(HostProcess.Platform, "linux"),
-            Effect.provideService(
-              HostProcess.Environment,
-              input.ambientBundledDev === undefined
-                ? {}
-                : { T3CODE_BUNDLED_DEV: input.ambientBundledDev },
-            ),
-          );
-
-          return { env: captured, vpArgs, tailscaleCalls };
-        });
-
-      it.effect("keeps an explicit T3CODE_BUNDLED_DEV=0 opt-out", () =>
-        Effect.gen(function* () {
-          const { env } = yield* shareSpawned({ ambientBundledDev: "0" });
-          assert.equal(env?.T3CODE_BUNDLED_DEV, "0");
-        }),
-      );
-
-      it.effect("--built serves the backend on the web port's tailnet URL", () =>
-        Effect.gen(function* () {
-          const { env, vpArgs, tailscaleCalls } = yield* shareSpawned({ built: true });
-          assert.include(vpArgs, "dev:built");
-          assert.equal(env?.T3CODE_BUILT_DEV, "1");
-          assert.equal(env?.T3CODE_BUNDLED_DEV, undefined);
-          assert.equal(env?.VITE_DEV_SERVER_URL, `https://host.example.ts.net:${env?.PORT}/`);
-          const serve = tailscaleCalls.find((args) => args.includes("--bg"));
-          assert.deepEqual(serve?.slice(-2), [
-            `--https=${env?.PORT}`,
-            `http://127.0.0.1:${env?.T3CODE_PORT}`,
-          ]);
-        }),
-      );
-
-      it.effect("--built --host ::1 targets the backend's IPv6 loopback", () =>
-        Effect.gen(function* () {
-          const { env, tailscaleCalls } = yield* shareSpawned({ built: true, host: "::1" });
-          const serve = tailscaleCalls.find((args) => args.includes("--bg"));
-          assert.equal(serve?.at(-1), `http://[::1]:${env?.T3CODE_PORT}`);
-        }),
-      );
-
-      // Node resolves localhost to ::1 first, so a 127.0.0.1 target can miss the backend.
-      it.effect("--built --host localhost keeps the backend's localhost name", () =>
-        Effect.gen(function* () {
-          const { env, tailscaleCalls } = yield* shareSpawned({ built: true, host: "localhost" });
-          const serve = tailscaleCalls.find((args) => args.includes("--bg"));
-          assert.equal(serve?.at(-1), `http://localhost:${env?.T3CODE_PORT}`);
-        }),
-      );
-
-      it.effect("without --built keeps Vite behind the tailnet URL", () =>
-        Effect.gen(function* () {
-          const { env, vpArgs, tailscaleCalls } = yield* shareSpawned({});
-          assert.include(vpArgs, "dev");
-          assert.notInclude(vpArgs, "dev:built");
-          assert.equal(env?.T3CODE_BUNDLED_DEV, "1");
-          const serve = tailscaleCalls.find((args) => args.includes("--bg"));
-          assert.equal(serve?.at(-1), `http://localhost:${env?.PORT}`);
-        }),
-      );
-    });
-
-    it.effect.each([
-      { mode: "dev", share: false },
-      { mode: "dev:web", share: true },
-      { mode: "dev:desktop", share: true },
-    ] as const)("rejects --built for $mode with share=$share", ({ mode, share }) => {
-      const spawnerLayer = Layer.succeed(
-        ChildProcessSpawner.ChildProcessSpawner,
-        ChildProcessSpawner.make(() => Effect.succeed(mockProcess(0))),
-      );
-
-      return Effect.gen(function* () {
-        const error = yield* runDevRunnerWithInput({
-          ...devServerInput,
-          mode,
-          port: undefined,
-          share,
-          built: true,
-        }).pipe(
-          Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)),
-          Effect.provideService(HostProcess.Platform, "linux"),
-          Effect.flip,
-        );
-
-        assert.equal(error._tag, "DevRunnerBuiltNeedsShareError");
+        assert.include(error.message, "loopback");
       });
     });
 

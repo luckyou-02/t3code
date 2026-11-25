@@ -235,7 +235,6 @@ import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import * as DirectEndpoints from "./environment/DirectEndpoints.ts";
 import * as RemoteOpenTargets from "./environment/RemoteOpenTargets.ts";
 import * as DefectReporter from "./observability/DefectReporter.ts";
 import * as EventLoopMonitor from "./observability/EventLoopMonitor.ts";
@@ -336,7 +335,6 @@ export const withLateConfigDiscovery = <E, R>(
   liveUpdates: Stream.Stream<ServerConfigStreamEvent, E, R>,
   launcher: EditorDiscovery,
   remoteOpenTargets: RemoteOpenTargets.RemoteOpenTargets["Service"],
-  directEndpoints: Pick<DirectEndpoints.DirectEndpoints["Service"], "resolve">,
 ) => {
   const lateEditorConfig = Stream.fromEffect(launcher.resolveAvailableEditors()).pipe(
     Stream.filter(
@@ -364,15 +362,7 @@ export const withLateConfigDiscovery = <E, R>(
     Stream.map((targets) => ({ type: "remoteOpenTargetsResolved" as const, targets })),
   );
 
-  const lateDirectEndpoints = Stream.fromEffect(directEndpoints.resolve()).pipe(
-    Stream.catchCause(() => Stream.empty),
-    Stream.map((endpoints) => ({ type: "directEndpointsResolved" as const, endpoints })),
-  );
-
-  return Stream.merge(
-    liveUpdates,
-    Stream.merge(lateEditorConfig, Stream.merge(lateRemoteOpenTargets, lateDirectEndpoints)),
-  ).pipe(
+  return Stream.merge(liveUpdates, Stream.merge(lateEditorConfig, lateRemoteOpenTargets)).pipe(
     Stream.mapAccum(
       (): ClientServerConfig => config,
       (current, event): readonly [ClientServerConfig, ReadonlyArray<ServerConfigStreamEvent>] => {
@@ -389,13 +379,6 @@ export const withLateConfigDiscovery = <E, R>(
           }
           case "remoteOpenTargetsResolved": {
             const next = { ...current, remoteOpenTargets: event.targets };
-            return [next, [{ version: 1, type: "snapshot", config: next }]];
-          }
-          case "directEndpointsResolved": {
-            if (JSON.stringify(current.directEndpoints ?? []) === JSON.stringify(event.endpoints)) {
-              return [current, []];
-            }
-            const next = { ...current, directEndpoints: event.endpoints };
             return [next, [{ version: 1, type: "snapshot", config: next }]];
           }
           case "keybindingsUpdated":
@@ -415,11 +398,10 @@ export const withLateConfigDiscovery = <E, R>(
 
 // Discoveries run side by side so the slowest one, not their sum, bounds the
 // server config snapshot. Each degrades on timeout rather than failing it.
-export const resolveOpenDiscoveryForConfig = <T, D, E1, R1, E2, R2, E3, R3, E4, R4>(discovery: {
+export const resolveOpenDiscoveryForConfig = <T, E1, R1, E2, R2, E3, R3>(discovery: {
   readonly editors: Effect.Effect<ReadonlyArray<EditorId>, E1, R1>;
   readonly fileManagerRevealKind: Effect.Effect<FileManagerRevealKind | undefined, E2, R2>;
   readonly remoteOpenTargets: Effect.Effect<ReadonlyArray<T>, E3, R3>;
-  readonly directEndpoints: Effect.Effect<ReadonlyArray<D>, E4, R4>;
 }) =>
   Effect.all(
     {
@@ -434,7 +416,6 @@ export const resolveOpenDiscoveryForConfig = <T, D, E1, R1, E2, R2, E3, R3, E4, 
       // Same discovery-with-timeout treatment as editors: a slow probe must
       // not stall server.getConfig, so it degrades to an empty list.
       remoteOpenTargets: resolveAvailableEditorsForConfig(discovery.remoteOpenTargets),
-      directEndpoints: resolveAvailableEditorsForConfig(discovery.directEndpoints),
     },
     { concurrency: "unbounded" },
   ).pipe(Effect.map(({ editorConfig, ...endpoints }) => ({ ...editorConfig, ...endpoints })));
@@ -1446,7 +1427,6 @@ export const layerWsRpc = (
       const environmentTheme = yield* EnvironmentTheme.EnvironmentThemeService;
       const externalLauncher = yield* ExternalLauncher.ExternalLauncher;
       const remoteOpenTargets = yield* RemoteOpenTargets.RemoteOpenTargets;
-      const directEndpoints = yield* DirectEndpoints.DirectEndpoints;
       const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
       const review = yield* ReviewService.ReviewService;
       const vcsProvisioning = yield* VcsProvisioningService.VcsProvisioningService;
@@ -1784,9 +1764,6 @@ export const layerWsRpc = (
           remoteOpenTargets: options.deferNetworkDiscovery
             ? Effect.succeed([])
             : remoteOpenTargets.resolveTargets(),
-          directEndpoints: options.deferNetworkDiscovery
-            ? directEndpoints.resolveAvailable()
-            : directEndpoints.resolve(),
         });
 
         return {
@@ -3374,12 +3351,6 @@ export const layerWsRpc = (
               const remoteTargets = yield* Effect.forkScoped(remoteOpenTargets.resolveTargets(), {
                 startImmediately: true,
               });
-              const directResult = yield* Effect.forkScoped(
-                directEndpoints
-                  .resolve()
-                  .pipe(Effect.catchCause(() => directEndpoints.resolveAvailable())),
-                { startImmediately: true },
-              );
               const config = yield* loadServerConfig({
                 usageLimitsCommand,
                 workspaceSnapshotsOnDemand,
@@ -3493,7 +3464,6 @@ export const layerWsRpc = (
                 {
                   resolveTargets: () => Fiber.join(remoteTargets),
                 },
-                { resolve: () => Fiber.join(directResult) },
               );
               return Stream.concat(
                 rpcInitialItems([

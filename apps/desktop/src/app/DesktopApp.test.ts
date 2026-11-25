@@ -32,7 +32,6 @@ import * as DesktopLifecycle from "./DesktopLifecycle.ts";
 import * as DesktopShutdown from "./DesktopShutdown.ts";
 import * as DesktopState from "./DesktopState.ts";
 import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
-import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
@@ -64,7 +63,6 @@ import * as ElectronMenu from "../electron/ElectronMenu.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
-import * as LoopbackTunnel from "../preview/LoopbackTunnel.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 
 interface StubbedDesktop {
@@ -101,7 +99,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         isPackaged: true,
         stateDir: "/isolated/userdata",
         configuredBackendPort: Option.some(3773),
-        defaultDesktopSettings: { serverExposureMode: "local-only" },
         ...stub.environment,
       } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
       Effect.provideService(DesktopShellEnvironment.DesktopShellEnvironment, {
@@ -115,7 +112,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         load: Effect.void,
         get: Effect.succeed({
           localEnvironmentEnabled: stub.localEnvironmentEnabled,
-          serverExposureMode: "local-only",
         }),
       } as unknown as DesktopAppSettings.DesktopAppSettings["Service"]),
       Effect.provideService(DesktopLifecycle.DesktopLifecycle, {
@@ -155,10 +151,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         }),
         list: Effect.succeed(stub.backends ?? []),
       } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]),
-      Effect.provideService(DesktopServerExposure.DesktopServerExposure, {
-        configureFromSettings: () => Effect.succeed({ mode: "local-only" }),
-        backendConfig: Effect.succeed({ httpBaseUrl: new URL("http://127.0.0.1:3773") }),
-      } as unknown as DesktopServerExposure.DesktopServerExposure["Service"]),
       Effect.provideService(DesktopWslBackend.DesktopWslBackend, {
         reconcile: Effect.void,
       } as DesktopWslBackend.DesktopWslBackend["Service"]),
@@ -176,7 +168,9 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         Layer.mergeAll(
           Layer.mock(BrowserImport.BrowserImport, {}),
           Layer.mock(ChildProcessSpawner.ChildProcessSpawner, {}),
-          Layer.mock(DesktopBackendConfiguration.DesktopBackendConfiguration, {}),
+          Layer.mock(DesktopBackendConfiguration.DesktopBackendConfiguration, {
+            setPrimaryPort: () => Effect.void,
+          }),
           Layer.mock(DesktopCliCommand.DesktopCliCommand, {}),
           Layer.mock(DesktopClientSettings.DesktopClientSettings, {}),
           Layer.mock(DesktopConnectionCatalogStore.DesktopConnectionCatalogStore, {}),
@@ -204,7 +198,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
           Layer.mock(ElectronShell.ElectronShell, {}),
           Layer.mock(ElectronTheme.ElectronTheme, {}),
           Layer.mock(ElectronWindow.ElectronWindow, {}),
-          Layer.mock(LoopbackTunnel.LoopbackTunnel, {}),
           Layer.mock(PreviewManager.PreviewManager, {
             isBrowserPartition: () => {
               throw new Error("unexpected browser partition lookup");
