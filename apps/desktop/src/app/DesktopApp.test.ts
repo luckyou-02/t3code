@@ -29,8 +29,6 @@ import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLegacyLocalStorage from "./DesktopLegacyLocalStorage.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
-import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
-import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
 import * as DesktopShutdown from "./DesktopShutdown.ts";
 import * as DesktopState from "./DesktopState.ts";
 import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
@@ -38,7 +36,6 @@ import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
-import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import * as PreviewPasskeys from "../preview/Passkeys.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
@@ -77,7 +74,6 @@ interface StubbedDesktop {
   readonly fileSystem: Layer.Layer<FileSystem.FileSystem>;
   readonly record: (event: string) => Effect.Effect<void>;
   readonly windowStarted: Deferred.Deferred<void>;
-  readonly registerLinuxUrlHandler: Effect.Effect<void>;
   readonly backends?: ReadonlyArray<{ readonly stop: () => Effect.Effect<void> }>;
   readonly flushRendererHistory?: Effect.Effect<void>;
   readonly tokenRequested?: Deferred.Deferred<void>;
@@ -110,10 +106,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
           defaultDesktopSettings: { serverExposureMode: "local-only" },
           ...stub.environment,
         } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
-        Effect.provideService(DesktopPreReadyPlatform.DesktopPreReadyElectronOptions, {
-          linux: null,
-          linuxPasswordStoreCommandLine: "basic",
-        }),
         Effect.provideService(DesktopShellEnvironment.DesktopShellEnvironment, {
           installIntoProcess: Effect.succeed(true),
           awaitDiscovery: Effect.succeed(true),
@@ -132,9 +124,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
           register: Effect.void,
           relaunch: () => Effect.void,
         }),
-        Effect.provideService(ElectronSafeStorage.ElectronSafeStorage, {
-          selectedStorageBackend: Effect.succeedNone,
-        } as unknown as ElectronSafeStorage.ElectronSafeStorage["Service"]),
         Effect.provideService(PreviewPasskeys.PreviewPasskeys, {
           configure: Effect.void,
         } as PreviewPasskeys.PreviewPasskeys["Service"]),
@@ -144,9 +133,6 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
         Effect.provideService(DesktopUpdates.DesktopUpdates, {
           configure: Effect.void,
         } as unknown as DesktopUpdates.DesktopUpdates["Service"]),
-        Effect.provideService(DesktopLinuxUrlHandler.DesktopLinuxUrlHandler, {
-          register: stub.registerLinuxUrlHandler,
-        }),
       )
       .pipe(
         Effect.provideService(ElectronProtocol.ElectronProtocol, {
@@ -245,12 +231,9 @@ const runStubbedDesktop = (stub: StubbedDesktop) =>
   });
 
 it.effect.each([false, true])(
-  "stops backends together before flushing history and cancels Linux registration, stop defect=%s",
+  "stops backends together before flushing history, stop defect=%s",
   (stopDefect) =>
     Effect.gen(function* () {
-      const registrationStarted = yield* Deferred.make<void>();
-      const releaseRegistration = yield* Deferred.make<void>();
-      const registrationStopped = yield* Deferred.make<void>();
       const windowStarted = yield* Deferred.make<void>();
       const firstStopStarted = yield* Deferred.make<void>();
       const secondStopStarted = yield* Deferred.make<void>();
@@ -269,10 +252,6 @@ it.effect.each([false, true])(
           }),
         windowStarted,
         tokenRequested,
-        registerLinuxUrlHandler: Deferred.succeed(registrationStarted, undefined).pipe(
-          Effect.andThen(Deferred.await(releaseRegistration)),
-          Effect.ensuring(Deferred.succeed(registrationStopped, undefined)),
-        ),
         backends: [
           {
             stop: () =>
@@ -293,7 +272,6 @@ it.effect.each([false, true])(
           Effect.asVoid,
         ),
       });
-      yield* Deferred.await(registrationStarted);
       yield* Deferred.await(windowStarted);
       yield* Deferred.await(tokenRequested);
       // The backend spawns before menus, and its token is minted without waiting for the renderer.
@@ -302,7 +280,6 @@ it.effect.each([false, true])(
         ["identity", "ready", "identity", "backend", "menu", "window"],
       );
       assert.isAbove(events.indexOf("token"), events.indexOf("backend"));
-      assert.isFalse(yield* Deferred.isDone(registrationStopped));
       const shutdown = yield* DesktopShutdown.DesktopShutdown;
       yield* shutdown.request;
       yield* Deferred.await(firstStopStarted);
@@ -316,7 +293,6 @@ it.effect.each([false, true])(
       const result = yield* Fiber.await(app);
       assert.equal(Exit.isFailure(result), stopDefect);
       assert.isTrue(yield* shutdown.isComplete);
-      assert.isTrue(yield* Deferred.isDone(registrationStopped));
     }).pipe(Effect.provide(DesktopShutdown.layer)),
 );
 
@@ -359,7 +335,6 @@ it.effect(
         fileSystem: Layer.succeed(FileSystem.FileSystem, fs),
         record: () => Effect.void,
         windowStarted,
-        registerLinuxUrlHandler: Effect.void,
       });
       yield* Deferred.await(windowStarted);
       yield* (yield* DesktopShutdown.DesktopShutdown).request;

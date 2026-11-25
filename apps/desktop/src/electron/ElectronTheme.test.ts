@@ -2,80 +2,47 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
-import type { LinuxColorScheme } from "./LinuxColorScheme.ts";
-
 const { nativeTheme } = vi.hoisted(() => ({
-  nativeTheme: { themeSource: "system" as "system" | "light" | "dark" },
+  nativeTheme: {
+    themeSource: "system" as "system" | "light" | "dark",
+    shouldUseDarkColors: false,
+    on: vi.fn(),
+    removeListener: vi.fn(),
+  },
 }));
 
 vi.mock("electron", () => ({ nativeTheme }));
 
 import * as ElectronTheme from "./ElectronTheme.ts";
 
-function setup() {
-  nativeTheme.themeSource = "system";
-  const portal: { report: (scheme: LinuxColorScheme) => void; stopped: boolean } = {
-    report: () => undefined,
-    stopped: false,
-  };
-  const watch = (onChange: (scheme: LinuxColorScheme) => void) => {
-    portal.report = onChange;
-    return {
-      stop: () => {
-        portal.stopped = true;
-      },
-    };
-  };
-  return { portal, watch };
-}
-
 describe("ElectronTheme", () => {
-  it.effect("resolves the system appearance from the desktop color scheme as it changes", () =>
+  it.effect("updates Electron nativeTheme.themeSource", () =>
     Effect.gen(function* () {
-      const { portal, watch } = setup();
-      const theme = yield* ElectronTheme.makeWith(watch);
-      yield* theme.setSource("system");
+      nativeTheme.themeSource = "system";
+      const theme = yield* ElectronTheme.make;
 
-      portal.report("dark");
+      yield* theme.setSource("dark");
       assert.equal(nativeTheme.themeSource, "dark");
-      portal.report("light");
-      assert.equal(nativeTheme.themeSource, "light");
-      portal.report(null);
-      assert.equal(nativeTheme.themeSource, "system");
-    }),
-  );
-
-  it.effect("keeps an explicit appearance over the desktop color scheme", () =>
-    Effect.gen(function* () {
-      const { portal, watch } = setup();
-      const theme = yield* ElectronTheme.makeWith(watch);
-      portal.report("dark");
 
       yield* theme.setSource("light");
-      portal.report("dark");
       assert.equal(nativeTheme.themeSource, "light");
 
       yield* theme.setSource("system");
-      assert.equal(nativeTheme.themeSource, "dark");
-    }),
-  );
-
-  it.effect("stops following the desktop when the layer is released", () =>
-    Effect.gen(function* () {
-      const { portal, watch } = setup();
-      yield* ElectronTheme.makeWith(watch).pipe(Effect.scoped);
-      assert.isTrue(portal.stopped);
-    }),
-  );
-
-  it.effect("leaves the system appearance to Electron when the portal is unavailable", () =>
-    Effect.gen(function* () {
-      setup();
-      const theme = yield* ElectronTheme.makeWith(() => {
-        throw new Error("no session bus");
-      });
-      yield* theme.setSource("system");
       assert.equal(nativeTheme.themeSource, "system");
+    }),
+  );
+
+  it.effect("registers and removes the updated listener with the scope", () =>
+    Effect.gen(function* () {
+      nativeTheme.on.mockReset();
+      nativeTheme.removeListener.mockReset();
+      const listener = () => undefined;
+      const theme = yield* ElectronTheme.make;
+
+      yield* theme.onUpdated(listener).pipe(Effect.scoped);
+
+      assert.deepEqual(nativeTheme.on.mock.calls, [["updated", listener]]);
+      assert.deepEqual(nativeTheme.removeListener.mock.calls, [["updated", listener]]);
     }),
   );
 });

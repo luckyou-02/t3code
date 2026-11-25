@@ -13,9 +13,6 @@ import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
 import * as DesktopAppSettings from "./DesktopAppSettings.ts";
 
 const DesktopSettingsPatch = Schema.Struct({
-  linuxPasswordStore: Schema.optionalKey(
-    Schema.Literals(["auto", "gnome-libsecret", "kwallet", "kwallet5", "kwallet6"]),
-  ),
   mainWindowBounds: Schema.optionalKey(
     Schema.NullOr(
       Schema.Struct({
@@ -223,7 +220,6 @@ describe("DesktopSettings", () => {
         );
 
         assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
           localEnvironmentEnabled: true,
           mainWindowBounds: { x: 120, y: 80, width: 1280, height: 900 },
           mainWindowMaximized: false,
@@ -376,7 +372,6 @@ describe("DesktopSettings", () => {
         });
 
         assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
           localEnvironmentEnabled: true,
           mainWindowBounds: null,
           mainWindowMaximized: false,
@@ -405,7 +400,6 @@ describe("DesktopSettings", () => {
         });
 
         assert.deepEqual(yield* settings.load, {
-          linuxPasswordStore: "auto",
           localEnvironmentEnabled: true,
           mainWindowBounds: null,
           mainWindowMaximized: false,
@@ -494,6 +488,25 @@ describe("DesktopSettings", () => {
         const loaded = yield* settings.load;
         assert.equal(loaded.wslBackendEnabled, true);
         assert.equal(loaded.wslDistro, "Ubuntu-22.04");
+      }),
+    ),
+  );
+
+  it.effect("ignores legacy linuxPasswordStore keys when loading saved desktop settings", () =>
+    withSettings(
+      Effect.gen(function* () {
+        const environment = yield* DesktopEnvironment.DesktopEnvironment;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const settings = yield* DesktopAppSettings.DesktopAppSettings;
+        yield* fileSystem.makeDirectory(environment.stateDir, { recursive: true });
+        yield* fileSystem.writeFileString(
+          environment.desktopSettingsPath,
+          `{ "linuxPasswordStore": "gnome-libsecret", "wslBackendEnabled": true }\n`,
+        );
+
+        const loaded = yield* settings.load;
+        assert.equal(loaded.wslBackendEnabled, true);
+        assert.equal(loaded.localEnvironmentEnabled, true);
       }),
     ),
   );

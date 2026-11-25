@@ -48,7 +48,6 @@ import * as DesktopNetworkInterfaces from "./backend/DesktopNetworkInterfaces.ts
 import * as DesktopEnvironment from "./app/DesktopEnvironment.ts";
 import * as DesktopManagedPolicy from "./app/DesktopManagedPolicy.ts";
 import * as DesktopLifecycle from "./app/DesktopLifecycle.ts";
-import * as DesktopLinuxUrlHandler from "./app/DesktopLinuxUrlHandler.ts";
 import * as DesktopShutdown from "./app/DesktopShutdown.ts";
 import * as DesktopObservability from "./app/DesktopObservability.ts";
 import * as DesktopServerExposure from "./backend/DesktopServerExposure.ts";
@@ -56,7 +55,6 @@ import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.ts";
 import * as DesktopSnapShot from "./snapShot/DesktopSnapShot.ts";
 import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
-import * as DesktopPreReadyPlatform from "./app/DesktopPreReadyPlatform.ts";
 import * as DesktopShellEnvironment from "./shell/DesktopShellEnvironment.ts";
 import * as DesktopSshEnvironment from "./ssh/DesktopSshEnvironment.ts";
 import * as DesktopSshPasswordPrompts from "./ssh/DesktopSshPasswordPrompts.ts";
@@ -208,7 +206,6 @@ const layerDesktopApplication = Layer.mergeAll(
   layerDesktopAppActivation,
   DesktopWebLinks.layer,
   DesktopApplicationMenu.layer,
-  DesktopLinuxUrlHandler.layer,
   DesktopCliCommand.layer,
 ).pipe(
   Layer.provideMerge(layerDesktopSnapShot),
@@ -232,7 +229,7 @@ const layerDesktopApplicationRuntime = layerDesktopApplication.pipe(
 );
 
 const layerDesktopRuntime = layerDesktopApplicationRuntime.pipe(
-  Layer.provideMerge(DesktopPreReadyPlatform.layer),
+  Layer.provideMerge(ElectronProtocol.layerSchemePrivileges),
   Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 

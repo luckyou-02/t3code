@@ -1,5 +1,4 @@
 import * as Cause from "effect/Cause";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
@@ -11,7 +10,6 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
-import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
@@ -27,9 +25,7 @@ import * as DesktopLocalEnvironmentAuth from "../backend/DesktopLocalEnvironment
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLegacyLocalStorage from "./DesktopLegacyLocalStorage.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
-import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
 import * as DesktopObservability from "./DesktopObservability.ts";
-import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
 import * as DesktopShutdown from "./DesktopShutdown.ts";
 import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
@@ -48,11 +44,6 @@ import { m } from "../i18n/messages.ts";
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
 const DESKTOP_BACKEND_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::"] as const;
-
-const LinuxDesktopSessionConfig = Config.all({
-  current: Config.String("XDG_CURRENT_DESKTOP").pipe(Config.option),
-  session: Config.String("XDG_SESSION_DESKTOP").pipe(Config.option),
-});
 
 const makeDesktopRunId = SecureRandom.SecureRandom.pipe(
   Effect.flatMap((random) => random.uuidV4()),
@@ -361,53 +352,17 @@ const startup = Effect.gen(function* () {
   const applicationMenu = yield* DesktopApplicationMenu.DesktopApplicationMenu;
   const electronApp = yield* ElectronApp.ElectronApp;
   const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
-  const linuxUrlHandler = yield* DesktopLinuxUrlHandler.DesktopLinuxUrlHandler;
   const shellEnvironment = yield* DesktopShellEnvironment.DesktopShellEnvironment;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
-  const preReadyElectronOptions = yield* DesktopPreReadyPlatform.DesktopPreReadyElectronOptions;
-  const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
   const updates = yield* DesktopUpdates.DesktopUpdates;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const previewPasskeys = yield* PreviewPasskeys.PreviewPasskeys;
 
   yield* shellEnvironment.installIntoProcess;
-  const hasCommandLinePasswordStore =
-    preReadyElectronOptions.linuxPasswordStoreCommandLine !== null;
-  const linuxElectronOptions =
-    environment.platform === "linux" && !hasCommandLinePasswordStore
-      ? DesktopPreReadyPlatform.resolveEarlyLinuxElectronOptionsFromProcess(
-          yield* HostProcess.HomeDirectory,
-        )
-      : preReadyElectronOptions.linux;
-  if (linuxElectronOptions !== null && !hasCommandLinePasswordStore) {
-    if (
-      linuxElectronOptions.passwordStore !== null ||
-      preReadyElectronOptions.linux?.passwordStore !== null
-    ) {
-      yield* electronApp.removeCommandLineSwitch("password-store");
-    }
-    if (linuxElectronOptions.passwordStore !== null) {
-      yield* electronApp.appendCommandLineSwitch(
-        "password-store",
-        linuxElectronOptions.passwordStore,
-      );
-    }
-  }
   const userDataPath = yield* appIdentity.resolveUserDataPath;
   yield* electronApp.setPath("userData", userDataPath);
   yield* logStartupInfo("runtime logging configured", { logDir: environment.logDir });
   yield* desktopSettings.load;
-
-  if (linuxElectronOptions !== null) {
-    const xdgDesktop = yield* LinuxDesktopSessionConfig;
-    yield* logStartupInfo("linux password store configured", {
-      passwordStore: hasCommandLinePasswordStore
-        ? "command-line"
-        : (linuxElectronOptions.passwordStore ?? "electron-default"),
-      xdgCurrentDesktop: Option.getOrNull(xdgDesktop.current),
-      xdgSessionDesktop: Option.getOrNull(xdgDesktop.session),
-    });
-  }
 
   yield* appIdentity.configure;
   yield* lifecycle.register;
@@ -417,12 +372,6 @@ const startup = Effect.gen(function* () {
     Effect.catchCause((cause) => fatalStartupCause("whenReady", cause)),
   );
   yield* logStartupInfo("app ready");
-  if (environment.platform === "linux") {
-    const selectedBackend = yield* safeStorage.selectedStorageBackend;
-    yield* logStartupInfo("safe storage ready", {
-      backend: Option.getOrElse(selectedBackend, () => "unknown"),
-    });
-  }
   yield* appIdentity.configure;
   // Sets canInstallUpdates, which the backend bootstrap payload reads.
   yield* updates.configure;
@@ -433,8 +382,6 @@ const startup = Effect.gen(function* () {
   );
   yield* previewPasskeys.configure;
   yield* applicationMenu.configure;
-  // Portal identity is prepared pre-ready; MIME helpers must not gate the backend or window.
-  yield* linuxUrlHandler.register.pipe(Effect.forkScoped);
   yield* bootstrap(backendStarted).pipe(
     Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)),
   );

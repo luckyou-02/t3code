@@ -19,17 +19,11 @@ import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
-import {
-  DEFAULT_LINUX_PASSWORD_STORE,
-  normalizeLinuxPasswordStorePreference,
-  type LinuxPasswordStorePreference,
-} from "../linuxSecretStorage.ts";
 import { desktopUpdateChannelOf } from "@t3tools/shared/cliRelease";
 import { isValidDistroName } from "../wsl/wslPathParsing.ts";
 
 export interface DesktopSettings {
   readonly localEnvironmentEnabled: boolean;
-  readonly linuxPasswordStore: LinuxPasswordStorePreference;
   readonly mainWindowBounds: DesktopWindowBounds | null;
   readonly mainWindowMaximized: boolean;
   readonly serverExposureMode: DesktopServerExposureMode;
@@ -70,7 +64,6 @@ export const DEFAULT_MAIN_WINDOW_SIZE = {
 
 export const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   localEnvironmentEnabled: true,
-  linuxPasswordStore: DEFAULT_LINUX_PASSWORD_STORE,
   mainWindowBounds: null,
   mainWindowMaximized: false,
   serverExposureMode: "local-only",
@@ -97,7 +90,6 @@ const optionalReadableKey = <S extends Schema.Top>(schema: S) =>
 
 const DesktopSettingsDocument = Schema.Struct({
   localEnvironmentEnabled: optionalReadableKey(Schema.Boolean),
-  linuxPasswordStore: optionalReadableKey(Schema.Unknown),
   mainWindowBounds: optionalReadableKey(Schema.NullOr(DesktopWindowBoundsDocument)),
   mainWindowMaximized: optionalReadableKey(Schema.Boolean),
   serverExposureMode: optionalReadableKey(DesktopServerExposureModeSchema),
@@ -226,7 +218,6 @@ function normalizeDesktopSettingsDocument(
 
   return {
     localEnvironmentEnabled: parsed.localEnvironmentEnabled !== false,
-    linuxPasswordStore: normalizeLinuxPasswordStorePreference(parsed.linuxPasswordStore),
     mainWindowBounds,
     mainWindowMaximized: mainWindowBounds !== null && parsed.mainWindowMaximized === true,
     serverExposureMode:
@@ -253,9 +244,6 @@ function toDesktopSettingsDocument(
     document.localEnvironmentEnabled = settings.localEnvironmentEnabled;
   }
 
-  if (settings.linuxPasswordStore !== defaults.linuxPasswordStore) {
-    document.linuxPasswordStore = settings.linuxPasswordStore;
-  }
   if (settings.mainWindowBounds !== null) {
     document.mainWindowBounds = settings.mainWindowBounds;
   }
