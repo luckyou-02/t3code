@@ -71,37 +71,11 @@ Restart `vp run dev --share` and open its printed pairing URL once per browser p
 
 Unsigned local builds write to `release/`:
 
-```sh
-vp run dist:desktop:dmg
-vp run dist:desktop:linux
+```powershell
 vp run dist:desktop:win
-# Linux ARM64: vp run dist:desktop:artifact --platform linux --target AppImage --arch arm64
 ```
 
 Run `vp run dist:desktop:artifact --help` for `--arch`, `--signed`, and `--keep-stage`.
-
-### Linux AppImage prerequisites
-
-Build on Linux (the browser-secret helper links against `libsecret`). Install Rust stable (`rustup`), C/C++ build tools, `libsecret` dev headers, `pkg-config`, ImageMagick, and Electron runtime libs (`gtk3`, `nss`, `alsa`, `gbm`):
-
-```sh
-# Ubuntu 24.04 / Debian 13 (on 22.04/Debian 12 use libgtk-3-0 and libasound2)
-sudo apt-get install build-essential libsecret-1-dev pkg-config imagemagick libgtk-3-0t64 libnss3 libasound2t64 libgbm1
-
-# Fedora
-sudo dnf install gcc gcc-c++ make libsecret-devel pkgconf-pkg-config ImageMagick gtk3 nss alsa-lib mesa-libgbm
-
-# Arch
-sudo pacman -S base-devel libsecret pkgconf imagemagick gtk3 nss alsa-lib mesa
-```
-
-### macOS DMG prerequisites
-
-Install Xcode Command Line Tools (`xcode-select --install`) and Rust. For cross-arch/universal builds:
-
-```sh
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-```
 
 ### Windows installer prerequisites
 

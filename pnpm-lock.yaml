@@ -182,18 +182,12 @@ catalogs:
     '@pierre/trees':
       specifier: 1.0.0
       version: 1.0.0
-    '@types/plist':
-      specifier: 3.0.5
-      version: 3.0.5
     '@types/react':
       specifier: ~19.3.0
       version: 19.3.0
     '@types/react-dom':
       specifier: ~19.3.0
       version: 19.3.0
-    electron-webauthn:
-      specifier: 1.3.1
-      version: 1.3.1
     mdast-util-directive:
       specifier: 3.1.0
       version: 3.1.0
@@ -212,9 +206,6 @@ catalogs:
     pele:
       specifier: ^1.8.0
       version: 1.8.0
-    plist:
-      specifier: 3.1.1
-      version: 3.1.1
     react:
       specifier: 19.3.0
       version: 19.3.0
@@ -239,9 +230,6 @@ catalogs:
     remark-rehype:
       specifier: 11.1.2
       version: 11.1.2
-    tldts:
-      specifier: 7.4.2
-      version: 7.4.2
     undici:
       specifier: 8.12.4
       version: 8.12.4
@@ -319,8 +307,6 @@ overrides:
   '@opencode/schema>effect': 4.1.5
   node-abi: 4.33.0
   '@react-native/metro-config': 0.88.1
-  electron-webauthn>@electron-webauthn/macos: 1.3.1
-  '@electron-webauthn/macos>objc-js': 1.5.0
   lightningcss: 1.33.0
   tailwindcss: 4.3.3
   '@types/ws@^8': 8.18.2
@@ -427,9 +413,6 @@ importers:
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9(patch_hash=91b5648a7eed42761523ef542ebb7e548b037eda41d66533c8152ac65ac72155)(supports-color@8.1.1)
-      electron-webauthn:
-        specifier: 'catalog:'
-        version: 1.3.1(typescript@6.0.3)
       ffi-rs:
         specifier: 1.3.2
         version: 1.3.2
@@ -442,9 +425,6 @@ importers:
       react-grab:
         specifier: ^0.1.32
         version: 0.1.44(react@19.3.0)
-      tldts:
-        specifier: 'catalog:'
-        version: 7.4.2
     devDependencies:
       '@effect/vitest':
         specifier: 4.1.5
@@ -2417,9 +2397,6 @@ importers:
       '@electron/asar':
         specifier: ^4.3.0
         version: 4.3.0
-      '@electron/osx-sign':
-        specifier: 2.7.0
-        version: 2.7.0
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:../packages/contracts
@@ -2444,9 +2421,6 @@ importers:
       playwright-core:
         specifier: 1.64.1
         version: 1.64.1
-      plist:
-        specifier: 'catalog:'
-        version: 3.1.1
       pngjs:
         specifier: 7.0.0
         version: 7.0.0
@@ -2457,9 +2431,6 @@ importers:
       '@effect/vitest':
         specifier: 4.1.5
         version: 4.1.5(patch_hash=dd0bf2b1ae0f63aff0d620ebc67b82d19759b3fa69a608ef85e2a5b40b4d46c5)(@astrojs/compiler-rs@0.5.1)(@types/node@24.12.4)(@vitest/browser-playwright@5.1.1)(@vitest/ui@5.1.1)(@volar/typescript@2.4.28(typescript@6.0.3))(bufferutil@4.1.0)(effect@4.1.5(patch_hash=14a7acd734809d8dddbf2c19c4ec01fdd2ffae60a612de42b5ed29860216052a))(esbuild@0.28.2)(jiti@2.7.0)(jsdom@30.1.0(@noble/hashes@1.8.0))(playwright@1.64.1)(terser@5.48.0)(typescript@6.0.3)(unrun@0.2.39)(utf-8-validate@6.0.6)(yaml@2.9.0)
-      '@types/plist':
-        specifier: 'catalog:'
-        version: 3.0.5
       '@types/pngjs':
         specifier: 6.0.5
         version: 6.0.5
@@ -3417,15 +3388,6 @@ packages:
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
     engines: {node: '>=22.12.0'}
 
-  '@electron-webauthn/macos@1.3.1':
-    resolution: {integrity: sha512-NJA4I83ulh3pOfkv7sBkEGecTxaCtjFUbGTAi+BLNWdFc463AY7DaUprsqbGr+WAnD8SIUpuHSO7vC0C+HPu6g==}
-    os: [darwin]
-    peerDependencies:
-      typescript: ^6.0.2
-
-  '@electron-webauthn/types@1.3.1':
-    resolution: {integrity: sha512-C7Jy6dg32/QzIAl1E110acjpp6+b67xqZJL4L0rL2X2VIOJx4m+vfcWl3AjC4JgkxUBcSMSNa85bay2/473y/Q==}
-
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
     engines: {node: '>=10.12.0'}
@@ -3455,11 +3417,6 @@ packages:
   '@electron/osx-sign@1.3.3':
     resolution: {integrity: sha512-KZ8mhXvWv2rIEgMbWZ4y33bDHyUKMXnx4M0sTyPNK/vcB81ImdeY9Ggdqy0SWbMDgmbqyQ+phgejh6V3R2QuSg==}
     engines: {node: '>=12.0.0'}
-    hasBin: true
-
-  '@electron/osx-sign@2.7.0':
-    resolution: {integrity: sha512-9DGhNqKMl6ibkhUoXbN7OHX2gZznfY10L3ZwG0u6r667Kfb6kec4JEfFTXftoqzmOfZ+OzwDbr4p/nKBMHnz0g==}
-    engines: {node: '>=22.12.0'}
     hasBin: true
 
   '@electron/rebuild@4.0.4':
@@ -4766,29 +4723,6 @@ packages:
 
   '@opencode/schema@2.0.28':
     resolution: {integrity: sha512-NHl42ngFN6uLCjtmtooYlEGEayng9ZFc+30DAqQuPcvKpMWsO23OqximHlukxtErp209C4f9LW+OJH/6k60+yw==}
-
-  '@oslojs/asn1@1.0.0':
-    resolution: {integrity: sha512-zw/wn0sj0j0QKbIXfIlnEcTviaCzYOY3V5rAyjR6YtOByFtJiT574+8p9Wlach0lZH9fddD4yb9laEAIl4vXQA==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-
-  '@oslojs/binary@1.0.0':
-    resolution: {integrity: sha512-9RCU6OwXU6p67H4NODbuxv2S3eenuQ4/WFLrsq+K/k682xrznH5EVWA7N4VFk9VYVcbFtKqur5YQQZc0ySGhsQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-
-  '@oslojs/cbor@1.0.0':
-    resolution: {integrity: sha512-AY6Lknexs7n2xp8Cgey95c+975VG7XOk4UEdRdNFxHmDDbuf47OC/LAVRsl14DeTLwo8W6xr3HLFwUFmKcndTQ==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-
-  '@oslojs/crypto@1.0.0':
-    resolution: {integrity: sha512-dVz8TkkgYdr3tlwxHd7SCYGxoN7ynwHLA0nei/Aq9C+ERU0BK+U8+/3soEzBUxUNKYBf42351DyJUZ2REla50w==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-
-  '@oslojs/encoding@1.0.0':
-    resolution: {integrity: sha512-dyIB0SdZgMm5BhGwdSp8rMxEFIopLKxDG1vxIBaiogyom6ZqH2aXPb6DEC2WzOOWKdPSq1cxdNeRx2wAn1Z+ZQ==}
-
-  '@oslojs/webauthn@1.0.0':
-    resolution: {integrity: sha512-2ZRpbt3msNURwvjmavzq9vrNlxUnWFBGMYqbC1kO3fYBLskL7r4DiLJT1wbtLoI+hclFwjhl48YhRFBl6RWg1A==}
-    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   '@oxc-parser/binding-android-arm-eabi@0.147.0':
     resolution: {integrity: sha512-fOtoGvIoirkvxQVw9J1WJPxz571XPgLsPf9uhRD+PJteUnvrJHMDmK9pw2yZEGGyismtRoEsp+JcXUdF/JDMDw==}
@@ -6738,9 +6672,6 @@ packages:
   '@types/node@24.12.4':
     resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
 
-  '@types/plist@3.0.5':
-    resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
-
   '@types/pngjs@6.0.5':
     resolution: {integrity: sha512-0k5eKfrA83JOZPppLtS2C7OUtyNAl2wKNxfyYl9Q5g9lPkgBl/9hNyAu6HuEH2J4XmIv2znEpkDd0SaZVxW6iQ==}
 
@@ -8010,11 +7941,6 @@ packages:
 
   electron-updater@6.8.9:
     resolution: {integrity: sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig==}
-
-  electron-webauthn@1.3.1:
-    resolution: {integrity: sha512-I8/SOjPfnIiVjN38eTX3BRZfuFDGzLWtlByh4OecmlVkfxQt9R/zCwEm4PquyvaqP+xtGgkFrBxwOuJ+DhWlDg==}
-    peerDependencies:
-      typescript: ^6.0.2
 
   electron-winstaller@5.4.0:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
@@ -9760,10 +9686,6 @@ packages:
   node-addon-api@7.1.1:
     resolution: {integrity: sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==}
 
-  node-addon-api@8.9.2:
-    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
-    engines: {node: ^18 || ^20 || >= 21}
-
   node-api-version@0.2.1:
     resolution: {integrity: sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==}
 
@@ -9851,10 +9773,6 @@ packages:
   ob1@0.87.1:
     resolution: {integrity: sha512-i8iA8uij0g1YQzS8uOJPSRCgwDjO9warIHUAu1Fqj877Wc3wlfxDYBioYWgKTBF2+URVJttyDWSEpmd99nlvtQ==}
     engines: {node: ^22.13.0 || ^24.3.0 || >= 26.0.0}
-
-  objc-js@1.5.0:
-    resolution: {integrity: sha512-IHmouX5xYrE2UyGRRlpwY7u2HJVjF6P/P+jy6Vqga+Ya7RAf/hFeNkt4KgTkGUMM3VmnBVUEMJ0tKWY2RlYgKg==}
-    os: [darwin]
 
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
@@ -12564,16 +12482,6 @@ snapshots:
 
   '@electron-internal/extract-zip@1.0.5': {}
 
-  '@electron-webauthn/macos@1.3.1(typescript@6.0.3)':
-    dependencies:
-      '@electron-webauthn/types': 1.3.1
-      '@oslojs/webauthn': 1.0.0
-      objc-js: 1.5.0
-      typescript: 6.0.3
-    optional: true
-
-  '@electron-webauthn/types@1.3.1': {}
-
   '@electron/asar@3.4.1':
     dependencies:
       commander: 5.1.0
@@ -12634,15 +12542,6 @@ snapshots:
       isbinaryfile: 4.0.10
       minimist: 1.2.8
       plist: 3.1.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@electron/osx-sign@2.7.0':
-    dependencies:
-      debug: 4.4.3(supports-color@8.1.1)
-      isbinaryfile: 4.0.10
-      plist: 3.1.1
-      semver: 7.8.5
     transitivePeerDependencies:
       - supports-color
 
@@ -13929,37 +13828,6 @@ snapshots:
     dependencies:
       '@standard-schema/spec': 1.1.0
       effect: 4.1.5(patch_hash=14a7acd734809d8dddbf2c19c4ec01fdd2ffae60a612de42b5ed29860216052a)
-
-  '@oslojs/asn1@1.0.0':
-    dependencies:
-      '@oslojs/binary': 1.0.0
-    optional: true
-
-  '@oslojs/binary@1.0.0':
-    optional: true
-
-  '@oslojs/cbor@1.0.0':
-    dependencies:
-      '@oslojs/binary': 1.0.0
-    optional: true
-
-  '@oslojs/crypto@1.0.0':
-    dependencies:
-      '@oslojs/asn1': 1.0.0
-      '@oslojs/binary': 1.0.0
-    optional: true
-
-  '@oslojs/encoding@1.0.0':
-    optional: true
-
-  '@oslojs/webauthn@1.0.0':
-    dependencies:
-      '@oslojs/asn1': 1.0.0
-      '@oslojs/binary': 1.0.0
-      '@oslojs/cbor': 1.0.0
-      '@oslojs/crypto': 1.0.0
-      '@oslojs/encoding': 1.0.0
-    optional: true
 
   '@oxc-parser/binding-android-arm-eabi@0.147.0':
     optional: true
@@ -15404,11 +15272,6 @@ snapshots:
     dependencies:
       undici-types: 7.16.0
 
-  '@types/plist@3.0.5':
-    dependencies:
-      '@types/node': 24.12.4
-      xmlbuilder: 15.1.1
-
   '@types/pngjs@6.0.5':
     dependencies:
       '@types/node': 24.12.4
@@ -16738,13 +16601,6 @@ snapshots:
       tiny-typed-emitter: 2.1.0
     transitivePeerDependencies:
       - supports-color
-
-  electron-webauthn@1.3.1(typescript@6.0.3):
-    dependencies:
-      '@electron-webauthn/types': 1.3.1
-      typescript: 6.0.3
-    optionalDependencies:
-      '@electron-webauthn/macos': 1.3.1(typescript@6.0.3)
 
   electron-winstaller@5.4.0(supports-color@8.1.1):
     dependencies:
@@ -19117,9 +18973,6 @@ snapshots:
 
   node-addon-api@7.1.1: {}
 
-  node-addon-api@8.9.2:
-    optional: true
-
   node-api-version@0.2.1:
     dependencies:
       semver: 7.7.4
@@ -19233,12 +19086,6 @@ snapshots:
   ob1@0.87.1:
     dependencies:
       flow-enums-runtime: 0.0.6
-
-  objc-js@1.5.0:
-    dependencies:
-      node-addon-api: 8.9.2
-      node-gyp-build: 4.8.4
-    optional: true
 
   object-assign@4.1.1: {}
 

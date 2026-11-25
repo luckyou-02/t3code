@@ -518,10 +518,6 @@
     },
     {
       "license": "MIT",
-      "name": "objc-js"
-    },
-    {
-      "license": "MIT",
       "name": "map-stream",
       "generatedNotice": {
         "licenseId": "MIT",

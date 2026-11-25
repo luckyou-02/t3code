@@ -36,7 +36,6 @@ import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
-import * as PreviewPasskeys from "../preview/Passkeys.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "../shell/DesktopShellEnvironment.ts";
 import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
@@ -83,101 +82,95 @@ interface StubbedDesktop {
 const runStubbedDesktop = (stub: StubbedDesktop) =>
   Effect.gen(function* () {
     const quitting = yield* Ref.make(false);
-    const runApp = DesktopApp.program
-      .pipe(
-        Effect.provide(NodeCrypto.layer),
-        Effect.provideService(DesktopAppIdentity.DesktopAppIdentity, {
-          resolveUserDataPath: Effect.succeed("/isolated/userdata"),
-          configure: stub.record("identity"),
-        } as DesktopAppIdentity.DesktopAppIdentity["Service"]),
-        Effect.provideService(ElectronApp.ElectronApp, {
-          setPath: () => Effect.void,
-          whenReady: stub.record("ready"),
-        } as unknown as ElectronApp.ElectronApp["Service"]),
-        Effect.provideService(ElectronDialog.ElectronDialog, {
-          showErrorBox: () => Effect.die("unexpected fatal startup error"),
-        } as unknown as ElectronDialog.ElectronDialog["Service"]),
-        Effect.provideService(DesktopEnvironment.DesktopEnvironment, {
-          platform: "linux",
-          isDevelopment: false,
-          isPackaged: true,
-          stateDir: "/isolated/userdata",
-          configuredBackendPort: Option.some(3773),
-          defaultDesktopSettings: { serverExposureMode: "local-only" },
-          ...stub.environment,
-        } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
-        Effect.provideService(DesktopShellEnvironment.DesktopShellEnvironment, {
-          installIntoProcess: Effect.succeed(true),
-          awaitDiscovery: Effect.succeed(true),
-          awaitUserShellDiscovery: Effect.succeed(true),
-          discoveryFinished: Effect.succeed(true),
-          updates: Stream.empty,
+    const runApp = DesktopApp.program.pipe(
+      Effect.provide(NodeCrypto.layer),
+      Effect.provideService(DesktopAppIdentity.DesktopAppIdentity, {
+        resolveUserDataPath: Effect.succeed("/isolated/userdata"),
+        configure: stub.record("identity"),
+      } as DesktopAppIdentity.DesktopAppIdentity["Service"]),
+      Effect.provideService(ElectronApp.ElectronApp, {
+        setPath: () => Effect.void,
+        whenReady: stub.record("ready"),
+      } as unknown as ElectronApp.ElectronApp["Service"]),
+      Effect.provideService(ElectronDialog.ElectronDialog, {
+        showErrorBox: () => Effect.die("unexpected fatal startup error"),
+      } as unknown as ElectronDialog.ElectronDialog["Service"]),
+      Effect.provideService(DesktopEnvironment.DesktopEnvironment, {
+        platform: "linux",
+        isDevelopment: false,
+        isPackaged: true,
+        stateDir: "/isolated/userdata",
+        configuredBackendPort: Option.some(3773),
+        defaultDesktopSettings: { serverExposureMode: "local-only" },
+        ...stub.environment,
+      } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]),
+      Effect.provideService(DesktopShellEnvironment.DesktopShellEnvironment, {
+        installIntoProcess: Effect.succeed(true),
+        awaitDiscovery: Effect.succeed(true),
+        awaitUserShellDiscovery: Effect.succeed(true),
+        discoveryFinished: Effect.succeed(true),
+        updates: Stream.empty,
+      }),
+      Effect.provideService(DesktopAppSettings.DesktopAppSettings, {
+        load: Effect.void,
+        get: Effect.succeed({
+          localEnvironmentEnabled: stub.localEnvironmentEnabled,
+          serverExposureMode: "local-only",
         }),
-        Effect.provideService(DesktopAppSettings.DesktopAppSettings, {
-          load: Effect.void,
-          get: Effect.succeed({
-            localEnvironmentEnabled: stub.localEnvironmentEnabled,
-            serverExposureMode: "local-only",
-          }),
-        } as unknown as DesktopAppSettings.DesktopAppSettings["Service"]),
-        Effect.provideService(DesktopLifecycle.DesktopLifecycle, {
-          register: Effect.void,
-          relaunch: () => Effect.void,
+      } as unknown as DesktopAppSettings.DesktopAppSettings["Service"]),
+      Effect.provideService(DesktopLifecycle.DesktopLifecycle, {
+        register: Effect.void,
+        relaunch: () => Effect.void,
+      }),
+      Effect.provideService(DesktopApplicationMenu.DesktopApplicationMenu, {
+        configure: stub.record("menu"),
+      }),
+      Effect.provideService(DesktopUpdates.DesktopUpdates, {
+        configure: Effect.void,
+      } as unknown as DesktopUpdates.DesktopUpdates["Service"]),
+      Effect.provideService(ElectronProtocol.ElectronProtocol, {
+        registerDesktopProtocol: () => Effect.void,
+      } as unknown as ElectronProtocol.ElectronProtocol["Service"]),
+      Effect.provideService(DesktopLegacyLocalStorage.DesktopLegacyLocalStorage, {
+        load: () => Effect.void,
+      } as unknown as DesktopLegacyLocalStorage.DesktopLegacyLocalStorage["Service"]),
+      Effect.provideService(DesktopSnapShot.DesktopSnapShot, {
+        initialize: Effect.void,
+      } as DesktopSnapShot.DesktopSnapShot["Service"]),
+      Effect.provideService(DesktopState.DesktopState, {
+        quitting,
+      } as DesktopState.DesktopState["Service"]),
+      Effect.provideService(DesktopWindow.DesktopWindow, {
+        ensureMain: stub
+          .record("window")
+          .pipe(Effect.andThen(Deferred.succeed(stub.windowStarted, undefined))),
+        createMainIfBackendReady: stub
+          .record("window")
+          .pipe(Effect.andThen(Deferred.succeed(stub.windowStarted, undefined))),
+      } as unknown as DesktopWindow.DesktopWindow["Service"]),
+      Effect.provideService(DesktopBackendPool.DesktopBackendPool, {
+        primary: Effect.succeed({
+          start: stub.record("backend"),
+          currentConfig: Effect.succeedSome({ preflightFailure: Option.none() }),
         }),
-        Effect.provideService(PreviewPasskeys.PreviewPasskeys, {
-          configure: Effect.void,
-        } as PreviewPasskeys.PreviewPasskeys["Service"]),
-        Effect.provideService(DesktopApplicationMenu.DesktopApplicationMenu, {
-          configure: stub.record("menu"),
-        }),
-        Effect.provideService(DesktopUpdates.DesktopUpdates, {
-          configure: Effect.void,
-        } as unknown as DesktopUpdates.DesktopUpdates["Service"]),
-      )
-      .pipe(
-        Effect.provideService(ElectronProtocol.ElectronProtocol, {
-          registerDesktopProtocol: () => Effect.void,
-        } as unknown as ElectronProtocol.ElectronProtocol["Service"]),
-        Effect.provideService(DesktopLegacyLocalStorage.DesktopLegacyLocalStorage, {
-          load: () => Effect.void,
-        } as unknown as DesktopLegacyLocalStorage.DesktopLegacyLocalStorage["Service"]),
-        Effect.provideService(DesktopSnapShot.DesktopSnapShot, {
-          initialize: Effect.void,
-        } as DesktopSnapShot.DesktopSnapShot["Service"]),
-        Effect.provideService(DesktopState.DesktopState, {
-          quitting,
-        } as DesktopState.DesktopState["Service"]),
-        Effect.provideService(DesktopWindow.DesktopWindow, {
-          ensureMain: stub
-            .record("window")
-            .pipe(Effect.andThen(Deferred.succeed(stub.windowStarted, undefined))),
-          createMainIfBackendReady: stub
-            .record("window")
-            .pipe(Effect.andThen(Deferred.succeed(stub.windowStarted, undefined))),
-        } as unknown as DesktopWindow.DesktopWindow["Service"]),
-        Effect.provideService(DesktopBackendPool.DesktopBackendPool, {
-          primary: Effect.succeed({
-            start: stub.record("backend"),
-            currentConfig: Effect.succeedSome({ preflightFailure: Option.none() }),
-          }),
-          list: Effect.succeed(stub.backends ?? []),
-        } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]),
-        Effect.provideService(DesktopServerExposure.DesktopServerExposure, {
-          configureFromSettings: () => Effect.succeed({ mode: "local-only" }),
-          backendConfig: Effect.succeed({ httpBaseUrl: new URL("http://127.0.0.1:3773") }),
-        } as unknown as DesktopServerExposure.DesktopServerExposure["Service"]),
-        Effect.provideService(DesktopWslBackend.DesktopWslBackend, {
-          reconcile: Effect.void,
-        } as DesktopWslBackend.DesktopWslBackend["Service"]),
-        Effect.provideService(DesktopAppActivation.DesktopAppActivation, {
-          start: stub.activationStarted
-            ? Deferred.succeed(stub.activationStarted, undefined)
-            : Effect.void,
-        } as unknown as DesktopAppActivation.DesktopAppActivation["Service"]),
-        Effect.provideService(DesktopRendererHistory.DesktopRendererHistory, {
-          shutdown: stub.flushRendererHistory ?? Effect.void,
-        } as DesktopRendererHistory.DesktopRendererHistory["Service"]),
-      );
+        list: Effect.succeed(stub.backends ?? []),
+      } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]),
+      Effect.provideService(DesktopServerExposure.DesktopServerExposure, {
+        configureFromSettings: () => Effect.succeed({ mode: "local-only" }),
+        backendConfig: Effect.succeed({ httpBaseUrl: new URL("http://127.0.0.1:3773") }),
+      } as unknown as DesktopServerExposure.DesktopServerExposure["Service"]),
+      Effect.provideService(DesktopWslBackend.DesktopWslBackend, {
+        reconcile: Effect.void,
+      } as DesktopWslBackend.DesktopWslBackend["Service"]),
+      Effect.provideService(DesktopAppActivation.DesktopAppActivation, {
+        start: stub.activationStarted
+          ? Deferred.succeed(stub.activationStarted, undefined)
+          : Effect.void,
+      } as unknown as DesktopAppActivation.DesktopAppActivation["Service"]),
+      Effect.provideService(DesktopRendererHistory.DesktopRendererHistory, {
+        shutdown: stub.flushRendererHistory ?? Effect.void,
+      } as DesktopRendererHistory.DesktopRendererHistory["Service"]),
+    );
     return yield* runApp.pipe(
       Effect.provide(
         Layer.mergeAll(

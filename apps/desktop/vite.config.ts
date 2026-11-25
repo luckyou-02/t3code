@@ -35,7 +35,7 @@ const pageWorldFunction = (): Rolldown.Plugin => ({
     try {
       const { output } = await bundle.generate({ format: "iife", name: "pageWorld" });
       for (const file of await bundle.watchFiles) this.addWatchFile(file);
-      return `export function installPageWorld(host) {\n${output[0].code}\nreturn pageWorld.installPageWorld(host);\n}\n`;
+      return `export function installPageWorld() {\n${output[0].code}\nreturn pageWorld.installPageWorld();\n}\n`;
     } finally {
       await bundle.close();
     }

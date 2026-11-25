@@ -50,12 +50,8 @@ import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import { SNAP_SHOT_EVENT_CHANNEL } from "../ipc/channels.ts";
 import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
-import {
-  PASSKEY_BRIDGE_ARGUMENT,
-  PRIMARY_PASTE_DISABLED_ARGUMENT,
-} from "../preview/GuestProtocol.ts";
+import { PRIMARY_PASTE_DISABLED_ARGUMENT } from "../preview/GuestProtocol.ts";
 import * as PreviewManager from "../preview/Manager.ts";
-import * as PreviewPasskeys from "../preview/Passkeys.ts";
 
 const environmentInput = {
   dirname: "/repo/apps/desktop/dist-electron",
@@ -262,7 +258,6 @@ function layerTest(input: {
     readonly titleBarOverlay: boolean;
   }>;
   readonly primaryPasteEnabled?: boolean;
-  readonly previewPasskeyBridgeEnabled?: boolean;
 }) {
   let desktopSettings = input.desktopSettings ?? DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS;
   const layerDesktopAppSettings = Layer.succeed(DesktopAppSettings.DesktopAppSettings, {
@@ -367,11 +362,6 @@ function layerTest(input: {
         layerElectronWindow,
         Layer.succeed(DesktopPrimaryPaste.DesktopPrimaryPaste, {
           enabled: input.primaryPasteEnabled ?? true,
-        }),
-        Layer.mock(PreviewPasskeys.PreviewPasskeys)({
-          bridgeEnabled: input.previewPasskeyBridgeEnabled ?? false,
-          installSessionHandlers: () => {},
-          attachGuest: () => () => {},
         }),
         Layer.mock(PreviewManager.PreviewManager)({
           getBrowserSession: () => Effect.succeed({} as Electron.Session),
@@ -479,11 +469,6 @@ const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
           layerElectronTheme,
           Layer.succeed(ElectronWindow.ElectronWindow, electronWindowShape),
           Layer.succeed(DesktopPrimaryPaste.DesktopPrimaryPaste, { enabled: true }),
-          Layer.mock(PreviewPasskeys.PreviewPasskeys)({
-            bridgeEnabled: false,
-            installSessionHandlers: () => {},
-            attachGuest: () => () => {},
-          }),
           Layer.mock(PreviewManager.PreviewManager)({
             getBrowserSession: () => Effect.succeed({} as Electron.Session),
             setMainWindow: () => Effect.void,
@@ -1532,9 +1517,9 @@ describe("DesktopWindow", () => {
   it.effect.each([
     {
       primaryPasteEnabled: false,
-      expected: [PASSKEY_BRIDGE_ARGUMENT, PRIMARY_PASTE_DISABLED_ARGUMENT],
+      expected: [PRIMARY_PASTE_DISABLED_ARGUMENT],
     },
-    { primaryPasteEnabled: true, expected: [PASSKEY_BRIDGE_ARGUMENT] },
+    { primaryPasteEnabled: true, expected: undefined },
   ])(
     "isolates preview guests and passes them the primary-paste setting (enabled: $primaryPasteEnabled)",
     ({ primaryPasteEnabled, expected }) =>
@@ -1545,7 +1530,6 @@ describe("DesktopWindow", () => {
           createCount: yield* Ref.make(0),
           mainWindow: yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none()),
           primaryPasteEnabled,
-          previewPasskeyBridgeEnabled: true,
         });
 
         yield* Effect.gen(function* () {

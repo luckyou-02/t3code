@@ -4,9 +4,6 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeCrypto from "node:crypto";
 import * as NodeModule from "node:module";
-// plist is CommonJS; Node cannot load its named exports from an ES module.
-import Plist from "plist";
-
 import {
   createPackageWithOptions,
   extractAll,
@@ -17,7 +14,6 @@ import {
 
 import { fromYaml } from "@t3tools/shared/schemaYaml";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { clerkFrontendApiHostnameFromPublishableKey } from "@t3tools/shared/relayAuth";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
@@ -39,7 +35,6 @@ import {
   findInlinedExternalPackages,
   selectCliRuntimeExternalDependencies,
 } from "./lib/cli-external-packages.ts";
-import { loadRepoEnv } from "./lib/public-config.ts";
 import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external-packages.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 import { resolveTaggedSourceVersion } from "./lib/tagged-source-version.ts";
@@ -61,12 +56,12 @@ import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-const LINUX_ICON_SIZES = [16, 22, 24, 32, 48, 64, 128, 256, 512] as const;
 const DESKTOP_APP_ID = "com.t3tools.t3code";
-const APPLE_TEAM_ID_PATTERN = /^[A-Z0-9]{10}$/u;
 
-const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
-const BuildArch = Schema.Literals(["arm64", "x64", "universal"]);
+const BuildPlatform = Schema.Literals(["win"]);
+const BuildArch = Schema.Literals(["arm64", "x64"]);
+type StagePlatform = "mac" | "linux" | "win";
+type StageArch = "arm64" | "x64";
 
 const WorkspaceConfig = Schema.Struct({
   catalog: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -86,26 +81,9 @@ const StageWorkspaceConfig = Schema.Struct({
   allowBuilds: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   patchedDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   overrides: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  packageExtensions: Schema.optional(
-    Schema.Record(
-      Schema.String,
-      Schema.Struct({
-        peerDependenciesMeta: Schema.Record(
-          Schema.String,
-          Schema.Struct({ optional: Schema.Boolean }),
-        ),
-      }),
-    ),
-  ),
   nodeLinker: Schema.optional(Schema.Literals(["hoisted"])),
 });
 type StageWorkspaceConfig = typeof StageWorkspaceConfig.Type;
-
-// TypeScript is a typings-only peer; pnpm auto-installation would ship a compiler.
-const STAGE_PACKAGE_EXTENSIONS = {
-  "electron-webauthn": { peerDependenciesMeta: { typescript: { optional: true } } },
-  "@electron-webauthn/macos": { peerDependenciesMeta: { typescript: { optional: true } } },
-} as const;
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
@@ -126,48 +104,27 @@ export const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* ()
 });
 
 interface DesktopBuildIconAssets {
-  readonly macIconPng: string;
-  readonly linuxIconPng: string;
   readonly windowsIconIco: string;
 }
 
 interface PlatformConfig {
-  readonly cliFlag: "--mac" | "--linux" | "--win";
+  readonly cliFlag: "--win";
   readonly defaultTarget: string;
   readonly archChoices: ReadonlyArray<typeof BuildArch.Type>;
 }
 
 export function resolveResourceMonitorRustTargets(
-  platform: typeof BuildPlatform.Type,
+  _platform: typeof BuildPlatform.Type,
   arch: typeof BuildArch.Type,
 ): ReadonlyArray<string> {
-  if (platform === "mac") {
-    if (arch === "universal") {
-      return ["aarch64-apple-darwin", "x86_64-apple-darwin"];
-    }
-    return [arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin"];
-  }
-  if (platform === "linux") {
-    return [arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"];
-  }
   return [arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc"];
 }
 
-export function resourceMonitorExecutableName(platform: typeof BuildPlatform.Type): string {
-  return platform === "win" ? "t3-resource-monitor.exe" : "t3-resource-monitor";
+export function resourceMonitorExecutableName(): string {
+  return "t3-resource-monitor.exe";
 }
 
 const PLATFORM_CONFIG: Record<typeof BuildPlatform.Type, PlatformConfig> = {
-  mac: {
-    cliFlag: "--mac",
-    defaultTarget: "dmg",
-    archChoices: ["arm64", "x64", "universal"],
-  },
-  linux: {
-    cliFlag: "--linux",
-    defaultTarget: "AppImage",
-    archChoices: ["x64", "arm64"],
-  },
   win: {
     cliFlag: "--win",
     defaultTarget: "nsis",
@@ -191,55 +148,18 @@ interface BuildCliInput {
 }
 
 function detectHostBuildPlatform(hostPlatform: string): typeof BuildPlatform.Type | undefined {
-  if (hostPlatform === "darwin") return "mac";
-  if (hostPlatform === "linux") return "linux";
-  if (hostPlatform === "win32") return "win";
-  return undefined;
+  return hostPlatform === "win32" ? "win" : undefined;
 }
 
 const getDefaultArch = Effect.fn("getDefaultArch")(function* (platform: typeof BuildPlatform.Type) {
   const config = PLATFORM_CONFIG[platform];
   if (!config) {
-    return "x64";
+    return "x64" as const;
   }
 
-  return yield* getDefaultBuildArch(platform, config);
+  const resolved = yield* getDefaultBuildArch(platform, config);
+  return resolved === "arm64" ? ("arm64" as const) : ("x64" as const);
 });
-
-export class MacPasskeySigningConfigurationResolutionError extends Schema.TaggedError<MacPasskeySigningConfigurationResolutionError>()(
-  "MacPasskeySigningConfigurationResolutionError",
-  {
-    cause: Schema.Defect(),
-  },
-) {
-  static fromCause(
-    cause: unknown,
-  ): MacPasskeySigningConfigurationError | MacPasskeySigningConfigurationResolutionError {
-    return isMacPasskeySigningConfigurationError(cause)
-      ? cause
-      : new MacPasskeySigningConfigurationResolutionError({ cause });
-  }
-
-  override get message(): string {
-    return "Failed to resolve macOS passkey signing configuration.";
-  }
-}
-
-export class KeyringNativePackageMissingError extends Schema.TaggedError<KeyringNativePackageMissingError>()(
-  "KeyringNativePackageMissingError",
-  {
-    packageName: Schema.String,
-    binaryFileName: Schema.String,
-    packageEntryPath: Schema.String,
-    platform: BuildPlatform,
-    arch: BuildArch,
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return `Keyring native package is missing: ${this.packageName}`;
-  }
-}
 
 export class ClerkPasskeyNativePackageMissingError extends Schema.TaggedError<ClerkPasskeyNativePackageMissingError>()(
   "ClerkPasskeyNativePackageMissingError",
@@ -337,93 +257,6 @@ export class BuildCommandFailedError extends Schema.TaggedError<BuildCommandFail
   }
 }
 
-export const LINUX_DESKTOP_BUILD_PREREQUISITES = [
-  { id: "cargo", description: "Rust compiler and Cargo", packages: ["cargo", "rustc"] },
-  { id: "rust-target", description: "Requested Rust standard library", packages: [] },
-  { id: "cc", description: "C/C++ build toolchain", packages: ["build-essential"] },
-  { id: "make", description: "Make", packages: ["build-essential"] },
-  {
-    id: "libsecret",
-    description: "libsecret development headers and pkg-config",
-    packages: ["libsecret-1-dev", "pkg-config"],
-  },
-  { id: "imagemagick", description: "ImageMagick", packages: ["imagemagick"] },
-] as const;
-
-export class LinuxDesktopBuildPrerequisitesMissingError extends Schema.TaggedError<LinuxDesktopBuildPrerequisitesMissingError>()(
-  "LinuxDesktopBuildPrerequisitesMissingError",
-  {
-    missing: Schema.Array(Schema.String),
-    rustTarget: Schema.String,
-  },
-) {
-  override get message(): string {
-    const missingRequirements = LINUX_DESKTOP_BUILD_PREREQUISITES.filter((requirement) =>
-      this.missing.includes(requirement.id),
-    );
-    const details = missingRequirements
-      .map((requirement) =>
-        requirement.packages.length > 0
-          ? `  - ${requirement.description} (${requirement.packages.join(", ")})`
-          : `  - ${requirement.description}`,
-      )
-      .join("\n");
-    const packages = [
-      ...new Set(missingRequirements.flatMap((requirement) => requirement.packages)),
-    ];
-    return [
-      "Linux desktop build prerequisites are missing:",
-      details,
-      "",
-      ...(packages.length > 0
-        ? ["On Ubuntu/Debian, install them with:", `  sudo apt-get install ${packages.join(" ")}`]
-        : []),
-      ...(this.missing.includes("rust-target")
-        ? ["Add the requested Rust target with:", `  rustup target add ${this.rustTarget}`]
-        : []),
-      "",
-      "For other distributions, see docs/operations/00_development.md#linux-appimage-prerequisites.",
-      "Then rerun `vp run dist:desktop:linux`.",
-    ].join("\n");
-  }
-}
-
-const MAC_DESKTOP_BUILD_PREREQUISITES = [
-  { id: "rust", description: "Rust/Cargo and the requested Rust target" },
-  { id: "clang", description: "Xcode Command Line Tools (clang)" },
-  { id: "make", description: "Xcode Command Line Tools (make)" },
-  { id: "sips", description: "macOS image tool (sips)" },
-  { id: "iconutil", description: "macOS icon tool (iconutil)" },
-  { id: "lipo", description: "Xcode universal-binary tool (lipo)" },
-] as const;
-
-export class MacDesktopBuildPrerequisitesMissingError extends Schema.TaggedError<MacDesktopBuildPrerequisitesMissingError>()(
-  "MacDesktopBuildPrerequisitesMissingError",
-  {
-    missing: Schema.Array(Schema.String),
-    rustTargets: Schema.Array(Schema.String),
-  },
-) {
-  override get message(): string {
-    const details = MAC_DESKTOP_BUILD_PREREQUISITES.filter((requirement) =>
-      this.missing.includes(requirement.id),
-    )
-      .map((requirement) => `  - ${requirement.description}`)
-      .join("\n");
-    return [
-      "macOS desktop build prerequisites are missing:",
-      details,
-      "",
-      "Install Apple's build tools with:",
-      "  xcode-select --install",
-      "Install Rust from https://rustup.rs, then add the requested target(s):",
-      `  rustup target add ${this.rustTargets.join(" ")}`,
-      "",
-      "Then rerun the desktop artifact command.",
-    ].join("\n");
-  }
-}
-
 const WINDOWS_DESKTOP_BUILD_PREREQUISITES = [
   { id: "rust", description: "Rust/Cargo and the requested MSVC Rust target" },
   { id: "python", description: "Python 3 for node-gyp" },
@@ -475,12 +308,6 @@ export class ResourceMonitorBuildOutputMissingError extends Schema.TaggedError<R
   }
 }
 
-const desktopIconPlatformNames = {
-  mac: "macOS",
-  linux: "Linux",
-  win: "Windows",
-} satisfies Record<typeof BuildPlatform.Type, string>;
-
 export class DesktopIconSourceMissingError extends Schema.TaggedError<DesktopIconSourceMissingError>()(
   "DesktopIconSourceMissingError",
   {
@@ -489,19 +316,7 @@ export class DesktopIconSourceMissingError extends Schema.TaggedError<DesktopIco
   },
 ) {
   override get message(): string {
-    return `Desktop ${desktopIconPlatformNames[this.platform]} icon source is missing at ${this.sourcePath}`;
-  }
-}
-
-export class DesktopDmgBackgroundSourceMissingError extends Schema.TaggedError<DesktopDmgBackgroundSourceMissingError>()(
-  "DesktopDmgBackgroundSourceMissingError",
-  {
-    channel: Schema.Literals(["latest", "nightly"]),
-    sourcePath: Schema.String,
-  },
-) {
-  override get message(): string {
-    return `Desktop ${this.channel} DMG background source is missing at ${this.sourcePath}`;
+    return `Desktop Windows icon source is missing at ${this.sourcePath}`;
   }
 }
 
@@ -652,17 +467,6 @@ export class MissingDesktopBuildInputError extends Schema.TaggedError<MissingDes
   }
 }
 
-export class MacProvisioningProfileNotFoundError extends Schema.TaggedError<MacProvisioningProfileNotFoundError>()(
-  "MacProvisioningProfileNotFoundError",
-  {
-    provisioningProfilePath: Schema.String,
-  },
-) {
-  override get message(): string {
-    return `macOS provisioning profile not found: ${this.provisioningProfilePath}`;
-  }
-}
-
 export class DesktopBuildDistDirectoryMissingError extends Schema.TaggedError<DesktopBuildDistDirectoryMissingError>()(
   "DesktopBuildDistDirectoryMissingError",
   {
@@ -779,21 +583,6 @@ export class WindowsPackagedPayloadValidationError extends Schema.TaggedError<Wi
       return "Windows packaged payload is missing resources/server.asar.";
     }
     return `Windows packaged application directory was not found at ${this.packagedAppDir}.`;
-  }
-}
-
-export class LinuxIconResizeError extends Schema.TaggedError<LinuxIconResizeError>()(
-  "LinuxIconResizeError",
-  {
-    operation: Schema.Literal("resize"),
-    iconSize: Schema.Int,
-    primaryTool: Schema.Literal("magick"),
-    fallbackTool: Schema.Literal("convert"),
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return `Failed to ${this.operation} the Linux desktop icon to ${this.iconSize}x${this.iconSize} with \`${this.primaryTool}\` or \`${this.fallbackTool}\`. Install ImageMagick so either tool is available.`;
   }
 }
 
@@ -957,7 +746,6 @@ interface StagePackageJson {
   readonly version: string;
   readonly buildVersion: string;
   readonly t3codeCommitHash: string;
-  readonly t3codeWebAuthn?: MacWebAuthnEntitlements;
   readonly private: true;
   readonly packageManager: string;
   readonly description: string;
@@ -988,27 +776,6 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
 ] as const;
-// Windows terminal helpers cannot run on macOS and slow signing and notarization.
-export const MAC_FILE_EXCLUSIONS = [
-  "!**/node_modules/node-pty/prebuilds/win32-*/**/*",
-  "!**/node_modules/node-pty/third_party/conpty/**/*",
-] as const;
-// Linux builds node-pty from source; its prebuilds target other platforms.
-export const LINUX_FILE_EXCLUSIONS = [
-  ...MAC_FILE_EXCLUSIONS,
-  "!**/node_modules/node-pty/prebuilds/darwin-*/**/*",
-] as const;
-
-// Native packages (node-pty, objc-js) ship prebuilds for both Darwin architectures; only universal
-// apps need both. macOS 27 warns that an arm64 app holding x64-only code won't open on macOS 28.
-export function resolveMacFileExclusions(arch?: typeof BuildArch.Type) {
-  if (arch === undefined || arch === "universal") {
-    return [...MAC_FILE_EXCLUSIONS];
-  }
-
-  const unusedArch = arch === "arm64" ? "x64" : "arm64";
-  return [...MAC_FILE_EXCLUSIONS, `!**/node_modules/**/prebuilds/darwin-${unusedArch}/**/*`];
-}
 // Large ASAR sidecars avoid NSIS extracting thousands of loose files during installs and updates.
 export const WINDOWS_SERVER_ASAR_RESOURCE = "server.asar";
 // Native modules and executables need real paths, so place them in ASAR's .unpacked sibling.
@@ -1086,330 +853,22 @@ export const DESKTOP_EXTRA_RESOURCES = [
   },
 ] as const;
 
-export interface MacPasskeySigningConfiguration {
-  readonly appId: string;
-  readonly teamId: string;
-  readonly rpDomains: readonly string[];
-  readonly provisioningProfilePath: string;
-}
-
-export const InvalidMacPasskeyRpDomainReason = Schema.Literals([
-  "empty",
-  "scheme-not-allowed",
-  "parse-failed",
-  "credentials-not-allowed",
-  "port-not-allowed",
-  "path-not-allowed",
-  "query-not-allowed",
-  "fragment-not-allowed",
-  "hostname-mismatch",
-]);
-export type InvalidMacPasskeyRpDomainReason = typeof InvalidMacPasskeyRpDomainReason.Type;
-
-export class InvalidMacPasskeyRpDomainError extends Schema.TaggedError<InvalidMacPasskeyRpDomainError>()(
-  "InvalidMacPasskeyRpDomainError",
-  {
-    reason: InvalidMacPasskeyRpDomainReason,
-    inputLength: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    cause: Schema.optionalKey(Schema.Defect()),
-  },
-) {
-  override get message(): string {
-    return `Invalid passkey RP domain (${this.reason}).`;
-  }
-}
-
-export class InvalidAppleTeamIdError extends Schema.TaggedError<InvalidAppleTeamIdError>()(
-  "InvalidAppleTeamIdError",
-  {
-    teamId: Schema.String,
-  },
-) {
-  override get message(): string {
-    return `T3CODE_APPLE_TEAM_ID '${this.teamId}' must be a 10-character Apple Developer Team ID.`;
-  }
-}
-
-export class MissingMacPasskeyProvisioningProfileError extends Schema.TaggedError<MissingMacPasskeyProvisioningProfileError>()(
-  "MissingMacPasskeyProvisioningProfileError",
-  {},
-) {
-  override get message(): string {
-    return "T3CODE_MACOS_PROVISIONING_PROFILE must point to an Associated Domains provisioning profile.";
-  }
-}
-
-export class MissingMacPasskeyDomainConfigurationError extends Schema.TaggedError<MissingMacPasskeyDomainConfigurationError>()(
-  "MissingMacPasskeyDomainConfigurationError",
-  {},
-) {
-  override get message(): string {
-    return "T3CODE_CLERK_PUBLISHABLE_KEY or T3CODE_CLERK_PASSKEY_RP_DOMAINS is required for signed macOS passkey builds.";
-  }
-}
-
-export class InvalidMacPasskeyPublishableKeyError extends Schema.TaggedError<InvalidMacPasskeyPublishableKeyError>()(
-  "InvalidMacPasskeyPublishableKeyError",
-  {
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return "T3CODE_CLERK_PUBLISHABLE_KEY is invalid.";
-  }
-}
-
-export class MissingMacPasskeyRpDomainError extends Schema.TaggedError<MissingMacPasskeyRpDomainError>()(
-  "MissingMacPasskeyRpDomainError",
-  {},
-) {
-  override get message(): string {
-    return "At least one Clerk passkey RP domain is required.";
-  }
-}
-
-export const MacPasskeySigningConfigurationError = Schema.Union([
-  InvalidMacPasskeyRpDomainError,
-  InvalidAppleTeamIdError,
-  MissingMacPasskeyProvisioningProfileError,
-  MissingMacPasskeyDomainConfigurationError,
-  InvalidMacPasskeyPublishableKeyError,
-  MissingMacPasskeyRpDomainError,
-]);
-export type MacPasskeySigningConfigurationError = typeof MacPasskeySigningConfigurationError.Type;
-export const isMacPasskeySigningConfigurationError = Schema.is(MacPasskeySigningConfigurationError);
-
-function normalizePasskeyRpDomain(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  const inputLength = value.length;
-  if (normalized.length === 0) {
-    throw new InvalidMacPasskeyRpDomainError({ reason: "empty", inputLength });
-  }
-  if (/^[a-z][a-z\d+.-]*:\/\//u.test(normalized)) {
-    throw new InvalidMacPasskeyRpDomainError({
-      reason: "scheme-not-allowed",
-      inputLength,
-    });
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(`https://${normalized}`);
-  } catch (cause) {
-    throw new InvalidMacPasskeyRpDomainError({ reason: "parse-failed", inputLength, cause });
-  }
-
-  let reason: InvalidMacPasskeyRpDomainReason | undefined;
-  if (parsed.username.length > 0 || parsed.password.length > 0) {
-    reason = "credentials-not-allowed";
-  } else if (parsed.port.length > 0) {
-    reason = "port-not-allowed";
-  } else if (parsed.pathname !== "/") {
-    reason = "path-not-allowed";
-  } else if (parsed.search.length > 0) {
-    reason = "query-not-allowed";
-  } else if (parsed.hash.length > 0) {
-    reason = "fragment-not-allowed";
-  } else if (parsed.host !== normalized) {
-    reason = "hostname-mismatch";
-  }
-  if (reason) {
-    throw new InvalidMacPasskeyRpDomainError({ reason, inputLength });
-  }
-
-  return parsed.hostname;
-}
-
-export function resolveMacPasskeySigningConfiguration(
-  env: Readonly<Record<string, string | undefined>>,
-): MacPasskeySigningConfiguration {
-  const teamId = env.T3CODE_APPLE_TEAM_ID?.trim().toUpperCase() ?? "";
-  if (!APPLE_TEAM_ID_PATTERN.test(teamId)) {
-    throw new InvalidAppleTeamIdError({ teamId });
-  }
-
-  const provisioningProfilePath = env.T3CODE_MACOS_PROVISIONING_PROFILE?.trim() ?? "";
-  if (provisioningProfilePath.length === 0) {
-    throw new MissingMacPasskeyProvisioningProfileError();
-  }
-
-  const configuredRpDomains = env.T3CODE_CLERK_PASSKEY_RP_DOMAINS?.trim();
-  let rpDomains: readonly string[];
-  if (configuredRpDomains) {
-    rpDomains = configuredRpDomains.split(",").map(normalizePasskeyRpDomain);
-  } else {
-    const publishableKey = env.T3CODE_CLERK_PUBLISHABLE_KEY?.trim();
-    if (!publishableKey) {
-      throw new MissingMacPasskeyDomainConfigurationError();
-    }
-    let hostname: string;
-    try {
-      hostname = clerkFrontendApiHostnameFromPublishableKey(publishableKey);
-    } catch (cause) {
-      throw new InvalidMacPasskeyPublishableKeyError({ cause });
-    }
-    rpDomains = [normalizePasskeyRpDomain(hostname)];
-  }
-
-  const uniqueRpDomains = [...new Set(rpDomains)];
-  if (uniqueRpDomains.length === 0) {
-    throw new MissingMacPasskeyRpDomainError();
-  }
-
-  return {
-    appId: DESKTOP_APP_ID,
-    teamId,
-    rpDomains: uniqueRpDomains,
-    provisioningProfilePath,
-  };
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-/** macOS refuses restricted entitlements absent from the provisioning profile. */
-export interface MacWebAuthnEntitlements {
-  readonly touchIdKeychainAccessGroup: string | undefined;
-  readonly browserPasskeys: boolean;
-}
-
-const BROWSER_PASSKEYS_ENTITLEMENT = "com.apple.developer.web-browser.public-key-credential";
-
-const ProvisioningProfilePlist = Schema.Struct({
-  Entitlements: Schema.Struct({
-    "keychain-access-groups": Schema.optional(Schema.Array(Schema.String)),
-    [BROWSER_PASSKEYS_ENTITLEMENT]: Schema.optional(Schema.Boolean),
-  }),
-});
-const isProvisioningProfilePlist = Schema.is(ProvisioningProfilePlist);
-
-const readProfileEntitlements = (provisioningProfile: string) => {
-  const start = provisioningProfile.indexOf("<?xml");
-  const end = provisioningProfile.indexOf("</plist>", start);
-  if (start === -1 || end === -1) return undefined;
-  try {
-    const profile: unknown = Plist.parse(provisioningProfile.slice(start, end + "</plist>".length));
-    return isProvisioningProfilePlist(profile) ? profile.Entitlements : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-export function resolveMacWebAuthnEntitlements(
-  provisioningProfile: string,
-  configuration: Pick<MacPasskeySigningConfiguration, "appId" | "teamId">,
-): MacWebAuthnEntitlements {
-  const entitlements = readProfileEntitlements(provisioningProfile);
-  const keychainAccessGroup = `${configuration.teamId}.${configuration.appId}.webauthn`;
-  const keychainGroupAuthorized = (entitlements?.["keychain-access-groups"] ?? []).some((group) =>
-    group.endsWith("*")
-      ? keychainAccessGroup.startsWith(group.slice(0, -1))
-      : group === keychainAccessGroup,
-  );
-  return {
-    touchIdKeychainAccessGroup: keychainGroupAuthorized ? keychainAccessGroup : undefined,
-    browserPasskeys: entitlements?.[BROWSER_PASSKEYS_ENTITLEMENT] === true,
-  };
-}
-
-export function renderMacPasskeyEntitlements(
-  configuration: MacPasskeySigningConfiguration,
-  webAuthn: MacWebAuthnEntitlements,
-): string {
-  const associatedDomains = configuration.rpDomains
-    .map((domain) => `      <string>webcredentials:${escapeXml(domain)}</string>`)
-    .join("\n");
-  const keychainAccessGroups = webAuthn.touchIdKeychainAccessGroup
-    ? `
-    <key>keychain-access-groups</key>
-    <array>
-      <string>${escapeXml(webAuthn.touchIdKeychainAccessGroup)}</string>
-    </array>`
-    : "";
-  const browserPasskeys = webAuthn.browserPasskeys
-    ? `
-    <key>${BROWSER_PASSKEYS_ENTITLEMENT}</key>
-    <true/>`
-    : "";
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-  <dict>
-    <key>com.apple.application-identifier</key>
-    <string>${escapeXml(`${configuration.teamId}.${configuration.appId}`)}</string>
-    <key>com.apple.developer.team-identifier</key>
-    <string>${escapeXml(configuration.teamId)}</string>
-    <key>com.apple.developer.associated-domains</key>
-    <array>
-${associatedDomains}
-    </array>${keychainAccessGroups}${browserPasskeys}
-    <key>com.apple.security.cs.allow-jit</key>
-    <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.cs.disable-library-validation</key>
-    <true/>
-    <key>com.apple.security.automation.apple-events</key>
-    <true/>
-    <!-- The hardened runtime denies camera and microphone to the app and every
-         child process, with no prompt, unless the app claims these. Terminals
-         and coding agents inherit the app's TCC identity, so without these a
-         command like ffmpeg or imagesnap gets silent access-denied. -->
-    <key>com.apple.security.device.camera</key>
-    <true/>
-    <key>com.apple.security.device.audio-input</key>
-    <true/>
-  </dict>
-</plist>
-`;
-}
-
 export function resolveFffNativeDependencies(
-  platform: typeof BuildPlatform.Type,
-  arch: typeof BuildArch.Type,
+  platform: StagePlatform,
+  arch: StageArch,
   version: string,
 ): Record<string, string> {
-  const architectures = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
-
   if (platform === "mac") {
-    return Object.fromEntries(
-      architectures.map((architecture) => [`@ff-labs/fff-bin-darwin-${architecture}`, version]),
-    );
+    return { [`@ff-labs/fff-bin-darwin-${arch}`]: version };
   }
 
   if (platform === "win") {
-    return Object.fromEntries(
-      architectures.map((architecture) => [`@ff-labs/fff-bin-win32-${architecture}`, version]),
-    );
+    return { [`@ff-labs/fff-bin-win32-${arch}`]: version };
   }
 
   return Object.fromEntries(
-    architectures.flatMap((architecture) =>
-      ["gnu", "musl"].map((libc) => [`@ff-labs/fff-bin-linux-${architecture}-${libc}`, version]),
-    ),
+    ["gnu", "musl"].map((libc) => [`@ff-labs/fff-bin-linux-${arch}-${libc}`, version]),
   );
-}
-
-// macOS and Linux share one app.asar; stage the union of both bundles' external dependencies.
-export function resolveMergedStageDependencies(input: {
-  readonly platform: "mac" | "linux";
-  readonly serverDependencies: Record<string, string>;
-  readonly desktopDependencies: Record<string, string>;
-  readonly arch: typeof BuildArch.Type;
-  readonly fffNodeVersion: string;
-}) {
-  return {
-    ...selectCliRuntimeExternalDependencies(input.serverDependencies),
-    ...input.desktopDependencies,
-    ...resolveFffNativeDependencies(input.platform, input.arch, input.fffNodeVersion),
-  };
 }
 
 /** Cursor's helper lookup falls through the archive to this real resources tree. */
@@ -1435,84 +894,16 @@ export interface ClerkPasskeyNativeArtifact {
 }
 
 export function resolveClerkPasskeyNativeArtifacts(
-  platform: typeof BuildPlatform.Type,
+  _platform: typeof BuildPlatform.Type,
   arch: typeof BuildArch.Type,
 ): readonly ClerkPasskeyNativeArtifact[] {
-  const architectures = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
-
-  if (platform === "mac") {
-    return architectures.map((architecture) => ({
-      packageName: `@clerk/electron-passkeys-darwin-${architecture}`,
-      binaryFileName: `electron-passkeys.darwin-${architecture}.node`,
-    }));
-  }
-
-  if (platform === "win") {
-    return architectures.map((architecture) => ({
-      packageName: `@clerk/electron-passkeys-win32-${architecture}-msvc`,
-      binaryFileName: `electron-passkeys.win32-${architecture}-msvc.node`,
-    }));
-  }
-
-  return [];
+  return [
+    {
+      packageName: `@clerk/electron-passkeys-win32-${arch}-msvc`,
+      binaryFileName: `electron-passkeys.win32-${arch}-msvc.node`,
+    },
+  ];
 }
-
-export function resolveKeyringNativeArtifacts(
-  platform: typeof BuildPlatform.Type,
-  arch: typeof BuildArch.Type,
-): readonly ClerkPasskeyNativeArtifact[] {
-  const architectures = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
-
-  if (platform === "mac") {
-    return architectures.map((architecture) => ({
-      packageName: `@napi-rs/keyring-darwin-${architecture}`,
-      binaryFileName: `keyring.darwin-${architecture}.node`,
-    }));
-  }
-
-  if (platform === "win") {
-    return architectures.map((architecture) => ({
-      packageName: `@napi-rs/keyring-win32-${architecture}-msvc`,
-      binaryFileName: `keyring.win32-${architecture}-msvc.node`,
-    }));
-  }
-
-  return architectures.map((architecture) => ({
-    packageName: `@napi-rs/keyring-linux-${architecture}-gnu`,
-    binaryFileName: `keyring.linux-${architecture}-gnu.node`,
-  }));
-}
-
-/** electron-builder omits pnpm-nested platform packages; stage keyring's binary beside its loader, which checks there first. */
-const stageKeyringNativeBinaries = Effect.fn("stageKeyringNativeBinaries")(function* (
-  stageAppDir: string,
-  platform: typeof BuildPlatform.Type,
-  arch: typeof BuildArch.Type,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const packageEntryPath = yield* fs.realPath(
-    path.join(stageAppDir, "node_modules", "@napi-rs", "keyring", "index.js"),
-  );
-  const packageDir = path.dirname(packageEntryPath);
-  const packageRequire = NodeModule.createRequire(packageEntryPath);
-
-  for (const artifact of resolveKeyringNativeArtifacts(platform, arch)) {
-    const sourcePath = yield* Effect.try({
-      try: () => packageRequire.resolve(`${artifact.packageName}/${artifact.binaryFileName}`),
-      catch: (cause) =>
-        new KeyringNativePackageMissingError({
-          packageName: artifact.packageName,
-          binaryFileName: artifact.binaryFileName,
-          packageEntryPath,
-          platform,
-          arch,
-          cause,
-        }),
-    });
-    yield* fs.copyFile(sourcePath, path.join(packageDir, artifact.binaryFileName));
-  }
-});
 
 // Stage pnpm-nested Clerk binaries beside index.js so the loader finds them and electron-builder unpacks them.
 const stageClerkPasskeyNativeBinaries = Effect.fn("stageClerkPasskeyNativeBinaries")(function* (
@@ -1546,16 +937,16 @@ const stageClerkPasskeyNativeBinaries = Effect.fn("stageClerkPasskeyNativeBinari
 });
 
 export function createStageWorkspaceConfig(input: {
-  readonly platform: typeof BuildPlatform.Type;
-  readonly arch: typeof BuildArch.Type;
+  readonly platform: StagePlatform;
+  readonly arch: StageArch;
   readonly allowBuilds?: Record<string, boolean>;
   readonly patchedDependencies?: Record<string, string>;
   readonly overrides?: Record<string, string>;
 }): StageWorkspaceConfig {
   const { platform, arch, allowBuilds, patchedDependencies, overrides } = input;
   const hostOs = platform === "mac" ? "darwin" : platform === "win" ? "win32" : "linux";
-  const hostCpu = arch === "universal" ? ["arm64", "x64"] : [arch];
-  // Linux AppImages require glibc native optional dependencies; tell pnpm explicitly.
+  const hostCpu = [arch];
+  // Linux CLI archives require glibc native optional dependencies; tell pnpm explicitly.
   const supportedArchitectures =
     platform === "linux"
       ? {
@@ -1575,7 +966,6 @@ export function createStageWorkspaceConfig(input: {
       ? { patchedDependencies }
       : {}),
     ...(overrides && Object.keys(overrides).length > 0 ? { overrides } : {}),
-    packageExtensions: STAGE_PACKAGE_EXTENSIONS,
   };
 }
 
@@ -1889,85 +1279,6 @@ const rustTargetIsInstalled = Effect.fn("rustTargetIsInstalled")(function* (targ
   return entries.some((entry) => entry.startsWith("libstd-") && entry.endsWith(".rlib"));
 });
 
-export const preflightLinuxDesktopBuild = Effect.fn("preflightLinuxDesktopBuild")(function* (
-  arch: typeof BuildArch.Type = "x64",
-) {
-  const reuseResourceMonitor = yield* Config.Boolean("T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR").pipe(
-    Config.withDefault(false),
-  );
-  const reuseCaptureHelpers = yield* Config.Boolean(
-    "T3CODE_DESKTOP_REUSE_LINUX_CAPTURE_HELPERS",
-  ).pipe(Config.withDefault(false));
-  const needsRust = !reuseResourceMonitor || !reuseCaptureHelpers;
-  const rustTarget = resolveResourceMonitorRustTargets("linux", arch)[0]!;
-
-  const checks = yield* Effect.all(
-    {
-      cargo: needsRust
-        ? desktopBuildProbeSucceeds(ChildProcess.make("cargo", ["--version"]), "cargo")
-        : Effect.succeed(true),
-      "rust-target": needsRust ? rustTargetIsInstalled(rustTarget) : Effect.succeed(true),
-      cc: desktopBuildProbeSucceeds(ChildProcess.make("cc", ["--version"]), "cc"),
-      make: desktopBuildProbeSucceeds(ChildProcess.make("make", ["--version"]), "make"),
-      libsecret: desktopBuildProbeSucceeds(
-        ChildProcess.make("pkg-config", ["--exists", "libsecret-1"]),
-        "libsecret",
-      ),
-      imagemagick: Effect.all([
-        desktopBuildProbeSucceeds(ChildProcess.make("magick", ["-version"]), "magick"),
-        desktopBuildProbeSucceeds(ChildProcess.make("convert", ["-version"]), "convert"),
-      ]).pipe(Effect.map(([magick, convert]) => magick || convert)),
-    },
-    { concurrency: "unbounded" },
-  );
-  const missing = LINUX_DESKTOP_BUILD_PREREQUISITES.filter(
-    (requirement) => !checks[requirement.id],
-  ).map((requirement) => requirement.id);
-
-  if (missing.length > 0) {
-    return yield* new LinuxDesktopBuildPrerequisitesMissingError({ missing, rustTarget });
-  }
-});
-
-export const preflightMacDesktopBuild = Effect.fn("preflightMacDesktopBuild")(function* (
-  arch: typeof BuildArch.Type,
-) {
-  const rustTargets = resolveResourceMonitorRustTargets("mac", arch);
-  const reuseResourceMonitor = yield* Config.Boolean("T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR").pipe(
-    Config.withDefault(false),
-  );
-  const checks = yield* Effect.all(
-    {
-      rust: reuseResourceMonitor
-        ? Effect.succeed(true)
-        : Effect.all([
-            desktopBuildProbeSucceeds(ChildProcess.make("cargo", ["--version"]), "cargo"),
-            Effect.forEach(rustTargets, rustTargetIsInstalled).pipe(
-              Effect.map((results) => results.every(Boolean)),
-            ),
-          ]).pipe(Effect.map(([cargo, targets]) => cargo && targets)),
-      clang: desktopBuildProbeSucceeds(ChildProcess.make("clang", ["--version"]), "clang"),
-      make: desktopBuildProbeSucceeds(ChildProcess.make("make", ["--version"]), "make"),
-      sips: desktopBuildProbeSucceeds(ChildProcess.make("sips", ["--help"]), "sips"),
-      iconutil: desktopBuildProbeSucceeds(
-        ChildProcess.make("xcrun", ["--find", "iconutil"]),
-        "iconutil",
-      ),
-      lipo:
-        arch === "universal"
-          ? desktopBuildProbeSucceeds(ChildProcess.make("lipo", ["-version"]), "lipo")
-          : Effect.succeed(true),
-    },
-    { concurrency: "unbounded" },
-  );
-  const missing = MAC_DESKTOP_BUILD_PREREQUISITES.filter(
-    (requirement) => !checks[requirement.id],
-  ).map((requirement) => requirement.id);
-  if (missing.length > 0) {
-    return yield* new MacDesktopBuildPrerequisitesMissingError({ missing, rustTargets });
-  }
-});
-
 function windowsVswherePrerequisiteScript(arch: typeof BuildArch.Type): string {
   const toolComponents =
     arch === "arm64"
@@ -2271,7 +1582,7 @@ export const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* 
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const manifestPath = path.join(input.repoRoot, "native/resource-monitor/Cargo.toml");
-  const executableName = resourceMonitorExecutableName(input.platform);
+  const executableName = resourceMonitorExecutableName();
   const rustTargets = resolveResourceMonitorRustTargets(input.platform, input.arch);
   const reuseResourceMonitor = yield* Config.Boolean("T3CODE_DESKTOP_REUSE_RESOURCE_MONITOR").pipe(
     Config.withDefault(false),
@@ -2327,182 +1638,8 @@ export const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* 
   yield* fs.remove(destinationDirectory, { recursive: true, force: true }).pipe(Effect.ignore);
   yield* fs.makeDirectory(destinationDirectory, { recursive: true });
 
-  if (builtBinaries.length === 1) {
-    yield* fs.copyFile(builtBinaries[0]!, destinationPath);
-  } else {
-    yield* runCommand(
-      ChildProcess.make("lipo", ["-create", ...builtBinaries, "-output", destinationPath]),
-      {
-        label: "lipo resource monitor universal binary",
-        verbose: input.verbose,
-      },
-    );
-  }
-
-  if (input.platform !== "win") {
-    yield* fs.chmod(destinationPath, 0o755);
-  }
+  yield* fs.copyFile(builtBinaries[0]!, destinationPath);
 });
-
-const generateMacIconSet = Effect.fn("build-desktop-artifact.generateMacIconSet")(function* (
-  sourcePng: string,
-  targetIcns: string,
-  tmpRoot: string,
-  path: Path.Path,
-  verbose: boolean,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const iconsetDir = path.join(tmpRoot, "icon.iconset");
-  yield* fs.makeDirectory(iconsetDir, { recursive: true });
-
-  const iconSizes = [16, 32, 128, 256, 512] as const;
-  for (const size of iconSizes) {
-    yield* runCommand(
-      ChildProcess.make(
-        {},
-      )`sips -z ${size} ${size} ${sourcePng} --out ${path.join(iconsetDir, `icon_${size}x${size}.png`)}`,
-      { label: `sips icon ${size}x${size}`, verbose },
-    );
-
-    const retinaSize = size * 2;
-    yield* runCommand(
-      ChildProcess.make(
-        {},
-      )`sips -z ${retinaSize} ${retinaSize} ${sourcePng} --out ${path.join(iconsetDir, `icon_${size}x${size}@2x.png`)}`,
-      { label: `sips icon ${size}x${size}@2x`, verbose },
-    );
-  }
-
-  yield* runCommand(ChildProcess.make({})`iconutil -c icns ${iconsetDir} -o ${targetIcns}`, {
-    label: "iconutil icns",
-    verbose,
-  });
-});
-
-const stageMacIcons = Effect.fn("build-desktop-artifact.stageMacIcons")(function* (
-  stageResourcesDir: string,
-  sourcePng: string,
-  verbose: boolean,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  if (!(yield* fs.exists(sourcePng))) {
-    return yield* new DesktopIconSourceMissingError({
-      platform: "mac",
-      sourcePath: sourcePng,
-    });
-  }
-
-  const tmpRoot = yield* fs.makeTempDirectoryScoped({
-    prefix: "t3code-icon-build-",
-  });
-
-  const iconPngPath = path.join(stageResourcesDir, "icon.png");
-  const iconIcnsPath = path.join(stageResourcesDir, "icon.icns");
-
-  yield* runCommand(ChildProcess.make({})`sips -z 512 512 ${sourcePng} --out ${iconPngPath}`, {
-    label: "sips mac icon",
-    verbose,
-  });
-
-  yield* generateMacIconSet(sourcePng, iconIcnsPath, tmpRoot, path, verbose);
-});
-
-export const stageDesktopDmgBackground = Effect.fn("stageDesktopDmgBackground")(function* (
-  stageResourcesDir: string,
-  channel: "latest" | "nightly",
-  verbose: boolean,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const sourcePath = path.join(stageResourcesDir, "dmg", `dmg-background-${channel}.svg`);
-  if (!(yield* fs.exists(sourcePath))) {
-    return yield* new DesktopDmgBackgroundSourceMissingError({ channel, sourcePath });
-  }
-
-  for (const output of [
-    { suffix: "", width: 640, height: 432 },
-    { suffix: "@2x", width: 1280, height: 864 },
-  ] as const) {
-    const targetPath = path.join(
-      stageResourcesDir,
-      "dmg",
-      `dmg-background-${channel}${output.suffix}.png`,
-    );
-    yield* runCommand(
-      ChildProcess.make(
-        {},
-      )`sips -s format png -z ${output.height} ${output.width} ${sourcePath} --out ${targetPath}`,
-      {
-        label: `sips ${channel} DMG background${output.suffix || "@1x"}`,
-        verbose,
-      },
-    );
-  }
-});
-
-const stageLinuxIcons = Effect.fn("build-desktop-artifact.stageLinuxIcons")(function* (
-  stageResourcesDir: string,
-  sourcePng: string,
-  verbose: boolean,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  if (!(yield* fs.exists(sourcePng))) {
-    return yield* new DesktopIconSourceMissingError({
-      platform: "linux",
-      sourcePath: sourcePng,
-    });
-  }
-
-  const iconPath = path.join(stageResourcesDir, "icon.png");
-  yield* fs.copyFile(sourcePng, iconPath);
-
-  const iconsDir = path.join(stageResourcesDir, "icons");
-  yield* fs.makeDirectory(iconsDir, { recursive: true });
-  for (const iconSize of LINUX_ICON_SIZES) {
-    yield* stageLinuxIconSize(
-      sourcePng,
-      path.join(iconsDir, `${iconSize}x${iconSize}.png`),
-      iconSize,
-      verbose,
-    );
-  }
-});
-
-export function stageLinuxIconSize(
-  sourcePng: string,
-  targetPng: string,
-  iconSize: number,
-  verbose: boolean,
-) {
-  const resize = (command: string) =>
-    runCommand(
-      ChildProcess.make(command, [sourcePng, "-resize", `${iconSize}x${iconSize}`, targetPng]),
-      { label: `${command} linux icon ${iconSize}x${iconSize}`, verbose },
-    );
-
-  return resize("magick").pipe(
-    Effect.catch((primaryCause) =>
-      resize("convert").pipe(
-        Effect.mapError(
-          (fallbackCause) =>
-            new LinuxIconResizeError({
-              operation: "resize",
-              iconSize,
-              primaryTool: "magick",
-              fallbackTool: "convert",
-              cause: new AggregateError(
-                [primaryCause, fallbackCause],
-                "Both Linux icon resize tool attempts failed.",
-                { cause: primaryCause },
-              ),
-            }),
-        ),
-      ),
-    ),
-  );
-}
 
 const stageWindowsIcons = Effect.fn("build-desktop-artifact.stageWindowsIcons")(function* (
   stageResourcesDir: string,
@@ -2613,15 +1750,11 @@ export function resolveDesktopWebAssetBrand(version: string): WebAssetBrand {
 export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
-      macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
-      linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
     };
   }
 
   return {
-    macIconPng: BRAND_ASSET_PATHS.productionMacIconPng,
-    linuxIconPng: BRAND_ASSET_PATHS.productionLinuxIconPng,
     windowsIconIco: BRAND_ASSET_PATHS.productionWindowsIconIco,
   };
 }
@@ -2648,20 +1781,13 @@ export function resolveDesktopProductName(version: string): string {
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
-  platform: typeof BuildPlatform.Type,
+  _platform: typeof BuildPlatform.Type,
   target: string,
   version: string,
   signed: boolean,
   mockUpdates: boolean,
   mockUpdateServerPort: number | undefined,
-  macPasskeySigning:
-    | {
-        readonly entitlementsPath: string;
-        readonly provisioningProfilePath: string;
-      }
-    | undefined,
   wslRuntimeBundled = false,
-  arch?: typeof BuildArch.Type,
 ) {
   const buildConfig: Record<string, unknown> = {
     afterPack: (yield* Path.Path).join(yield* RepoRoot, "scripts/prepare-server-compile-cache.cjs"),
@@ -2669,25 +1795,17 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     productName: resolveDesktopProductName(version),
     artifactName: "T3-Code-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
-    files: [
-      ...DESKTOP_FILE_EXCLUSIONS,
-      ...(platform === "mac"
-        ? resolveMacFileExclusions(arch)
-        : platform === "linux"
-          ? LINUX_FILE_EXCLUSIONS
-          : []),
-    ],
+    files: [...DESKTOP_FILE_EXCLUSIONS],
     directories: {
       buildResources: "apps/desktop/resources",
     },
     // Disable smart unpack so native packages' JS/metadata stay archived and avoid slowing NSIS with loose files.
-    ...(platform === "win"
-      ? { asar: { smartUnpack: false }, asarUnpack: [WINDOWS_NATIVE_ASAR_UNPACK_GLOB] }
-      : { asarUnpack: ["**/node_modules/@transcribe-cpp/**/*.{dylib,so,so.*}"] }),
+    asar: { smartUnpack: false },
+    asarUnpack: [WINDOWS_NATIVE_ASAR_UNPACK_GLOB],
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
-      ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
-      ...(platform === "win" && wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
+      ...WINDOWS_SERVER_EXTRA_RESOURCES,
+      ...(wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
     ],
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
@@ -2707,189 +1825,40 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     }
   }
 
-  if (platform === "mac") {
+  buildConfig.npmRebuild = false;
+  buildConfig.nsis = {
+    differentialPackage: true,
+    include: "apps/desktop/resources/installer.nsh",
+  };
+  const winConfig: Record<string, unknown> = {
+    target: [target],
+    icon: "icon.ico",
+    // Smart App Control validates unpacked native libraries independently; sign them too.
+    signExts: [".node", ".dll"],
+    // Resource editing sets product icons even when code signing is disabled.
+    signAndEditExecutable: true,
+  };
+  if (signed && (yield* HostProcess.Platform) === "win32") {
+    winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
+  } else if (signed) {
     const path = yield* Path.Path;
-    const repoRoot = yield* RepoRoot;
-    buildConfig.mac = {
-      target: target === "dmg" ? [target, "zip"] : [target],
-      icon: "icon.icns",
-      category: "public.app-category.developer-tools",
-      extendInfo: {
-        // macOS 26 offers Messages/Mail codes in every text field unless opted out.
-        NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
-        NSLocalNetworkUsageDescription:
-          "T3 Code connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
-        NSCalendarsUsageDescription:
-          "Commands you run in T3 Code may need access to your calendars.",
-        NSCalendarsFullAccessUsageDescription:
-          "Commands you run in T3 Code may need to read and write your calendar events.",
-        NSCalendarsWriteOnlyAccessUsageDescription:
-          "Commands you run in T3 Code may need to add events to your calendars.",
-        NSScreenCaptureUsageDescription:
-          "T3 Code captures the active window when you use the window capture shortcut.",
-        NSCameraUsageDescription:
-          "T3 Code lets commands run by terminals and coding agents use the camera.",
-        NSMicrophoneUsageDescription:
-          "T3 Code lets commands run by terminals and coding agents use the microphone.",
-        NSAppleEventsUsageDescription:
-          "T3 Code lets commands run by terminals and coding agents control other apps.",
-        // macOS lists an app under Default web browser only when it opens web
-        // pages as documents as well as http and https links (see protocols).
-        CFBundleDocumentTypes: [
-          {
-            CFBundleTypeName: "Web page",
-            CFBundleTypeRole: "Viewer",
-            LSHandlerRank: "Alternate",
-            LSItemContentTypes: ["public.html", "public.xhtml"],
-          },
-        ],
-      },
-      protocols: [
-        {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
-        },
-        {
-          name: "Web site URL",
-          schemes: ["http", "https"],
-          role: "Viewer",
-        },
-      ],
-      ...(signed ? { sign: path.join(repoRoot, "scripts/sign-macos.ts") } : {}),
-      ...(macPasskeySigning
-        ? {
-            entitlements: macPasskeySigning.entitlementsPath,
-            provisioningProfile: macPasskeySigning.provisioningProfilePath,
-          }
-        : {}),
+    const { publisherName } = yield* AzureTrustedSigningOptionsConfig;
+    winConfig.signtoolOptions = {
+      sign: yield* path.fromFileUrl(new URL("./lib/windows-jsign.ts", import.meta.url)),
+      signingHashAlgorithms: ["sha256"],
+      publisherName: [publisherName],
     };
   }
-
-  if (platform === "mac" && target === "dmg") {
-    buildConfig.dmg = {
-      // Finder caches DMG backgrounds by volume name; give each installer its own.
-      title: `${resolveDesktopProductName(version)} ${version} Installer`,
-      background: `dmg/dmg-background-${updateChannel}.png`,
-      window: {
-        width: 640,
-        // DMG bounds include Finder's 32px title bar; keep that artwork strip clear.
-        height: 432,
-      },
-      contents: [
-        { x: 166, y: 214, type: "file" },
-        { x: 474, y: 214, type: "link", path: "/Applications" },
-      ],
-      iconSize: 120,
-      iconTextSize: 12,
-    };
-  }
-
-  if (platform === "linux") {
-    // Pin the static AppImage runtime so hosts with only FUSE 3 do not need libfuse2.
-    buildConfig.toolsets = { appimage: "1.0.3" };
-    const path = yield* Path.Path;
-    const repoRoot = yield* RepoRoot;
-    buildConfig.afterPack = path.join(repoRoot, "scripts/linux-after-pack.ts");
-    buildConfig.linux = {
-      target: target === "AppImage" ? [target, "deb"] : [target],
-      executableName: "t3code",
-      icon: "icons",
-      category: "Development",
-      synopsis: "Desktop GUI for coding agents",
-      maintainer: "T3 Tools <hello@t3.codes>",
-      protocols: [
-        {
-          name: "T3 Code",
-          schemes: ["t3code", "t3code-dev"],
-        },
-      ],
-      desktop: {
-        entry: {
-          // Match Electron's WM_CLASS from setDesktopName so docks use this launcher.
-          StartupWMClass: "com.t3tools.T3Code",
-        },
-      },
-    };
-    // electron-updater replaces an installed AppImage in place only when its name has no x.y.z version.
-    if (buildConfig.publish) {
-      buildConfig.appImage = {
-        artifactName:
-          updateChannel === "nightly" ? "T3-Code-Nightly-${arch}.${ext}" : "T3-Code-${arch}.${ext}",
-      };
-    }
-    buildConfig.deb = {
-      // FPM runs outside the staged app directory, so source paths must be absolute.
-      fpm: [
-        `${path.join(repoRoot, "apps/desktop/resources/linux/com.t3tools.t3code.metainfo.xml")}=/usr/share/metainfo/com.t3tools.t3code.metainfo.xml`,
-        `${path.join(repoRoot, "LICENSE")}=/usr/share/doc/t3code/copyright`,
-      ],
-      // Debian 13 and Ubuntu 24.04 use 64-bit-time names; retain old-name fallbacks.
-      depends: [
-        "libasound2t64 | libasound2",
-        "libatspi2.0-0t64 | libatspi2.0-0",
-        "libgbm1",
-        "libgtk-3-0t64 | libgtk-3-0",
-        "libnotify4",
-        "libnss3",
-        "libsecret-1-0",
-        "libuuid1",
-        "libxss1",
-        "libxtst6",
-        "xdg-utils",
-      ],
-    };
-  }
-
-  if (platform === "win") {
-    buildConfig.npmRebuild = false;
-    buildConfig.nsis = {
-      differentialPackage: true,
-      include: "apps/desktop/resources/installer.nsh",
-    };
-    const winConfig: Record<string, unknown> = {
-      target: [target],
-      icon: "icon.ico",
-      // Smart App Control validates unpacked native libraries independently; sign them too.
-      signExts: [".node", ".dll"],
-      // Resource editing sets product icons even when code signing is disabled.
-      signAndEditExecutable: true,
-    };
-    if (signed && (yield* HostProcess.Platform) === "win32") {
-      winConfig.azureSignOptions = yield* AzureTrustedSigningOptionsConfig;
-    } else if (signed) {
-      const path = yield* Path.Path;
-      const { publisherName } = yield* AzureTrustedSigningOptionsConfig;
-      winConfig.signtoolOptions = {
-        sign: yield* path.fromFileUrl(new URL("./lib/windows-jsign.ts", import.meta.url)),
-        signingHashAlgorithms: ["sha256"],
-        publisherName: [publisherName],
-      };
-    }
-    buildConfig.win = winConfig;
-  }
+  buildConfig.win = winConfig;
 
   return buildConfig;
 });
 
 const assertPlatformBuildResources = Effect.fn("assertPlatformBuildResources")(function* (
-  platform: typeof BuildPlatform.Type,
   stageResourcesDir: string,
   iconAssets: DesktopBuildIconAssets,
-  verbose: boolean,
 ) {
-  if (platform === "mac") {
-    yield* stageMacIcons(stageResourcesDir, iconAssets.macIconPng, verbose);
-    return;
-  }
-
-  if (platform === "linux") {
-    yield* stageLinuxIcons(stageResourcesDir, iconAssets.linuxIconPng, verbose);
-    return;
-  }
-
-  if (platform === "win") {
-    yield* stageWindowsIcons(stageResourcesDir, iconAssets.windowsIconIco);
-  }
+  yield* stageWindowsIcons(stageResourcesDir, iconAssets.windowsIconIco);
 });
 
 // The digest verifies extraction and names the cache; hash the exact archive bytes that ship.
@@ -3299,7 +2268,7 @@ export const validateWindowsPackagedPayload = Effect.fn(
   const resourceMonitorPath = path.join(
     resourcesDir,
     "resource-monitor",
-    resourceMonitorExecutableName("win"),
+    resourceMonitorExecutableName(),
   );
   if (!(yield* isFile(resourceMonitorPath))) {
     return yield* new WindowsPackagedPayloadValidationError({
@@ -3430,70 +2399,6 @@ export const validateWindowsPackagedPayload = Effect.fn(
   return { packagedAppDir, fileCount, unpackedFiles } as const;
 });
 
-export class MacPackagedAppMissingError extends Schema.TaggedError<MacPackagedAppMissingError>()(
-  "MacPackagedAppMissingError",
-  { stageDistDir: Schema.String },
-) {
-  override get message(): string {
-    return `Expected electron-builder to leave a packaged .app with Contents/Resources/app.asar under ${this.stageDistDir}/mac*.`;
-  }
-}
-
-export const validateMacPackagedPayload = Effect.fn("desktopArtifact.validateMacPackagedPayload")(
-  function* (input: { readonly stageDistDir: string; readonly verbose?: boolean }) {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const asarPaths: string[] = [];
-    for (const entry of yield* fs.readDirectory(input.stageDistDir)) {
-      if (!entry.startsWith("mac")) continue;
-      const outputDir = path.join(input.stageDistDir, entry);
-      const apps = yield* fs.readDirectory(outputDir).pipe(Effect.orElseSucceed(() => []));
-      for (const app of apps) {
-        if (app.endsWith(".app")) {
-          asarPaths.push(path.join(outputDir, app, "Contents/Resources/app.asar"));
-        }
-      }
-    }
-    if (asarPaths.length === 0) {
-      return yield* new MacPackagedAppMissingError({ stageDistDir: input.stageDistDir });
-    }
-    for (const asarPath of asarPaths) {
-      yield* verifyPackagedBundleIsSelfContained({ asarPath, verbose: input.verbose ?? false });
-    }
-    yield* Effect.log(
-      `[desktop-artifact] Validated macOS payload (${String(asarPaths.length)} app bundle(s)).`,
-    );
-  },
-);
-
-export class LinuxPackagedAppMissingError extends Schema.TaggedError<LinuxPackagedAppMissingError>()(
-  "LinuxPackagedAppMissingError",
-  { stageDistDir: Schema.String },
-) {
-  override get message(): string {
-    return `Expected electron-builder to leave resources/app.asar under ${this.stageDistDir}/linux*-unpacked.`;
-  }
-}
-
-export const validateLinuxPackagedPayload = Effect.fn(
-  "desktopArtifact.validateLinuxPackagedPayload",
-)(function* (input: { readonly stageDistDir: string; readonly verbose?: boolean }) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const asarPaths = (yield* fs.readDirectory(input.stageDistDir))
-    .filter((entry) => entry.startsWith("linux") && entry.endsWith("-unpacked"))
-    .map((entry) => path.join(input.stageDistDir, entry, "resources/app.asar"));
-  if (asarPaths.length === 0) {
-    return yield* new LinuxPackagedAppMissingError({ stageDistDir: input.stageDistDir });
-  }
-  for (const asarPath of asarPaths) {
-    yield* verifyPackagedBundleIsSelfContained({ asarPath, verbose: input.verbose ?? false });
-  }
-  yield* Effect.log(
-    `[desktop-artifact] Validated Linux payload (${String(asarPaths.length)} app bundle(s)).`,
-  );
-});
-
 const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(function* (
   options: ResolvedBuildOptions,
 ) {
@@ -3501,13 +2406,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
   const hostPlatform = yield* HostProcess.Platform;
-  if (hostPlatform === "linux" && options.platform === "linux") {
-    yield* preflightLinuxDesktopBuild(options.arch);
-  }
-  if (hostPlatform === "darwin" && options.platform === "mac") {
-    yield* preflightMacDesktopBuild(options.arch);
-  }
-  if (hostPlatform === "win32" && options.platform === "win") {
+  if (hostPlatform === "win32") {
     yield* preflightWindowsDesktopBuild({
       arch: options.arch,
       bundlesWslRuntime: bundlesWslRuntime({
@@ -3665,23 +2564,10 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   yield* validateBundledClientAssets(path.dirname(bundledClientEntry));
 
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/desktop"), { recursive: true });
-  if (options.platform !== "win") {
-    yield* fs.makeDirectory(path.join(stageAppDir, "apps/server"), { recursive: true });
-  }
 
   yield* Effect.log("[desktop-artifact] Staging release app...");
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
   yield* fs.copy(distDirs.desktopResources, stageResourcesDir);
-  if (options.platform === "mac" && options.target === "dmg") {
-    yield* stageDesktopDmgBackground(
-      stageResourcesDir,
-      resolveDesktopUpdateChannel(appVersion),
-      options.verbose,
-    );
-  }
-  if (options.platform !== "win") {
-    yield* fs.copy(distDirs.serverDist, path.join(stageAppDir, "apps/server/dist"));
-  }
   yield* stageResourceMonitor({
     repoRoot,
     stageResourcesDir,
@@ -3689,89 +2575,32 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     arch: options.arch,
     verbose: options.verbose,
   });
-  yield* assertPlatformBuildResources(
-    options.platform,
-    stageResourcesDir,
-    {
-      macIconPng: path.join(repoRoot, iconAssets.macIconPng),
-      linuxIconPng: path.join(repoRoot, iconAssets.linuxIconPng),
-      windowsIconIco: path.join(repoRoot, iconAssets.windowsIconIco),
-    },
-    options.verbose,
-  );
+  yield* assertPlatformBuildResources(stageResourcesDir, {
+    windowsIconIco: path.join(repoRoot, iconAssets.windowsIconIco),
+  });
 
-  // electron-builder is filtering out stageResourcesDir directory in the AppImage for production
   const stageProdResourcesDir = path.join(stageAppDir, "apps/desktop/prod-resources");
   yield* fs.copy(stageResourcesDir, stageProdResourcesDir);
 
-  const configuredMacPasskeySigning =
-    options.platform === "mac" && options.signed
-      ? yield* Effect.try({
-          try: () => resolveMacPasskeySigningConfiguration(loadRepoEnv({ repoRoot })),
-          catch: MacPasskeySigningConfigurationResolutionError.fromCause,
-        })
-      : undefined;
-  const macPasskeySigning = configuredMacPasskeySigning
-    ? {
-        ...configuredMacPasskeySigning,
-        provisioningProfilePath: path.resolve(
-          repoRoot,
-          configuredMacPasskeySigning.provisioningProfilePath,
-        ),
-      }
-    : undefined;
-  const macEntitlementsPath = macPasskeySigning
-    ? path.join(stageAppDir, "entitlements.mac.plist")
-    : undefined;
-  let macWebAuthn: MacWebAuthnEntitlements | undefined;
-  if (macPasskeySigning && macEntitlementsPath) {
-    if (!(yield* fs.exists(macPasskeySigning.provisioningProfilePath))) {
-      return yield* new MacProvisioningProfileNotFoundError({
-        provisioningProfilePath: macPasskeySigning.provisioningProfilePath,
-      });
-    }
-    macWebAuthn = resolveMacWebAuthnEntitlements(
-      yield* fs.readFileString(macPasskeySigning.provisioningProfilePath),
-      macPasskeySigning,
-    );
-    yield* Effect.log(
-      `[desktop-artifact] In-app browser passkeys: Touch ID ${macWebAuthn.touchIdKeychainAccessGroup ? "enabled" : "disabled"}, browser passkeys ${macWebAuthn.browserPasskeys ? "enabled" : "disabled"}.`,
-    );
-    yield* fs.writeFileString(
-      macEntitlementsPath,
-      renderMacPasskeyEntitlements(macPasskeySigning, macWebAuthn),
-    );
-  }
-
-  const stageDependencies =
-    options.platform === "win"
-      ? { ...resolvedDesktopRuntimeDependencies }
-      : resolveMergedStageDependencies({
-          platform: options.platform,
-          serverDependencies: resolvedServerDependencies,
-          desktopDependencies: resolvedDesktopRuntimeDependencies,
-          arch: options.arch,
-          fffNodeVersion: serverPackageJson.dependencies["@ff-labs/fff-node"],
-        });
+  const stageDependencies = { ...resolvedDesktopRuntimeDependencies };
   const stagePatchedDependencies = createStagePatchedDependencies(
     workspacePatchedDependencies,
     stageDependencies,
   );
-  const windowsServerAsarPath =
-    options.platform === "win"
-      ? path.join(stageAppDir, WINDOWS_SERVER_RESOURCE_SOURCE_DIR, WINDOWS_SERVER_ASAR_RESOURCE)
-      : undefined;
+  const windowsServerAsarPath = path.join(
+    stageAppDir,
+    WINDOWS_SERVER_RESOURCE_SOURCE_DIR,
+    WINDOWS_SERVER_ASAR_RESOURCE,
+  );
   const stagePackageJson: StagePackageJson = {
     name: "t3code",
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
-    // Read by apps/desktop/src/preview/Passkeys.ts; must match the signed entitlements.
-    ...(macWebAuthn ? { t3codeWebAuthn: macWebAuthn } : {}),
     private: true,
     packageManager: rootPackageJson.packageManager,
     description:
-      "T3 Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop, web, or mobile to continue working remotely.",
+      "T3 Code is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects.",
     license: "MIT",
     homepage: "https://t3.codes",
     author: "T3 Tools",
@@ -3783,14 +2612,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       options.signed,
       options.mockUpdates,
       options.mockUpdateServerPort,
-      macPasskeySigning && macEntitlementsPath
-        ? {
-            entitlementsPath: macEntitlementsPath,
-            provisioningProfilePath: macPasskeySigning.provisioningProfilePath,
-          }
-        : undefined,
       bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime }),
-      options.arch,
     ),
     dependencies: stageDependencies,
     devDependencies: {
@@ -3827,31 +2649,23 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     { label: "vp install --prod", verbose: options.verbose },
   );
   yield* stageClerkPasskeyNativeBinaries(stageAppDir, options.platform, options.arch);
-  if ("@napi-rs/keyring" in stageDependencies) {
-    yield* stageKeyringNativeBinaries(stageAppDir, options.platform, options.arch);
-  }
 
-  if (options.platform === "win" && windowsServerAsarPath) {
-    yield* stageWindowsServerSidecar({
-      stageRoot,
-      repoRoot,
-      serverDistDir: distDirs.serverDist,
-      arch: options.arch,
-      appVersion,
-      runtimeExternalDependencies: resolvedServerRuntimeExternalDependencies,
-      fffNodeVersion: serverPackageJson.dependencies["@ff-labs/fff-node"],
-      allowBuilds: workspaceAllowBuilds,
-      patchedDependencies: workspacePatchedDependencies,
-      overrides: resolvedOverrides,
-      asarPath: windowsServerAsarPath,
-      verbose: options.verbose,
-    });
-  }
+  yield* stageWindowsServerSidecar({
+    stageRoot,
+    repoRoot,
+    serverDistDir: distDirs.serverDist,
+    arch: options.arch,
+    appVersion,
+    runtimeExternalDependencies: resolvedServerRuntimeExternalDependencies,
+    fffNodeVersion: serverPackageJson.dependencies["@ff-labs/fff-node"],
+    allowBuilds: workspaceAllowBuilds,
+    patchedDependencies: workspacePatchedDependencies,
+    overrides: resolvedOverrides,
+    asarPath: windowsServerAsarPath,
+    verbose: options.verbose,
+  });
   yield* stageCursorSdkPlatformPackages(
-    path.join(
-      options.platform === "win" ? path.join(stageRoot, "server") : stageAppDir,
-      "node_modules",
-    ),
+    path.join(stageRoot, "server", "node_modules"),
     path.join(stageProdResourcesDir, "cursor-sdk"),
   );
   if (
@@ -3875,17 +2689,10 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       delete buildEnv[key];
     }
   }
-  if (options.platform === "linux") {
-    // fpm uses system xz through tar; threading cuts compression time on many-core runners.
-    buildEnv.XZ_DEFAULTS = "-T0";
-  }
-  if (options.platform === "win") {
-    // Windows signs only through Azure Trusted Signing. Off Windows,
-    // electron-builder's signtool manager would read CSC_LINK (the macOS
-    // certificate) as a Windows certificate.
-    delete buildEnv.CSC_LINK;
-    delete buildEnv.CSC_KEY_PASSWORD;
-  }
+  // Windows signs only through Azure Trusted Signing. Off Windows,
+  // electron-builder's signtool manager would read CSC_LINK as a Windows certificate.
+  delete buildEnv.CSC_LINK;
+  delete buildEnv.CSC_KEY_PASSWORD;
   if (!options.signed) {
     buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
     delete buildEnv.CSC_LINK;
@@ -3905,11 +2712,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
   if (options.verbose) {
-    const debugNamespaces = [
-      "electron-builder",
-      "electron-builder:*",
-      ...(options.platform === "mac" ? ["electron-osx-sign*", "electron-notarize*"] : []),
-    ];
+    const debugNamespaces = ["electron-builder", "electron-builder:*"];
     buildEnv.DEBUG = [buildEnv.DEBUG, ...debugNamespaces].filter(Boolean).join(",");
   }
 
@@ -3951,31 +2754,17 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     });
   }
 
-  if (options.platform === "win") {
-    yield* validateWindowsPackagedPayload({
-      stageDistDir,
-      appExecutableName: `${resolveDesktopProductName(appVersion)}.exe`,
-      targetArch: options.arch,
-      appVersion,
-      expectWslRuntime: bundlesWslRuntime({
-        platform: options.platform,
-        runtimeArchivePath: options.wslRuntime,
-      }),
-      verbose: options.verbose,
-    });
-  }
-  // The probe runs on the host Node, so a cross-arch build skips it.
-  if (
-    options.platform === "linux" &&
-    hostPlatform === "linux" &&
-    options.arch === (yield* HostProcess.Architecture)
-  ) {
-    yield* validateLinuxPackagedPayload({ stageDistDir, verbose: options.verbose });
-  }
-  // x64 builds on arm64 runners; the arm64 check covers the shared JS bundle.
-  if (options.platform === "mac" && options.arch === "arm64" && hostPlatform === "darwin") {
-    yield* validateMacPackagedPayload({ stageDistDir, verbose: options.verbose });
-  }
+  yield* validateWindowsPackagedPayload({
+    stageDistDir,
+    appExecutableName: `${resolveDesktopProductName(appVersion)}.exe`,
+    targetArch: options.arch,
+    appVersion,
+    expectWslRuntime: bundlesWslRuntime({
+      platform: options.platform,
+      runtimeArchivePath: options.wslRuntime,
+    }),
+    verbose: options.verbose,
+  });
 
   const copiedArtifacts = yield* copyDesktopBuildArtifacts(
     stageDistDir,
@@ -4046,13 +2835,11 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
   target: Flag.String("target").pipe(
-    Flag.withDescription(
-      "Artifact target, for example dmg/AppImage/nsis (env: T3CODE_DESKTOP_TARGET).",
-    ),
+    Flag.withDescription("Artifact target, for example nsis/dir (env: T3CODE_DESKTOP_TARGET)."),
     Flag.optional,
   ),
   arch: Flag.Literals("arch", BuildArch.literals).pipe(
-    Flag.withDescription("Build arch, for example arm64/x64/universal (env: T3CODE_DESKTOP_ARCH)."),
+    Flag.withDescription("Build arch, for example arm64/x64 (env: T3CODE_DESKTOP_ARCH)."),
     Flag.optional,
   ),
   buildVersion: Flag.String("build-version").pipe(
@@ -4076,9 +2863,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
   signed: Flag.Boolean("signed").pipe(
-    Flag.withDescription(
-      "Enable signing/notarization discovery; Windows uses Azure Trusted Signing (env: T3CODE_DESKTOP_SIGNED).",
-    ),
+    Flag.withDescription("Enable Azure Trusted Signing (env: T3CODE_DESKTOP_SIGNED)."),
     Flag.optional,
   ),
   verbose: Flag.Boolean("verbose").pipe(

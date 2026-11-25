@@ -245,9 +245,7 @@ const managerLayer = (platform: NodeJS.Platform = "darwin") =>
     Layer.provideMerge(layerBrowserSession),
     Layer.provideMerge(
       Layer.mock(PreviewPasskeys.PreviewPasskeys)({
-        bridgeEnabled: false,
         installSessionHandlers: () => {},
-        attachGuest: () => () => {},
       }),
     ),
     Layer.provideMerge(layerEnvironment),
@@ -691,9 +689,7 @@ describe("PreviewManager", () => {
                 placeDownload: () => true,
               }),
               Layer.mock(PreviewPasskeys.PreviewPasskeys)({
-                bridgeEnabled: false,
                 installSessionHandlers: () => {},
-                attachGuest: () => () => {},
               }),
               Layer.mock(DesktopRendererHistory.DesktopRendererHistory)({}),
               Layer.succeed(HostProcess.Platform, "linux"),
