@@ -32,7 +32,7 @@ It works with Claude Code, Codex, Cursor, OpenCode, Grok Build, Antigravity, Kir
 - **Your subscriptions.** T3 Code does not resell tokens. It drives the agents you are already signed in to.
 - **Every agent in one place.** Change models in the middle of a thread. Let Claude hand a task to Codex.
 - **Desktop, web, and phone.** One server, and every client shows the same threads. There are apps for iOS and Android.
-- **Remote ready.** Run agents on any machine. Connect over your local network, Tailscale, or [T3 Connect](./docs/user/remote-access.md).
+- **Remote ready.** Run agents on any machine. Connect over your local network or [Tailscale](./docs/user/remote-access.md).
 - **Git built in.** Each thread can work in its own worktree. Review the diff, then commit, push, and open a pull request with one button.
 - **Fast.** Performance is a feature here. We measure it, and we treat a dropped frame as a bug.
 - **Open.** Source code is MIT licensed. If you don't like something, fork it under your own branding (see [Trademarks and forks](#trademarks-and-forks)).
