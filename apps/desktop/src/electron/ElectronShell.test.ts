@@ -54,7 +54,7 @@ describe("ElectronShell", () => {
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 
-  it.effect("opens only the Grok Bot prompt link", () =>
+  it.effect("rejects Grok Bot app-launch URLs", () =>
     Effect.gen(function* () {
       openExternalMock.mockResolvedValue(undefined);
 
@@ -76,8 +76,8 @@ describe("ElectronShell", () => {
         (url) => electronShell.openExternal(url),
       );
 
-      assert.deepEqual(results, [true, ...Array<boolean>(9).fill(false)]);
-      assert.deepEqual(openExternalMock.mock.calls, [[prompt]]);
+      assert.deepEqual(results, Array<boolean>(10).fill(false));
+      assert.deepEqual(openExternalMock.mock.calls, []);
     }).pipe(Effect.provide(ElectronShell.layer)),
   );
 

@@ -1,10 +1,8 @@
 import {
   BearerConnectionTarget,
   PrimaryConnectionTarget,
-  RelayConnectionTarget,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
-import type * as Effect from "effect/Effect";
 import {
   EnvironmentId,
   type EnvironmentSpeechModel,
@@ -31,50 +29,14 @@ import { VoiceSettingsPanel } from "./VoiceSettingsPanel";
 vi.mock(import("../../speech/useEnvironmentSpeechInput"), { spy: true });
 vi.mock(import("../../state/session"), { spy: true });
 
-// The real connection runtime authorizes relay requests with a signed-in cloud session.
 vi.mock("../../connection/runtime", async () => {
-  const [{ ManagedRelay }, rpc, { Atom }, Context, Effect, Layer] = await Promise.all([
-    import("@t3tools/client-runtime/relay"),
+  const [rpc, { Atom }] = await Promise.all([
     import("@t3tools/client-runtime/rpc"),
     import("effect/reactivity"),
-    import("effect/Context"),
-    import("effect/Effect"),
-    import("effect/Layer"),
   ]);
-  type AuthorizedHttp =
-    import("@t3tools/client-runtime/authorization").AuthorizedRemoteHttpEnvironment;
-  // Services resolve by key, and client-runtime does not export this one.
-  class RemoteEnvironmentAuthorization extends Context.Service<
-    RemoteEnvironmentAuthorization,
-    {
-      readonly authorizeDpopHttp: (input: {
-        readonly expectedEnvironmentId: AuthorizedHttp["environmentId"];
-      }) => Effect.Effect<AuthorizedHttp>;
-    }
-    // @effect-diagnostics-next-line deterministicKeys:off
-  >()("@t3tools/client-runtime/authorization/service/RemoteEnvironmentAuthorization") {}
   return {
     connectionAtomRuntime: Atom.runtime(
-      Layer.mergeAll(
-        rpc.layerRemoteHttpClient((input, init) => globalThis.fetch(input, init)),
-        Layer.succeed(ManagedRelay.ManagedRelayDpopSigner, {
-          thumbprint: Effect.succeed("thumbprint"),
-          createProof: () => Effect.succeed("proof"),
-        }),
-        Layer.succeed(RemoteEnvironmentAuthorization, {
-          authorizeDpopHttp: ({ expectedEnvironmentId }) =>
-            Effect.succeed({
-              environmentId: expectedEnvironmentId,
-              label: "MacBook Pro",
-              httpBaseUrl: window.location.origin,
-              httpAuthorization: {
-                _tag: "Dpop",
-                accessToken: "relay-access-token",
-                expiresAtEpochMs: 4_102_444_800_000,
-              },
-            }),
-        }),
-      ),
+      rpc.layerRemoteHttpClient((input, init) => globalThis.fetch(input, init)),
     ),
   };
 });
@@ -392,129 +354,6 @@ it("tests the selected model after download and preserves its transcript across 
     },
   );
 });
-
-it.each([
-  { tier: "cpu", legacy: false },
-  { tier: "accelerated", legacy: false },
-  { tier: "cpu", legacy: true },
-] as const)(
-  "loads relay models using the server tier $tier (legacy: $legacy)",
-  async ({ tier, legacy }) => {
-    const target = new RelayConnectionTarget({
-      environmentId: EnvironmentId.make("voice-relay"),
-      label: "MacBook Pro",
-    });
-    const prepared = {
-      environmentId: target.environmentId,
-      label: target.label,
-      httpBaseUrl: window.location.origin,
-      socketUrl: "ws://localhost",
-      httpAuthorization: {
-        _tag: "Dpop" as const,
-        accessToken: "stale-access-token",
-        expiresAtEpochMs: 4_102_444_800_000,
-      },
-      target,
-    };
-    const model = {
-      id: "gpu",
-      name: "GPU pick",
-      description: "",
-      size: 100,
-      languages: ["en"],
-      benchmark: {
-        accuracy: { en: { grade: "A", errorPercent: 4 } },
-        secondsPer30s: { cpu: 20, accelerated: 1 },
-      },
-      accuracy: 1,
-      speed: 1,
-      recommended: false,
-      supportsStreaming: false,
-      supportsTranslation: false,
-      supportsLanguageDetection: false,
-      active: false,
-      state: "downloadable",
-    } satisfies EnvironmentSpeechModel;
-    const status = {
-      supported: true,
-      state: "missing-model",
-      modelId: model.id,
-      model: model.name,
-      size: model.size,
-      supportsStreaming: false,
-      supportsTranslation: false,
-      acceleration: "auto",
-      benchmarkTier: tier,
-      modelUnloadTimeout: "never",
-      gpuDevices: [{ id: "remote-gpu", name: "Remote GPU" }],
-    } satisfies EnvironmentSpeechStatus;
-    const cpuModel = {
-      ...model,
-      id: "cpu",
-      name: "CPU pick",
-      benchmark: {
-        accuracy: { en: { grade: "B+", errorPercent: 6 } },
-        secondsPer30s: { cpu: 1, accelerated: 8 },
-      },
-    };
-    const { benchmarkTier: _tier, ...legacyStatus } = status;
-    const models = [model, cpuModel];
-    const authorizations: Array<string | null> = [];
-    const fetch = globalThis.fetch;
-    using _network = vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-      const url = new URL(input instanceof Request ? input.url : input, window.location.href);
-      if (url.pathname === "/api/voice/status") {
-        authorizations.push(new Headers(init?.headers).get("authorization"));
-        return Promise.resolve(
-          Response.json(legacy ? { ...legacyStatus, acceleration: "cpu", gpuDevices: [] } : status),
-        );
-      }
-      if (url.pathname === "/api/voice/models")
-        return Promise.resolve(
-          Response.json({
-            models: legacy
-              ? models.map(({ benchmark, ...entry }) => ({
-                  ...entry,
-                  benchmark: {
-                    accuracy: benchmark.accuracy,
-                    secondsPer30s: benchmark.secondsPer30s.accelerated,
-                  },
-                }))
-              : models,
-          }),
-        );
-      return fetch(input, init);
-    });
-    using notify = vi.spyOn(toastManager, "add").mockReturnValue("test");
-    // Restored even when an assertion fails, unlike `withImplementation`.
-    using _destination = vi.mocked(useVoiceTranscriptionDestination).mockImplementation(() => ({
-      environmentId: target.environmentId,
-      label: target.label,
-      grantId: "test",
-      prepared,
-    }));
-    await using screen = await render(
-      <SettingsScopeProvider search={{}} onChange={() => {}}>
-        <VoiceSettingsPanel />
-      </SettingsScopeProvider>,
-    );
-    await vi.waitFor(() => expect(authorizations.length + notify.mock.calls.length).not.toBe(0));
-    expect(notify).not.toHaveBeenCalled();
-    expect(authorizations).toEqual(["DPoP relay-access-token"]);
-    const region = screen.getByRole("region", { name: "Transcription models" });
-    await vi.waitFor(() => expect(region.element().textContent).toContain("CPU pick"));
-    if (legacy) {
-      expect(region.element().textContent).toContain("update server for this benchmark");
-      expect(region.element().textContent).not.toContain("Recommended");
-    } else {
-      const winner = tier === "cpu" ? "CPU pick" : "GPU pick";
-      await vi.waitFor(() =>
-        expect(region.element().firstElementChild?.textContent).toContain(winner + "Recommended"),
-      );
-      expect(region.element().textContent).toContain("Speed: 1 s / 30 s");
-    }
-  },
-);
 
 it("recovers from a failed download progress poll without notifying, but reports a failed initial load", async () => {
   const target = new PrimaryConnectionTarget({

@@ -6,9 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 
-import { DpopProof, ManagedRelay } from "@t3tools/client-runtime/relay";
+import { DpopProof } from "@t3tools/client-runtime/authorization";
+import { loadOrCreateProofKey } from "../connection/dpopKey";
 import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
-import { RelayWebClientId } from "@t3tools/contracts/relay";
 import * as PrimaryEnvironmentHttpClient from "../environments/primary/httpClient";
 import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
 import * as ClientTracer from "../observability/clientTracer";
@@ -19,24 +19,17 @@ const layerWebCrypto = Layer.mergeAll(Digest.layerWebCrypto, Signature.layerWebC
   Layer.provideMerge(SecureRandom.layerWebCrypto),
 );
 
-const layerDisabledRelayDpopSigner = DpopProof.layerSigner({
+const layerDpopSigner = DpopProof.layerSigner({
   keyStore: "indexed-db",
-  loadOrCreateKey: Effect.fail(
-    new DpopProof.DpopProofError({ message: "T3 Connect is disabled." }),
-  ),
-});
-
-const layerDisabledManagedRelay = ManagedRelay.layer({
-  relayUrl: "http://relay.invalid",
-  clientId: RelayWebClientId,
-}).pipe(Layer.provideMerge(layerDisabledRelayDpopSigner));
+  loadOrCreateKey: loadOrCreateProofKey(),
+}).pipe(Layer.provide(layerWebCrypto));
 
 type RuntimeLayerSource =
   | typeof layerHttpClient
   | typeof layerWebCrypto
   | typeof Socket.layerWebSocketConstructorGlobal
   | typeof ClientTracer.layer
-  | typeof layerDisabledManagedRelay;
+  | typeof layerDpopSigner;
 
 const primaryHttpRuntime = ManagedRuntime.make(
   PrimaryEnvironmentHttpClient.layer.pipe(Layer.provide(PrimaryEnvironmentHttpLayer.layer)),
@@ -64,7 +57,7 @@ const layerRuntime = Layer.mergeAll(
   layerWebCrypto,
   Socket.layerWebSocketConstructorGlobal,
   ClientTracer.layer,
-  layerDisabledManagedRelay.pipe(Layer.provide(Layer.mergeAll(layerHttpClient, layerWebCrypto))),
+  layerDpopSigner,
 );
 
 const runtime: ManagedRuntime.ManagedRuntime<
