@@ -1,18 +1,34 @@
-import type { DesktopSshEnvironmentTarget } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Digest from "effect/crypto/Digest";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Hex from "effect/encoding/Hex";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
-import { buildSshChildEnvironment, type SshAuthOptions } from "./auth.ts";
-import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
+class SshInvalidTargetError extends Schema.TaggedError<SshInvalidTargetError>()(
+  "SshInvalidTargetError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class SshCommandError extends Schema.TaggedError<SshCommandError>()("SshCommandError", {
+  message: Schema.String,
+  command: Schema.Array(Schema.String),
+  exitCode: Schema.NullOr(Schema.Number),
+  stderr: Schema.String,
+  stdout: Schema.optional(Schema.String),
+  cause: Schema.optional(Schema.Defect()),
+}) {}
+
+interface SshCommandTarget {
+  readonly alias: string;
+  readonly hostname: string;
+  readonly username: string | null;
+  readonly port: number | null;
+}
 
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
 const MAX_SSH_ERROR_OUTPUT_LENGTH = 4_000;
@@ -29,12 +45,12 @@ export const resolveSshCommand = Effect.map(HostProcess.Platform, sshCommandForP
 
 const encoder = new TextEncoder();
 
-export interface SshCommandResult {
+interface SshCommandResult {
   readonly stdout: string;
   readonly stderr: string;
 }
 
-export interface RunSshCommandOptions extends SshAuthOptions {
+interface RunSshCommandOptions {
   readonly preHostArgs?: ReadonlyArray<string>;
   readonly remoteCommandArgs?: ReadonlyArray<string>;
   readonly stdin?: string;
@@ -43,54 +59,7 @@ export interface RunSshCommandOptions extends SshAuthOptions {
   readonly keepErrorOutputTail?: boolean;
 }
 
-function parseSshConfigOutput(stdout: string): Map<string, string> {
-  const values = new Map<string, string>();
-  for (const line of stdout.split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (trimmed.length === 0) {
-      continue;
-    }
-    const [key, ...rest] = trimmed.split(/\s+/u);
-    if (!key || rest.length === 0 || values.has(key)) {
-      continue;
-    }
-    values.set(key, rest.join(" ").trim());
-  }
-  return values;
-}
-
-export function parseSshResolveOutput(alias: string, stdout: string): DesktopSshEnvironmentTarget {
-  const values = parseSshConfigOutput(stdout);
-
-  const hostname = values.get("hostname")?.trim() || alias;
-  const username = values.get("user")?.trim() || null;
-  const rawPort = values.get("port")?.trim() ?? "";
-  const parsedPort = Number.parseInt(rawPort, 10);
-
-  return {
-    alias,
-    hostname,
-    username,
-    port: Number.isInteger(parsedPort) ? parsedPort : null,
-  };
-}
-
-export function targetConnectionKey(target: DesktopSshEnvironmentTarget): string {
-  return `${target.alias}\u0000${target.hostname}\u0000${target.username ?? ""}\u0000${target.port ?? ""}`;
-}
-
-export const remoteStateKey = Effect.fn("ssh/command.remoteStateKey")(function* (
-  target: DesktopSshEnvironmentTarget,
-): Effect.fn.Return<string, never, Digest.Digest> {
-  const digestService = yield* Digest.Digest;
-  const digest = yield* digestService.digest(
-    Digest.sha256,
-    encoder.encode(targetConnectionKey(target)),
-  );
-  return Hex.encode(digest).slice(0, 16);
-});
-
-function buildSshHostSpec(target: DesktopSshEnvironmentTarget): string {
+function buildSshHostSpec(target: SshCommandTarget): string {
   const destination = target.alias.trim() || target.hostname.trim();
   if (destination.length === 0) {
     throw new Error("SSH target is missing its alias/hostname.");
@@ -98,8 +67,8 @@ function buildSshHostSpec(target: DesktopSshEnvironmentTarget): string {
   return target.username ? `${target.username}@${destination}` : destination;
 }
 
-export const buildSshHostSpecEffect = (
-  target: DesktopSshEnvironmentTarget,
+const buildSshHostSpecEffect = (
+  target: SshCommandTarget,
 ): Effect.Effect<string, SshInvalidTargetError> =>
   Effect.try({
     try: () => buildSshHostSpec(target),
@@ -110,7 +79,7 @@ export const buildSshHostSpecEffect = (
   });
 
 export function baseSshArgs(
-  target: DesktopSshEnvironmentTarget,
+  target: SshCommandTarget,
   input?: { readonly batchMode?: "yes" | "no" },
 ): string[] {
   return [
@@ -128,28 +97,11 @@ export function baseSshArgs(
   ];
 }
 
-// `-F none` keeps the user's configured forwards out of T3's requests, and ProxyCommand=false
-// fails closed instead of dialing the host directly once the master is gone.
-export function controlMasterArgs(controlPath: string): string[] {
-  return ["-F", "none", "-o", `ControlPath=${controlPath}`, "-o", "ProxyCommand=false"];
-}
-
-export function getLastNonEmptyOutputLine(stdout: string): string | null {
-  return (
-    stdout
-      .trim()
-      .split(/\r?\n/u)
-      .map((entry) => entry.trim())
-      .findLast((entry) => entry.length > 0) ?? null
-  );
-}
-
 interface SshCommandOutput {
   stdout: string;
   stderr: string;
 }
 
-// Appends as chunks arrive so a timeout can still report what was printed.
 const collectProcessOutput = <E>(
   stream: Stream.Stream<Uint8Array, E>,
   output: SshCommandOutput,
@@ -175,7 +127,7 @@ function redactSshErrorOutput(output: string, keepTail = false): string {
     : `${redacted.slice(0, MAX_SSH_ERROR_OUTPUT_LENGTH)}\n[truncated]`;
 }
 
-export function shellSingleQuote(value: string): string {
+function shellSingleQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
@@ -190,7 +142,7 @@ function terminalArg(value: string, platform: NodeJS.Platform): string {
 // ssh prints this for unknown and changed host keys when it cannot ask. The app
 // never answers host key prompts, so the user checks the fingerprint in a terminal.
 function hostKeyVerificationMessage(input: {
-  readonly target: DesktopSshEnvironmentTarget;
+  readonly target: SshCommandTarget;
   readonly hostSpec: string;
   readonly stderr: string;
   readonly platform: NodeJS.Platform;
@@ -225,7 +177,7 @@ function normalizeSshErrorMessage(input: {
   return cleanedStdout.length > 0 ? cleanedStdout : input.fallbackMessage;
 }
 
-export function sshTargetLogFields(target: DesktopSshEnvironmentTarget) {
+function sshTargetLogFields(target: SshCommandTarget) {
   return {
     alias: target.alias,
     hostname: target.hostname,
@@ -239,34 +191,19 @@ function stdinStream(input: string | undefined) {
 }
 
 const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(function* (
-  target: DesktopSshEnvironmentTarget,
+  target: SshCommandTarget,
   input: RunSshCommandOptions,
   commandScope: Scope.Scope,
   output: SshCommandOutput,
 ): Effect.fn.Return<
   SshCommandResult,
   SshCommandError | SshInvalidTargetError,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+  ChildProcessSpawner.ChildProcessSpawner
 > {
   const hostSpec = yield* buildSshHostSpecEffect(target);
-  const environment = yield* buildSshChildEnvironment({
-    ...(input.interactiveAuth === undefined ? {} : { interactiveAuth: input.interactiveAuth }),
-    ...(input.authSecret === undefined ? {} : { authSecret: input.authSecret }),
-  }).pipe(
-    Effect.mapError(
-      (cause) =>
-        new SshCommandError({
-          command: ["ssh"],
-          exitCode: null,
-          stderr: "",
-          message: "Failed to prepare SSH authentication helpers.",
-          cause,
-        }),
-    ),
-  );
   const args = [
     ...baseSshArgs(target, {
-      batchMode: input.batchMode ?? (input.interactiveAuth ? "no" : "yes"),
+      batchMode: "yes",
     }),
     // Cold installs need a long command budget; a lost connection must fail sooner.
     "-o",
@@ -289,8 +226,6 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
   const child = yield* spawner
     .spawn(
       ChildProcess.make(sshCommand, args, {
-        env: environment,
-        extendEnv: true,
         forceKillAfter: "1 second",
         stdin: {
           stream: stdinStream(input.stdin),
@@ -374,12 +309,12 @@ const runSshCommandInScope = Effect.fn("ssh/command.runSshCommand.inScope")(func
 });
 
 export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
-  target: DesktopSshEnvironmentTarget,
+  target: SshCommandTarget,
   input: RunSshCommandOptions = {},
 ): Effect.fn.Return<
   SshCommandResult,
   SshCommandError | SshInvalidTargetError,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+  ChildProcessSpawner.ChildProcessSpawner
 > {
   const output: SshCommandOutput = { stdout: "", stderr: "" };
   return yield* Effect.scopedWith((commandScope) =>
@@ -412,67 +347,5 @@ export const runSshCommand = Effect.fn("ssh/command.runSshCommand")(function* (
         }),
       }),
     ),
-  );
-});
-
-export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(function* (
-  alias: string,
-): Effect.fn.Return<
-  DesktopSshEnvironmentTarget,
-  SshCommandError | SshInvalidTargetError,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-> {
-  const trimmedAlias = alias.trim();
-  if (trimmedAlias.length === 0) {
-    return yield* new SshInvalidTargetError({ message: "SSH host alias is required." });
-  }
-
-  yield* Effect.logDebug("ssh.target.resolve.start", { alias: trimmedAlias });
-  return yield* runSshCommand(
-    {
-      alias: trimmedAlias,
-      hostname: trimmedAlias,
-      username: null,
-      port: null,
-    },
-    { preHostArgs: ["-G"] },
-  ).pipe(
-    Effect.map((result) => parseSshResolveOutput(trimmedAlias, result.stdout)),
-    Effect.tap((target) =>
-      Effect.logDebug("ssh.target.resolve.succeeded", sshTargetLogFields(target)),
-    ),
-    Effect.catch((cause) =>
-      Effect.logDebug("ssh.target.resolve.fallback", { alias: trimmedAlias, cause }).pipe(
-        Effect.as({
-          alias: trimmedAlias,
-          hostname: trimmedAlias,
-          username: null,
-          port: null,
-        }),
-      ),
-    ),
-  );
-});
-
-/** The control path of the user's signed-in ControlMaster for `target`, or null when none is live. */
-export const findLiveControlPath = Effect.fn("ssh/command.findLiveControlPath")(function* (
-  target: DesktopSshEnvironmentTarget,
-): Effect.fn.Return<
-  string | null,
-  never,
-  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-> {
-  const resolved = yield* runSshCommand(target, { preHostArgs: ["-G"] }).pipe(Effect.option);
-  const controlPath = Option.isSome(resolved)
-    ? parseSshConfigOutput(resolved.value.stdout).get("controlpath")
-    : undefined;
-  if (controlPath === undefined || controlPath === "none") {
-    return null;
-  }
-  return yield* runSshCommand(target, {
-    preHostArgs: [...controlMasterArgs(controlPath), "-O", "check"],
-  }).pipe(
-    Effect.as(controlPath),
-    Effect.orElseSucceed(() => null),
   );
 });

@@ -2,7 +2,6 @@ import {
   BearerConnectionTarget,
   ConnectionTransientError,
   RelayConnectionTarget,
-  SshConnectionTarget,
   PrimaryConnectionTarget,
 } from "@t3tools/client-runtime/connection";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
@@ -111,12 +110,12 @@ it.effect("loads local WSL targets alongside legacy remote records", () =>
       environmentId: EnvironmentId.make("remote"),
       label: "Another machine",
     };
-    const raw = encodeCatalog({
+    const raw = JSON.stringify({
       ...emptyCatalog,
       targets: [
         new BearerConnectionTarget({ ...remote, connectionId: "bearer:remote" }),
         new RelayConnectionTarget(remote),
-        new SshConnectionTarget({ ...remote, connectionId: "ssh:remote" }),
+        { ...remote, _tag: "SshConnectionTarget", connectionId: "ssh:remote" },
         local,
       ],
     });

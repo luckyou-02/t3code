@@ -92,7 +92,7 @@ describe("useFileContextMenu", () => {
 
   it("opens files over SSH remote links instead of on the server host", async () => {
     state.remoteOpen = {
-      state: { mode: "remote-links", host: { kind: "ssh-alias", host: "box", username: "me" } },
+      state: { mode: "remote-links", host: { kind: "mdns", host: "box", username: "me" } },
       isResolved: true,
     };
     state.openInEditor.mockClear();

@@ -4,8 +4,7 @@ import {
   connectionRouteLabelText,
   connectionRoutes,
 } from "@t3tools/client-runtime/connection";
-import type { DesktopSshEnvironmentTarget, EnvironmentMachineKind } from "@t3tools/contracts";
-import * as Option from "effect/Option";
+import type { EnvironmentMachineKind } from "@t3tools/contracts";
 import { msg, useMessages } from "gt-react";
 import type { ReactNode } from "react";
 
@@ -17,11 +16,6 @@ import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
 import { m, type MessageResolver } from "../../i18n/messages";
 
 const T3_CONNECT_NAME = "T3 Connect";
-
-function formatDesktopSshTarget(target: DesktopSshEnvironmentTarget): string {
-  const authority = target.username ? `${target.username}@${target.hostname}` : target.hostname;
-  return target.port ? `${authority}:${target.port}` : authority;
-}
 
 function environmentTransportLabel(
   environment: EnvironmentPresentation,
@@ -44,13 +38,6 @@ function environmentTransportLabel(
   }
   if (environment.relayManaged) return T3_CONNECT_NAME;
   if (isDesktopLocalConnectionTarget(entry.target)) return "WSL";
-  if (
-    entry.target._tag === "SshConnectionTarget" &&
-    Option.isSome(entry.profile) &&
-    entry.profile.value._tag === "SshConnectionProfile"
-  ) {
-    return `SSH ${formatDesktopSshTarget(entry.profile.value.target)}`;
-  }
   return environment.displayUrl ?? resolve(msg("Remote link"));
 }
 

@@ -1,6 +1,7 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 
 import {
   type ConnectionRegistration,
@@ -19,8 +20,26 @@ export type StoredConnectionCredential = typeof StoredConnectionCredential.Type;
 
 export const ConnectionCatalogDocument = Schema.Struct({
   schemaVersion: Schema.Literal(1),
-  targets: Schema.Array(PersistedConnectionTarget),
-  profiles: Schema.Array(ConnectionProfile),
+  targets: Schema.Array(
+    Schema.Union([PersistedConnectionTarget, Schema.TaggedStruct("SshConnectionTarget", {})]),
+  ).pipe(
+    Schema.decodeTo(Schema.Array(Schema.toType(PersistedConnectionTarget)), {
+      decode: SchemaGetter.transform((targets) =>
+        targets.filter((target) => target._tag !== "SshConnectionTarget"),
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
+  ),
+  profiles: Schema.Array(
+    Schema.Union([ConnectionProfile, Schema.TaggedStruct("SshConnectionProfile", {})]),
+  ).pipe(
+    Schema.decodeTo(Schema.Array(Schema.toType(ConnectionProfile)), {
+      decode: SchemaGetter.transform((profiles) =>
+        profiles.filter((profile) => profile._tag !== "SshConnectionProfile"),
+      ),
+      encode: SchemaGetter.passthrough(),
+    }),
+  ),
   credentials: Schema.Array(StoredConnectionCredential),
   remoteDpopTokens: Schema.Array(TokenStore.RemoteDpopAccessToken),
   // Pull request routing grants. The field name predates the rename and stays, so older and
@@ -64,7 +83,6 @@ function connectionIdOf(target: ConnectionTarget): string | null {
     case "RelayConnectionTarget":
       return null;
     case "BearerConnectionTarget":
-    case "SshConnectionTarget":
       return target.connectionId;
   }
 }
@@ -135,7 +153,6 @@ export function registerConnectionInCatalog(
     case "RelayConnectionRegistration":
       return next;
     case "BearerConnectionRegistration":
-    case "SshConnectionRegistration":
       return {
         ...next,
         profiles: replaceCatalogValue(

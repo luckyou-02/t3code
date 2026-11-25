@@ -33,7 +33,7 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { extractPng } from "@t3tools/shared/png";
-import { SshCommandError } from "@t3tools/ssh/errors";
+import { SshCommandError } from "./sshCommand.ts";
 import * as FileSystem from "effect/FileSystem";
 import { resolveNodeExecutable, nodeRuntimeUnavailableMessage } from "@t3tools/shared/nodeRuntime";
 import * as Path from "effect/Path";

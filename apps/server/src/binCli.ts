@@ -32,7 +32,6 @@ import { uninstallCommand } from "./cli/uninstall.ts";
 import { runServiceLauncherCli } from "./cli/serviceLauncher.ts";
 import { speechWorkerCommand } from "./cli/speechWorker.ts";
 import { claudeHistoryCommand } from "./cli/claudeHistory.ts";
-import { sshHelperCommand } from "./cli/sshHelper.ts";
 import { serviceCommand, serviceStatusCommand } from "./cli/service.ts";
 import { servicePreflightCommand } from "./cli/servicePreflight.ts";
 import { themeCommand } from "./cli/theme.ts";
@@ -76,7 +75,6 @@ export const makeCli = () =>
       ),
       claudeHistoryCommand,
       speechWorkerCommand,
-      sshHelperCommand,
 
       servicePreflightCommand,
       themeCommand,

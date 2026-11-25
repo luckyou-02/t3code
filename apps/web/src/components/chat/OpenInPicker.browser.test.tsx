@@ -222,7 +222,7 @@ describe("remote editor links", () => {
   it("opens the link from the fallback when the picker is not mounted", async () => {
     await using fixture = await setup();
     const { screen, pressOpenFavorite, FavoriteEditorFallback } = fixture;
-    state.remote = { mode: "remote-links", host: { kind: "ssh-alias", host: "sol" } };
+    state.remote = { mode: "remote-links", host: { kind: "mdns", host: "sol" } };
     // A successful open would announce on a real timer that fires in the next test.
     state.openUrl.mockResolvedValueOnce(false);
     await act(async () => screen.rerender(<FavoriteEditorFallback />));
@@ -235,7 +235,7 @@ describe("remote editor links", () => {
   it("explains why a phone or tablet browser has no editor to open", async () => {
     await using fixture = await setup();
     const { renderPicker, byLabel, primaryButton, menuItems, click, pressOpenFavorite } = fixture;
-    state.remote = { mode: "remote-links", host: { kind: "ssh-alias", host: "sol" } };
+    state.remote = { mode: "remote-links", host: { kind: "mdns", host: "sol" } };
     state.clientEditors = [];
     await renderPicker();
 

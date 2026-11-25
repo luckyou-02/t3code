@@ -1,8 +1,7 @@
 # Remote architecture
 
-Each connection joins a client to one environment over HTTP and WebSocket. Direct access, Tailscale,
-and SSH change how the client reaches the server; they do not introduce a different
-execution model.
+Each connection joins a client to a local environment over HTTP and WebSocket.
+Desktop can also start and connect to a WSL backend on the same machine.
 
 ## Identity is independent of the route
 
@@ -44,9 +43,6 @@ through `/api/preview/tunnel` on the environment's own origin:
 
 ## Access and process ownership are separate
 
-- Tailscale supplies an endpoint for normal pairing; auth remains the environment's responsibility.
-- [SSH cleanup](../../packages/ssh/src/tunnel.ts) stops a remote server only if the launcher started
-  it; a server discovered already running must survive client disconnect.
 - Remote servers outlive client releases. Clients negotiate features via advertised capabilities
   rather than assuming version parity. Process replacement uses the
   [update protocol](./07_server-updates.md).

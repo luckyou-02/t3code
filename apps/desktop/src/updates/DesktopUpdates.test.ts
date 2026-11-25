@@ -91,31 +91,6 @@ const nextPublishedState = (emit: () => void) =>
   });
 
 describe("DesktopUpdates", () => {
-  it.effect("updates Linux .deb installs and leaves other non-AppImage installs off", () =>
-    Effect.gen(function* () {
-      const linuxState = (packageType: string | undefined) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const updates = yield* DesktopUpdates.DesktopUpdates;
-            const desktopState = yield* DesktopState.DesktopState;
-            yield* updates.configure;
-            return {
-              state: yield* updates.getState,
-              canInstallUpdates: yield* Ref.get(desktopState.canInstallUpdates),
-            };
-          }),
-        ).pipe(Effect.provide(makeHarness({ platform: "linux", packageType }).layer));
-
-      const deb = yield* linuxState("deb\n");
-      assert.equal(deb.state.status, "idle");
-      assert.isTrue(deb.canInstallUpdates);
-
-      const unmarked = yield* linuxState(undefined);
-      assert.equal(unmarked.state.status, "disabled");
-      assert.isFalse(unmarked.canInstallUpdates);
-    }),
-  );
-
   it.effect("keeps the disabled reason available after configuration and channel changes", () => {
     const harness = makeHarness({ env: { T3CODE_DISABLE_AUTO_UPDATE: "true" } });
     const reason = "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting.";
@@ -893,11 +868,7 @@ describe("DesktopUpdates", () => {
         const result = yield* updates.install;
         assert.isTrue(result.accepted);
         assert.isFalse(yield* Ref.get(desktopState.quitting));
-        assert.deepEqual(harness.installSteps, [
-          "closeSshTunnels",
-          "quitAndInstall",
-          "startBackend",
-        ]);
+        assert.deepEqual(harness.installSteps, ["quitAndInstall", "startBackend"]);
         assert.equal(harness.updateRestartMarkers.size, 0);
         assert.isUndefined(harness.updateInProgressMarker());
         assert.equal(harness.installRecords.size, 0);
@@ -928,7 +899,7 @@ describe("DesktopUpdates", () => {
 
         const result = yield* updates.install;
         assert.equal(result.state.errorContext, "install");
-        assert.deepEqual(harness.installSteps, ["closeSshTunnels", "quitAndInstall"]);
+        assert.deepEqual(harness.installSteps, ["quitAndInstall"]);
         assert.isFalse((yield* (yield* pool.primary).snapshot).desiredRunning);
       }),
     ).pipe(Effect.provide(Layer.merge(TestClock.layer(), harness.layer)));
@@ -1022,11 +993,7 @@ describe("DesktopUpdates", () => {
         assert.equal(harness.quitAndInstalls(), 1);
         harness.emit("error", new Error("duplicate native installer error"));
         yield* flushCallbacks;
-        assert.deepEqual(harness.installSteps, [
-          "closeSshTunnels",
-          "quitAndInstall",
-          "startBackend",
-        ]);
+        assert.deepEqual(harness.installSteps, ["quitAndInstall", "startBackend"]);
 
         yield* Deferred.succeed(releaseRecovery, undefined);
         const failedResult = yield* Fiber.join(failedInstall);

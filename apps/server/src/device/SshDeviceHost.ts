@@ -5,8 +5,8 @@ import {
   deviceToolInstallMessage,
   type SshDeviceHostConfig,
 } from "@t3tools/contracts";
-import { runSshCommand, baseSshArgs, resolveSshCommand } from "@t3tools/ssh/command";
-import { SshCommandError } from "@t3tools/ssh/errors";
+import { runSshCommand, baseSshArgs, resolveSshCommand } from "./sshCommand.ts";
+import { SshCommandError } from "./sshCommand.ts";
 import * as NetService from "@t3tools/shared/Net";
 import { waitForHttpReady } from "@t3tools/shared/httpReadiness";
 import * as Digest from "effect/crypto/Digest";

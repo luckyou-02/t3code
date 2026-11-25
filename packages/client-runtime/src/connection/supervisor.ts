@@ -959,17 +959,8 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       Effect.gen(function* () {
         const routes = connectionRoutes(yield* Ref.get(currentEntry));
         const setup = Duration.toNanosUnsafe(Duration.times(establishmentTimeout, routes.length));
-        // The desktop bounds SSH preparation, which may download a server
-        // release, so for SSH-only entries the clock stops while preparing.
-        const pausesWhilePreparing = routes.every((route) => connectionRouteKind(route) === "ssh");
-        const preparing = (expected: boolean) =>
-          SubscriptionRef.changes(state).pipe(
-            Stream.filter((current) => (current.stage === "preparing") === expected),
-            Stream.runHead,
-          );
         let spent = 0n;
         while (true) {
-          if (pausesWhilePreparing) yield* preparing(false);
           const synchronized = BigInt(yield* Ref.get(synchronizedRoutes));
           const remaining =
             setup + synchronized * Duration.toNanosUnsafe(synchronizationTimeout) - spent;
@@ -978,7 +969,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
           }
           const resumedAt = yield* Clock.monotonicTimeNanos;
           const sleep = Effect.sleep(Duration.nanos(remaining));
-          yield* pausesWhilePreparing ? Effect.raceFirst(sleep, preparing(true)) : sleep;
+          yield* sleep;
           spent += (yield* Clock.monotonicTimeNanos) - resumedAt;
         }
       }),

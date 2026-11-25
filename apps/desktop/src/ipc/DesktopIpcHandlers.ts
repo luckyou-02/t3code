@@ -8,16 +8,6 @@ import { getClientSettings, setClientSettings } from "./methods/clientSettings.t
 import { getConnectionCatalog, setConnectionCatalog } from "./methods/connectionCatalog.ts";
 import { getHostEnvironmentId, getLocalEnvironmentEnabled } from "./methods/localEnvironment.ts";
 import {
-  bootstrapSshBearerSession,
-  disconnectSshEnvironment,
-  discoverSshHosts,
-  ensureSshEnvironment,
-  fetchSshEnvironmentDescriptor,
-  fetchSshSessionState,
-  resolveSshHost,
-  resolveSshPasswordPrompt,
-} from "./methods/sshEnvironment.ts";
-import {
   checkForUpdate,
   downloadUpdate,
   getUpdateState,
@@ -108,15 +98,6 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(dismissSnapShotAnimation);
   yield* ipc.handle(acknowledgeSnapShot);
   yield* ipc.handle(setConnectionCatalog);
-
-  yield* ipc.handle(discoverSshHosts);
-  yield* ipc.handle(resolveSshHost);
-  yield* ipc.handle(ensureSshEnvironment);
-  yield* ipc.handle(disconnectSshEnvironment);
-  yield* ipc.handle(fetchSshEnvironmentDescriptor);
-  yield* ipc.handle(bootstrapSshBearerSession);
-  yield* ipc.handle(fetchSshSessionState);
-  yield* ipc.handle(resolveSshPasswordPrompt);
 
   yield* ipc.handle(getWslState);
   yield* ipc.handle(setWslBackendEnabled);

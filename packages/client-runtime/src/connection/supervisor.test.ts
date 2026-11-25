@@ -10,7 +10,6 @@ import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -43,7 +42,6 @@ import {
   ConnectionTransientError,
   PrimaryConnectionTarget,
   RelayConnectionTarget,
-  SshConnectionTarget,
   type ConnectionAttemptError,
   type ConnectionTarget,
   type NetworkStatus,
@@ -112,16 +110,6 @@ const LAN_THEN_RELAY_ENTRY: ConnectionCatalogEntry = {
   target: LAN_ROUTE.target,
   profile: LAN_ROUTE.profile,
   alternateRoutes: [{ target: RELAY_TARGET, profile: Option.none() }],
-  enabled: true,
-};
-
-const SSH_ENTRY: ConnectionCatalogEntry = {
-  target: new SshConnectionTarget({
-    environmentId: TARGET.environmentId,
-    label: TARGET.label,
-    connectionId: "ssh-connection",
-  }),
-  profile: Option.none(),
   enabled: true,
 };
 
@@ -1005,126 +993,6 @@ describe("EnvironmentSupervisor", () => {
       });
       expect(yield* Ref.get(harness.prepareCount)).toBe(1);
       expect(yield* Ref.get(harness.sessionCount)).toBe(0);
-    }).pipe(Effect.provide(TestClock.layer())),
-  );
-
-  it.effect("reports a slow SSH preparation failure instead of the setup timeout", () =>
-    Effect.gen(function* () {
-      const preparationFailure = new ConnectionTransientError({
-        reason: "remote-unavailable",
-        detail:
-          "Could not prepare the SSH environment: curl: (28) Operation timed out after 240003 milliseconds",
-      });
-      const harness = yield* makeHarness({
-        prepare: () =>
-          Effect.sleep("4 minutes").pipe(Effect.andThen(Effect.fail(preparationFailure))),
-      });
-      const supervisor = yield* EnvironmentSupervisor.make(SSH_ENTRY, {
-        initiallyDesired: true,
-      }).pipe(Effect.provide(harness.dependencies));
-
-      yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "connecting" && state.stage === "preparing",
-      );
-      const firstFailure = yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "backoff",
-      ).pipe(Effect.forkChild({ startImmediately: true }));
-      yield* TestClock.adjust("4 minutes");
-
-      expect(yield* Fiber.join(firstFailure)).toMatchObject({
-        attempt: 1,
-        lastFailure: {
-          _tag: "ConnectionTransientError",
-          reason: "remote-unavailable",
-          message: preparationFailure.message,
-        },
-      });
-    }).pipe(Effect.provide(TestClock.layer())),
-  );
-
-  it.effect("times out an SSH route that stops answering after a slow preparation", () =>
-    Effect.gen(function* () {
-      const harness = yield* makeHarness({
-        prepare: () => Effect.sleep("4 minutes").pipe(Effect.as(PREPARED_CONNECTION)),
-        ready: () => Effect.never,
-      });
-      const supervisor = yield* EnvironmentSupervisor.make(SSH_ENTRY, {
-        initiallyDesired: true,
-      }).pipe(Effect.provide(harness.dependencies));
-
-      yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "connecting" && state.stage === "preparing",
-      );
-      yield* TestClock.adjust("4 minutes");
-      yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "connecting" && state.stage === "synchronizing",
-      );
-      const firstFailure = yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "backoff",
-      ).pipe(Effect.forkChild({ startImmediately: true }));
-      yield* TestClock.adjust("90 seconds");
-
-      expect(yield* Fiber.join(firstFailure)).toMatchObject({
-        attempt: 1,
-        lastFailure: {
-          _tag: "ConnectionTransientError",
-          reason: "timeout",
-          message: "Test environment did not respond during connection setup.",
-        },
-      });
-    }).pipe(Effect.provide(TestClock.layer())),
-  );
-
-  it.effect("does not time a second SSH route's slow preparation", () =>
-    Effect.gen(function* () {
-      const secondSshTarget = new SshConnectionTarget({
-        environmentId: TARGET.environmentId,
-        label: TARGET.label,
-        connectionId: "ssh-connection-2",
-      });
-      const firstRouteFailure = transient("The first SSH route dropped while synchronizing.");
-      const harness = yield* makeHarness({
-        prepare: (attempt, target) =>
-          attempt === 1
-            ? Effect.succeed(preparedFor(target))
-            : Effect.sleep("4 minutes").pipe(
-                Effect.andThen(
-                  Effect.fail(
-                    new ConnectionTransientError({
-                      reason: "remote-unavailable",
-                      detail: "Could not prepare the SSH environment.",
-                    }),
-                  ),
-                ),
-              ),
-        ready: () => Effect.fail(firstRouteFailure),
-      });
-      const supervisor = yield* EnvironmentSupervisor.make(
-        { ...SSH_ENTRY, alternateRoutes: [{ target: secondSshTarget, profile: Option.none() }] },
-        { initiallyDesired: true },
-      ).pipe(Effect.provide(harness.dependencies));
-
-      yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "connecting" && state.stage === "preparing",
-      );
-      const firstFailure = yield* awaitState(
-        supervisor.state,
-        (state) => state.phase === "backoff",
-      ).pipe(Effect.forkChild({ startImmediately: true }));
-      yield* TestClock.adjust("4 minutes");
-
-      // The driver reports the first transient failure across its routes.
-      expect(yield* Fiber.join(firstFailure)).toMatchObject({
-        attempt: 1,
-        lastFailure: { reason: "transport", message: firstRouteFailure.message },
-      });
-      expect(yield* Ref.get(harness.prepareCount)).toBe(2);
     }).pipe(Effect.provide(TestClock.layer())),
   );
 

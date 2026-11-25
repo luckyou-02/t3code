@@ -1,8 +1,4 @@
-import {
-  connectionRoutes,
-  type ConnectionRoute,
-  type ConnectionTarget,
-} from "@t3tools/client-runtime/connection";
+import { type ConnectionTarget } from "@t3tools/client-runtime/connection";
 import {
   REMOTE_CAPABLE_EDITOR_IDS,
   type EditorId,
@@ -22,7 +18,7 @@ import { environmentPresentations } from "~/state/presentation";
 import { hostEnvironmentIdAtom } from "~/state/primaryEnvironment";
 
 export interface RemoteOpenHost {
-  readonly kind: "ssh-alias" | RemoteOpenTarget["kind"];
+  readonly kind: RemoteOpenTarget["kind"];
   readonly host: string;
   readonly username?: string;
 }
@@ -54,20 +50,8 @@ function parseHostname(url: string): string | null {
   }
 }
 
-function firstSshTarget(routes: ReadonlyArray<ConnectionRoute>) {
-  for (const route of routes) {
-    const profile = Option.getOrNull(route.profile);
-    if (profile?._tag === "SshConnectionProfile" && profile.target.alias.length > 0) {
-      return profile.target;
-    }
-  }
-  return null;
-}
-
 export function resolveRemoteOpenState(input: {
   readonly target: ConnectionTarget | null;
-  /** The environment's saved routes, preferred route first. */
-  readonly routes: ReadonlyArray<ConnectionRoute>;
   readonly remoteOpenTargets: ReadonlyArray<RemoteOpenTarget> | undefined;
   readonly isDesktopRenderer: boolean;
   readonly hostEnvironmentId: string | null;
@@ -89,22 +73,6 @@ export function resolveRemoteOpenState(input: {
     return LOCAL_EXEC;
   }
 
-  const sshTarget = firstSshTarget(input.routes);
-  if (sshTarget !== null) {
-    const { alias } = sshTarget;
-    const userSeparator = alias.lastIndexOf("@");
-    const host = userSeparator === -1 ? alias : alias.slice(userSeparator + 1);
-    const username =
-      sshTarget.username?.trim() || (userSeparator === -1 ? null : alias.slice(0, userSeparator));
-    return {
-      mode: "remote-links",
-      host: {
-        kind: "ssh-alias",
-        host,
-        ...(username === null ? {} : { username }),
-      },
-    };
-  }
   const advertised = input.remoteOpenTargets?.[0];
   if (advertised !== undefined) {
     return { mode: "remote-links", host: advertised };
@@ -133,7 +101,6 @@ const remoteOpenResolutionAtom = Atom.family((environmentId: EnvironmentId) =>
     const next: RemoteOpenResolution = {
       state: resolveRemoteOpenState({
         target: entry.target,
-        routes: connectionRoutes(entry),
         remoteOpenTargets: presentation?.serverConfig?.remoteOpenTargets,
         isDesktopRenderer: window.desktopBridge !== undefined,
         hostEnvironmentId: get(hostEnvironmentIdAtom),

@@ -10,21 +10,25 @@ import * as RemoteEnvironmentAuthorization from "../authorization/service.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { ConnectionCatalogEntry } from "./catalog.ts";
 import * as ConnectionDriver from "./driver.ts";
-import { ConnectionTransientError, SshConnectionTarget, type PreparedConnection } from "./model.ts";
+import {
+  ConnectionTransientError,
+  BearerConnectionTarget,
+  type PreparedConnection,
+} from "./model.ts";
 import * as ConnectionResolver from "./resolver.ts";
 
-const sshTarget = (connectionId: string) =>
-  new SshConnectionTarget({
+const bearerTarget = (connectionId: string) =>
+  new BearerConnectionTarget({
     environmentId: EnvironmentId.make("environment-1"),
     label: "Test environment",
     connectionId,
   });
 
 const ENTRY: ConnectionCatalogEntry = {
-  target: sshTarget("ssh-first"),
+  target: bearerTarget("bearer-first"),
   profile: Option.none(),
   enabled: true,
-  alternateRoutes: [{ target: sshTarget("ssh-second"), profile: Option.none() }],
+  alternateRoutes: [{ target: bearerTarget("bearer-second"), profile: Option.none() }],
 };
 
 describe("ConnectionDriver", () => {

@@ -11,9 +11,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 // @effect-diagnostics-next-line nodeBuiltinImport:off - Version output must flush before Electron exits, without acquiring the runtime.
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 
 import * as Electron from "electron";
@@ -54,8 +52,6 @@ import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.t
 import * as DesktopSnapShot from "./snapShot/DesktopSnapShot.ts";
 import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "./shell/DesktopShellEnvironment.ts";
-import * as DesktopSshEnvironment from "./ssh/DesktopSshEnvironment.ts";
-import * as DesktopSshPasswordPrompts from "./ssh/DesktopSshPasswordPrompts.ts";
 import * as DesktopState from "./app/DesktopState.ts";
 import * as DesktopLegacyLocalStorage from "./app/DesktopLegacyLocalStorage.ts";
 import * as DesktopTelemetryPublisher from "./telemetry/DesktopTelemetryPublisher.ts";
@@ -98,28 +94,6 @@ const layerDesktopEnvironment = Layer.unwrap(
   }),
 );
 
-const layerDesktopSshEnvironment = Layer.unwrap(
-  Effect.gen(function* () {
-    const environment = yield* DesktopEnvironment.DesktopEnvironment;
-    const env = yield* HostProcess.Environment;
-    return DesktopSshEnvironment.layer({
-      // Per connect: the login shell's environment is installed after this layer is built.
-      resolveCliRunner: Effect.sync(() =>
-        DesktopSshEnvironment.resolveDesktopSshCliRunner(environment, env),
-      ),
-      resolveLauncherId: yield* Effect.cached(
-        DesktopSshEnvironment.readOrCreateLauncherId(
-          environment.path.join(environment.stateDir, "ssh-launcher-id"),
-        ).pipe(
-          Effect.provide(
-            yield* Effect.context<FileSystem.FileSystem | SecureRandom.SecureRandom>(),
-          ),
-        ),
-      ),
-    });
-  }),
-);
-
 const layerElectron = Layer.mergeAll(
   ElectronApp.layer,
   ElectronDialog.layer,
@@ -147,10 +121,6 @@ const layerDesktopFoundation = Layer.mergeAll(
   DesktopObservability.layer,
   DesktopRendererHistory.layer,
 ).pipe(Layer.provideMerge(layerDesktopEnvironment));
-
-const layerDesktopSsh = layerDesktopSshEnvironment.pipe(
-  Layer.provideMerge(DesktopSshPasswordPrompts.layer()),
-);
 
 const layerDesktopPreview = PreviewManager.layer.pipe(
   Layer.provideMerge(DesktopBrowserHost.layer),
@@ -205,7 +175,6 @@ const layerDesktopApplication = Layer.mergeAll(
     ),
   ),
   // Updates closes the same tunnels the SSH IPC opens before quitAndInstall.
-  Layer.provideMerge(layerDesktopSsh),
   Layer.provideMerge(layerDesktopWslBackend),
   Layer.provideMerge(layerDesktopLocalEnvironmentAuth),
 );
