@@ -504,7 +504,7 @@ export interface ViewedImageAsset {
  * A tool reports the literal path it read, not a markdown destination. Escape what markdown
  * resolution would decode or split off, so a name like Grok's `sessions/%2FUsers...` survives.
  */
-export function viewedImageMarkdownSource(path: string): string {
+function viewedImageMarkdownSource(path: string): string {
   return /^file:/i.test(path) ? path : path.replace(/[%#?]/g, encodeURIComponent);
 }
 

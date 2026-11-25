@@ -376,14 +376,6 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
       // Web has only per-file cases.
       always: [],
     },
-    {
-      test: "apps/mobile/src/reactCompilerCoverage.test.ts",
-      root: "apps/mobile/src/",
-      name: (file: string) => file.slice("apps/mobile/".length),
-      compiled: (file: string) => /\.tsx?$/.test(file) && !/\.(test\.tsx?|d\.ts)$/.test(file),
-      // The Metro, cache, and stale-allowlist cases check more than one file, deletions included.
-      always: ["^(?!.*compiles )"],
-    },
   ].flatMap(({ test, root: appRoot, name, compiled, always }) => {
     const changed = files.filter((file) => file.startsWith(appRoot) && compiled(file));
     if (changed.length === 0 || tests.has(test)) return [];
@@ -425,7 +417,6 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
       file === "pnpm-lock.yaml" ||
       file === ".pnpmfile.cjs" ||
       file.startsWith("patches/") ||
-      file.startsWith("apps/mobile/deps/") ||
       file.startsWith("apps/web/deps/") ||
       path.basename(file) === "package.json",
   );
@@ -453,7 +444,6 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
     ).pipe(Effect.catch((error) => Effect.succeed({ ok: false, output: error.message })));
 
   // Resolve without the lockfile in a temp copy to preserve the working tree and lockfile.
-  // Copy mobile modules too: they are file: dependencies, not workspace packages.
   // Cached registry metadata limits this to patches stranded by local changes, not registry drift.
   const checkPatches = Effect.scoped(
     Effect.gen(function* () {
@@ -466,14 +456,7 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
       yield* copy("package.json");
       yield* copy("pnpm-workspace.yaml");
       for (const pkg of packages) yield* copy(`${pkg.dir}/package.json`);
-      const modulesDir = "apps/mobile/modules";
-      if (yield* fs.exists(inRoot(modulesDir))) {
-        for (const entry of yield* fs.readDirectory(inRoot(modulesDir))) {
-          const manifest = `${modulesDir}/${entry}/package.json`;
-          if (yield* fs.exists(inRoot(manifest))) yield* copy(manifest);
-        }
-      }
-      for (const extra of ["apps/mobile/deps", "apps/web/deps", "patches", ".pnpmfile.cjs"]) {
+      for (const extra of ["apps/web/deps", "patches", ".pnpmfile.cjs"]) {
         if (yield* fs.exists(inRoot(extra))) yield* copy(extra);
       }
       const result = yield* vp(["install", "--lockfile-only", "--ignore-scripts"], temp);
@@ -588,7 +571,6 @@ const checkChanged = Effect.fn("checkChanged")(function* (input: {
     "full test suites": outputs.test || outputs.test_web || outputs.test_server,
     build: outputs.build,
     rust: outputs.rust,
-    "mobile native lint": outputs.mobile_native,
   }).flatMap(([job, runs]) => (runs ? [job] : []));
   if (ciOnly.length > 0) summary.push(`  CI also runs: ${ciOnly.join(", ")}`);
   if (!runPatchCheck) summary.push("  unused patch check skipped: no dependency files changed");

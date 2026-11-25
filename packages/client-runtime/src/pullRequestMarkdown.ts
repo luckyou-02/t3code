@@ -360,7 +360,7 @@ let githubEmojiByAlias: ReadonlyMap<string, string> | undefined;
 const githubEmojiAlias = /:([a-z\d_+-]+)(?=:)/gu;
 
 /** GitHub's `:alias:` emoji in `text`; a colon closes one alias only, so `:tada:tada:` has one. */
-export function githubEmojiAliases(
+function githubEmojiAliases(
   text: string,
 ): ReadonlyArray<{ readonly index: number; readonly text: string; readonly emoji: string }> {
   githubEmojiByAlias ??= new Map(

@@ -71,7 +71,7 @@ function deriveRepositoryRelativeProjectPath(
 }
 
 /** The project's workspace root is its repository's git top-level, not a sub-folder. */
-export function isRepositoryRootProject(
+function isRepositoryRootProject(
   project: Pick<EnvironmentProject, "workspaceRoot" | "repositoryIdentity">,
 ): boolean {
   return deriveRepositoryRelativeProjectPath(project) === "";
@@ -231,7 +231,7 @@ export function resolveScratchProjectScopeKey(
     : key;
 }
 
-export function deriveProjectGroupLabel(input: {
+function deriveProjectGroupLabel(input: {
   readonly groupKey: string;
   readonly representative: Pick<EnvironmentProject, "title" | "repositoryIdentity">;
   readonly members: ReadonlyArray<

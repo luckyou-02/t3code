@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { AsyncResult, Atom, AtomRegistry } from "effect/reactivity";
+import { Atom, AtomRegistry } from "effect/reactivity";
 
 import { findErrorTraceId } from "../errors/errorTrace.ts";
 import * as ManagedRelay from "./managedRelay.ts";
@@ -260,19 +260,6 @@ function describeManagedRelayFailure(cause: Cause.Cause<unknown>): {
   return error instanceof Error
     ? { ...messageFromError(error), traceId }
     : { ...translatableMessage(msg("Could not load T3 Connect data.")), traceId };
-}
-
-export function readManagedRelaySnapshotState<A>(
-  result: AsyncResult.AsyncResult<A, unknown>,
-): ManagedRelaySnapshotState<A> {
-  const failure = result._tag === "Failure" ? describeManagedRelayFailure(result.cause) : null;
-  return {
-    data: AsyncResult.getOrElse(result, () => null),
-    error: failure?.message ?? null,
-    ...(failure?.i18nMessage !== undefined ? { i18nError: failure.i18nMessage } : {}),
-    errorTraceId: failure?.traceId ?? null,
-    isPending: result.waiting,
-  };
 }
 
 // Logged where the listing runs so each failed fetch reports once, however many

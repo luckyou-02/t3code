@@ -56,12 +56,3 @@ heap, and first-request latency against a fake Anthropic API and the real `claud
   stall the server event loop on slow disks (especially Windows).
 - Background awareness and settlement work must coalesce per thread and ignore high-frequency
   transcript/tool-output deltas.
-
-## Mobile looping animations
-
-`apps/mobile/package.json` enables Reanimated's `DISABLE_COMMIT_PAUSING_MECHANISM` for iOS keyboard
-avoidance without React Native's `preventShadowTreeCommitExhaustion`. Continuous Reanimated frames
-(`withRepeat`) commit to the shadow tree every frame and can starve React's JS commits, freezing the
-screen (or aborting in dev with `ShadowTree.cpp: assertion failed`). Use React Native's `Animated`
-with `useNativeDriver: true` for looping animations that run beside heavy content (see
-[`thread-work-log.tsx`](../../apps/mobile/src/features/threads/thread-work-log.tsx)).

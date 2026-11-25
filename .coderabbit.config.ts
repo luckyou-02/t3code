@@ -63,26 +63,9 @@ const DOC_RULES = [
     instructions: "Hold changed code to the rules in docs/internals/10_web-ui.md.",
   },
   {
-    files: "docs/internals/11_mobile-layout.md",
-    applyTo: "apps/mobile/src/**/*.{ts,tsx}",
-    instructions: "Hold mobile layout and pane changes to docs/internals/11_mobile-layout.md.",
-  },
-  {
-    files: "docs/internals/12_mobile-navigation.md",
-    applyTo: "apps/mobile/{src,modules}/**/*.{ts,tsx,swift,kt}",
-    instructions:
-      "Hold mobile navigation, native header, and media presentation changes to docs/internals/12_mobile-navigation.md.",
-  },
-  {
-    files: "docs/internals/13_mobile-development.md",
-    applyTo: "apps/mobile/{src/lib,modules,scripts}/**/*.{ts,tsx,mts}",
-    instructions:
-      "Hold mobile HMR, native module, and React Compiler changes to docs/internals/13_mobile-development.md.",
-  },
-  {
     files: "docs/internals/14_i18n.md",
     applyTo:
-      "{apps/web/src,apps/mobile/src,apps/desktop/src,packages/client-runtime/src,packages/shared/src}/**/*.{ts,tsx}",
+      "{apps/web/src,apps/desktop/src,packages/client-runtime/src,packages/shared/src}/**/*.{ts,tsx}",
     instructions:
       "Hold user-facing copy and translations to the rules in docs/internals/14_i18n.md.",
   },
@@ -95,10 +78,9 @@ const DOC_RULES = [
   },
   {
     files: "docs/internals/16_performance-regressions.md",
-    applyTo:
-      "{apps/server/src/orchestration-v2,apps/server/integration,apps/mobile/src}/**/*.{ts,tsx}",
+    applyTo: "{apps/server/src/orchestration-v2,apps/server/integration}/**/*.{ts,tsx}",
     instructions:
-      "Hold wire payload, indexing, and mobile animation changes to docs/internals/16_performance-regressions.md.",
+      "Hold wire payload and indexing changes to docs/internals/16_performance-regressions.md.",
   },
   {
     files: "docs/internals/17_scripts.md",

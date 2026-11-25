@@ -3,10 +3,10 @@
 import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
 
-const ROOTS = ["apps/web/src", "apps/mobile/src", "packages/client-runtime/src"];
+const ROOTS = ["apps/web/src", "packages/client-runtime/src"];
 const RULE = "no-untranslated-copy";
-// Split these one level deeper; they hold most of each app.
-const SPLIT = new Set(["apps/web/src/components", "apps/mobile/src/features"]);
+// Split this one level deeper; it holds most of the app.
+const SPLIT = new Set(["apps/web/src/components"]);
 
 const lint = NodeChildProcess.spawnSync("vp", ["lint", "--format=json", ...ROOTS], {
   encoding: "utf8",

@@ -1,9 +1,5 @@
 import type { DpopFailureReason } from "@t3tools/contracts";
-import {
-  T3CHAT_PLAN_TUNNEL_LIMITS,
-  type RelayEnvironmentStatusResponse,
-  type RelayProtectedError,
-} from "@t3tools/contracts/relay";
+import { T3CHAT_PLAN_TUNNEL_LIMITS, type RelayProtectedError } from "@t3tools/contracts/relay";
 import { mFallback, msg } from "gt-i18n";
 import type { MFunctionType } from "gt-i18n/types";
 
@@ -165,20 +161,4 @@ export function relayRequestFailureDetail(
 ): string | null {
   const text = relayRequestFailureText(error);
   return text === null ? null : resolveMarkedText(text, resolve);
-}
-
-export function relayOfflineReasonMessage(
-  status: Pick<RelayEnvironmentStatusResponse, "offlineReason">,
-  resolve: MFunctionType = mFallback,
-): string | null {
-  switch (status.offlineReason) {
-    case "tunnel_released":
-      return resolve(
-        msg(
-          "Offline for a while, so its T3 Connect tunnel was removed. Start T3 Code on that computer and update it to the latest version to reconnect.",
-        ),
-      );
-    case undefined:
-      return null;
-  }
 }

@@ -121,7 +121,7 @@ export const start = Effect.fn("startApp.start")(function* (input: {
 });
 
 const startApp = Effect.fn("startApp")(function* (input: {
-  readonly surface: "web" | "mobile";
+  readonly surface: "web";
   readonly home: string;
   readonly ports: ReadonlyArray<string>;
 }) {
@@ -149,106 +149,67 @@ const startApp = Effect.fn("startApp")(function* (input: {
     ...args,
   ];
 
-  if (input.surface === "web") {
-    // e2e opens the app at this host, so the web server is told to bind exactly it. Left to its
-    // default, `localhost`, it binds ::1 alone on machines that resolve the name to IPv6 first.
-    const [host = "", webPort = ""] = input.ports;
-    const origin = `http://${host}:${webPort}`;
-    const serverPort = String(yield* net.reserveLoopbackPort());
-    const token = yield* (yield* SecureRandom.SecureRandom).uuidV4();
-    const credential = `${token}${token}`.replaceAll("-", "");
-    // The fixture can retry this credential even if a session response was lost.
-    yield* fs.writeFileString(path.join(input.home, "browser-dev-token"), credential, {
-      mode: 0o600,
-    });
-    const ports = ["--port", serverPort, "--dev-url", origin];
-    const webEnv = { ...env, T3CODE_PORT_OFFSET: String(Number(webPort) - BASE_WEB_PORT) };
-    const server = yield* start({
-      cwd: checkout,
-      command: node,
-      args: devRunner("dev:server", ports),
-      env: {
-        ...webEnv,
-        T3CODE_DEV_ALLOWED_ORIGINS: origin,
-        T3CODE_DEV_AUTH_TOKEN: credential,
-      },
-      onLine: (line) => (line.includes("pairingUrl:") ? Effect.void : Console.log(line)),
-    });
-    const web = yield* start({
-      cwd: checkout,
-      command: node,
-      args: devRunner("dev:web", [...ports, "--", "--host", host]),
-      env: webEnv,
-      onLine: Console.log,
-    });
-    // A web server that came up on another loopback address would leave e2e waiting out its
-    // whole startup timeout; say so at once instead.
-    const boundElsewhere = Effect.gen(function* () {
-      const elsewhere = host === "::1" ? "127.0.0.1" : "::1";
-      if (yield* net.hasListenerOnHost(Number(webPort), host)) return yield* Effect.never;
-      if (!(yield* net.hasListenerOnHost(Number(webPort), elsewhere))) {
-        return yield* new ScenarioError({ message: "The web server is not listening yet." });
-      }
-      yield* Console.error(
-        `The web server listens on ${elsewhere}:${webPort}, not on ${host}: it ignored --host.`,
-      );
-      return 1;
-    }).pipe(
-      Effect.retry({
-        schedule: Schedule.spaced("1 second"),
-        while: (error) => error._tag === "ScenarioError",
-      }),
-    );
-    return yield* Effect.raceAll([server.exitCode, web.exitCode, boundElsewhere]);
-  }
-
-  // The device is another machine: the server listens on every interface, and Metro serves the
-  // dev client its JavaScript. Tests mint their own pairing links, so the startup one is dropped.
-  const [serverPort = "", metroPort = "", host = ""] = input.ports;
+  // e2e opens the app at this host, so the web server is told to bind exactly it. Left to its
+  // default, `localhost`, it binds ::1 alone on machines that resolve the name to IPv6 first.
+  const [host = "", webPort = ""] = input.ports;
+  const origin = `http://${host}:${webPort}`;
+  const serverPort = String(yield* net.reserveLoopbackPort());
+  const token = yield* (yield* SecureRandom.SecureRandom).uuidV4();
+  const credential = `${token}${token}`.replaceAll("-", "");
+  // The fixture can retry this credential even if a session response was lost.
+  yield* fs.writeFileString(path.join(input.home, "browser-dev-token"), credential, {
+    mode: 0o600,
+  });
+  const ports = ["--port", serverPort, "--dev-url", origin];
+  const webEnv = { ...env, T3CODE_PORT_OFFSET: String(Number(webPort) - BASE_WEB_PORT) };
   const server = yield* start({
     cwd: checkout,
     command: node,
-    args: devRunner("dev:server", ["--host", "0.0.0.0", "--port", serverPort]),
-    env,
+    args: devRunner("dev:server", ports),
+    env: {
+      ...webEnv,
+      T3CODE_DEV_ALLOWED_ORIGINS: origin,
+      T3CODE_DEV_AUTH_TOKEN: credential,
+    },
     onLine: (line) => (line.includes("pairingUrl:") ? Effect.void : Console.log(line)),
   });
-  yield* net.hasListenerOnHost(Number(serverPort), "127.0.0.1").pipe(
-    Effect.filterOrFail(
-      (listening) => listening,
-      () => new ScenarioError({ message: "The server is not listening yet." }),
-    ),
-    Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 600 }),
-  );
-  const metro = yield* start({
-    cwd: path.join(checkout, "apps/mobile"),
-    command: "npx",
-    args: ["expo", "start", "--dev-client", "--scheme", "t3code-dev", "--lan", "--port", metroPort],
-    env: {
-      ...env,
-      APP_VARIANT: "development",
-      CI: "1",
-      // Lazily fetched chunks sometimes arrive broken on pool devices.
-      EXPO_NO_METRO_LAZY: "1",
-      REACT_NATIVE_PACKAGER_HOSTNAME: host,
-    },
+  const web = yield* start({
+    cwd: checkout,
+    command: node,
+    args: devRunner("dev:web", [...ports, "--", "--host", host]),
+    env: webEnv,
     onLine: Console.log,
   });
-  return yield* Effect.raceFirst(server.exitCode, metro.exitCode);
+  // A web server that came up on another loopback address would leave e2e waiting out its
+  // whole startup timeout; say so at once instead.
+  const boundElsewhere = Effect.gen(function* () {
+    const elsewhere = host === "::1" ? "127.0.0.1" : "::1";
+    if (yield* net.hasListenerOnHost(Number(webPort), host)) return yield* Effect.never;
+    if (!(yield* net.hasListenerOnHost(Number(webPort), elsewhere))) {
+      return yield* new ScenarioError({ message: "The web server is not listening yet." });
+    }
+    yield* Console.error(
+      `The web server listens on ${elsewhere}:${webPort}, not on ${host}: it ignored --host.`,
+    );
+    return 1;
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.spaced("1 second"),
+      while: (error) => error._tag === "ScenarioError",
+    }),
+  );
+  return yield* Effect.raceAll([server.exitCode, web.exitCode, boundElsewhere]);
 });
 
 const command = Command.make(
   "start-app",
   {
-    surface: Argument.Literals("surface", ["web", "mobile"]).pipe(
-      Argument.withDescription(
-        "web: server and Vite. mobile: server on every interface and Metro.",
-      ),
+    surface: Argument.Literals("surface", ["web"]).pipe(
+      Argument.withDescription("web: server and Vite."),
     ),
     home: Argument.String("t3-home").pipe(Argument.withDescription("T3 home to recreate.")),
     ports: Argument.String("port").pipe(
-      Argument.withDescription(
-        "web: <host> <web-port>. mobile: <server-port> <metro-port> <host>.",
-      ),
+      Argument.withDescription("web: <host> <web-port>."),
       Argument.variadic(),
     ),
   },

@@ -12,16 +12,15 @@ const INERT = [
   /^LICENSE$/,
 ];
 
-// Shared test setup and vendored mobile dependencies affect every package.
+// Shared test setup affects every package.
 const RUNS_EVERYTHING = [
   /^packages\/shared\/src\/(HostProcess|testing\/(longTempDir|providerEnv|gitEnv|gitRepositoryEnv))\.ts$/,
-  /^apps\/mobile\/deps\//,
 ];
 
 // Includes cross-package reads absent from package.json dependencies.
 const EXTRA_OWNERS = [
   // Vite configs and tsconfigs of these apps import scripts/lib directly.
-  [/^scripts\/lib\//, ["@t3tools/desktop", "@t3tools/mobile", "@t3tools/web", "t3"]],
+  [/^scripts\/lib\//, ["@t3tools/desktop", "@t3tools/web", "t3"]],
   [/^native\/libghostty-vt\//, ["@t3tools/web"]],
 ];
 const RUST = /^native\/resource-monitor\//;
@@ -31,19 +30,10 @@ const TEST_ONLY_DEPS = {
   // Evals import the server's source to test its real model-facing text.
   "@t3tools/evals": ["t3"],
   "@t3tools/provider-pi": ["@t3tools/client-runtime"],
-  "@t3tools/scripts": [
-    "@t3tools/desktop",
-    "@t3tools/mobile",
-    "@t3tools/web",
-    "t3",
-    "@t3tools/provider-cursor",
-  ],
+  "@t3tools/scripts": ["@t3tools/desktop", "@t3tools/web", "t3", "@t3tools/provider-cursor"],
 };
 // The server bundles the web build without importing it.
 const BUILD_ONLY_DEPS = { t3: ["@t3tools/web"] };
-
-const MOBILE_NATIVE =
-  /^apps\/mobile\/.*\.(swift|kt|kts)$|^apps\/mobile\/(\.swiftlint\.yml|detekt\.yml|\.editorconfig|Brewfile)$|^scripts\/mobile-native-static-check\.ts$|^package\.json$|^\.github\/workflows\/ci\.yml$|^\.github\/scripts\/ci-changes\.cjs$|^\.github\/actions\/ci-changes\//;
 
 // Startup, migration, settlement, and sidebar paths that decide whether an upgraded user's
 // threads show after launch. Build runs scripts/smoke-desktop-app.ts for them, so they do not
@@ -175,7 +165,6 @@ function decide(files, packages, full) {
       test_web: has("@t3tools/web"),
       test_server: has("t3"),
       rust: everything || rust,
-      mobile_native: files === null || files.some((file) => MOBILE_NATIVE.test(file)),
     },
   };
 }

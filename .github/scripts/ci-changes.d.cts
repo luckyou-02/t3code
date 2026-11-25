@@ -22,6 +22,5 @@ export function decide(
     test_web: boolean;
     test_server: boolean;
     rust: boolean;
-    mobile_native: boolean;
   };
 };

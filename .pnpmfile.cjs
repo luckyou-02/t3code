@@ -1,10 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// Our forks ship as tarballs in apps/mobile/deps and apps/web/deps. A pnpm patch on one is a
+// Our forks ship as tarballs in apps/web/deps. A pnpm patch on one is a
 // second source of truth that the next tarball silently drops, so changes go to the fork (see
 // the README beside each tarball).
-const FORK_APPS = ["apps/mobile", "apps/web"];
+const FORK_APPS = ["apps/web"];
 
 function forkTarballPatches(patchedDependencies) {
   if (!patchedDependencies) return [];

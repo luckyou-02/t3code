@@ -70,11 +70,6 @@ function parseStandaloneIssueLink(url: string) {
   }
 }
 
-/** Whether `url` is a standalone tracker's issue link, which only bindings can resolve. */
-export function isStandaloneIssueLink(url: string): boolean {
-  return parseStandaloneIssueLink(url) !== null;
-}
-
 /** A cheap pre-check, so text without such a link never asks for the bindings. */
 export function mayContainStandaloneIssueLink(text: string): boolean {
   return text.includes(`${LINEAR_HOST}/`);
