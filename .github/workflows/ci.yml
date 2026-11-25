@@ -33,7 +33,6 @@ jobs:
       test_web: ${{ steps.detect.outputs.test_web }}
       test_server: ${{ steps.detect.outputs.test_server }}
       rust: ${{ steps.detect.outputs.rust }}
-      release_smoke: ${{ steps.detect.outputs.release_smoke }}
       mobile_native: ${{ steps.detect.outputs.mobile_native }}
     steps:
       # Only the package manifests the script reads to build the dependency graph.
@@ -86,8 +85,6 @@ jobs:
 
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
-        with:
-          task-cache-read-token: ${{ secrets.T3_TASK_CACHE_READ_TOKEN }}
 
       # electron's install.js (run by ensure:electron) reads this cache before it
       # downloads from GitHub. The key changes only with the Electron version.
@@ -161,8 +158,6 @@ jobs:
 
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
-        with:
-          task-cache-read-token: ${{ secrets.T3_TASK_CACHE_READ_TOKEN }}
 
       # electron's install.js (run by ensure:electron) reads this cache before it
       # downloads from GitHub. The key changes only with the Electron version.
@@ -321,8 +316,6 @@ jobs:
 
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
-        with:
-          task-cache-read-token: ${{ secrets.T3_TASK_CACHE_READ_TOKEN }}
 
       # electron's install.js (run by ensure:electron) reads this cache before it
       # downloads from GitHub. The key changes only with the Electron version.
@@ -334,12 +327,6 @@ jobs:
 
       - name: Ensure Electron runtime is installed
         run: vp run --filter @t3tools/desktop ensure:electron
-
-      - name: Test preview artifact validation
-        run: python3 -B .github/scripts/stage-preview-bundle.test.py
-
-      - name: Test release checks
-        run: node --test .github/scripts/check-nightly-release.test.cjs .github/scripts/vercel-deployment-output.test.cjs .github/scripts/mobile-preview-comment.test.cjs .github/scripts/mobile-ios-preview-record.test.cjs .github/scripts/test-delta.test.cjs .github/scripts/workflow-credentials.test.cjs
 
       - name: Finish installing browser secret helper build libraries
         timeout-minutes: 5
@@ -396,8 +383,6 @@ jobs:
 
       - name: Setup Vite+
         uses: ./.github/actions/setup-ci-deps
-        with:
-          task-cache-read-token: ${{ secrets.T3_TASK_CACHE_READ_TOKEN }}
 
       # The browser project runs React tests in headless Chromium. Same cache key as
       # test_server, so both jobs share one downloaded browser.
@@ -467,8 +452,6 @@ jobs:
       - name: Setup Vite+
         if: steps.changes.outputs.test_server != 'false'
         uses: ./.github/actions/setup-ci-deps
-        with:
-          task-cache-read-token: ${{ secrets.T3_TASK_CACHE_READ_TOKEN }}
 
       # No Electron setup here: `t3` (apps/server) has no Electron dependency
       # and none of its tests touch the runtime. Only the non-server `test`
@@ -630,33 +613,6 @@ jobs:
       - name: Lint mobile native sources
         run: vp run lint:mobile
 
-  release_smoke:
-    permissions:
-      contents: read
-      id-token: write
-    name: Release Smoke
-    needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.release_smoke != 'false' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          sparse-checkout: |
-            /*
-            !/.repos/
-            !/apps/mobile/modules/t3-terminal/Vendor/**/*.a
-          sparse-checkout-cone-mode: false
-
-      - name: Setup Vite+
-        uses: ./.github/actions/setup-ci-deps
-        with:
-          task-cache-read-token: ${{ secrets.T3_TASK_CACHE_READ_TOKEN }}
-
-      - name: Exercise release-only workflow steps
-        run: node scripts/release-smoke.ts
-
   # Branch protection requires this job by its name, `Check`. It fails when any
   # other job fails, is cancelled, or is skipped without a reason, so splitting
   # or resharding jobs needs no ruleset change. Add every new job to `needs`.
@@ -665,18 +621,7 @@ jobs:
   check:
     name: Check
     if: ${{ always() }}
-    needs:
-      [
-        changes,
-        lint,
-        build,
-        test,
-        test_web,
-        test_server,
-        rust,
-        mobile_native_static_analysis,
-        release_smoke,
-      ]
+    needs: [changes, lint, build, test, test_web, test_server, rust, mobile_native_static_analysis]
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:

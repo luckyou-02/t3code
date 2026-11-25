@@ -65,7 +65,7 @@ Restart `vp run dev --share` and open its printed pairing URL once per browser p
 - `vp run check:changed` — CI's fast checks for your branch (format, lint, knip, affected typechecks, nearby tests, and React Compiler coverage).
 - Focused iteration: `vp test run <files>`, `vp lint <files>`, `vp run --filter <pkg> typecheck`, `vp run knip:check`, `vp run lint:mobile`.
 - `apps/web` uses real Chromium (`*.browser.test.{ts,tsx}`) for DOM/React tests (no jsdom) and Node for `*.test.ts`.
-- Typechecking uses `effect-tsgo tsrs --noEmit` (`@effect/tsgo`), not `typescript` (except `apps/marketing` for Astro). On Windows, open the workspace through WSL for VS Code's `.vscode/tsdk/tsgo`.
+- Typechecking uses `effect-tsgo tsrs --noEmit` (`@effect/tsgo`), not `typescript`. On Windows, open the workspace through WSL for VS Code's `.vscode/tsdk/tsgo`.
 
 ## Desktop artifacts
 
@@ -111,4 +111,4 @@ Install Rust, Python 3, and Visual Studio Build Tools (**Desktop development wit
 rustup target add x86_64-pc-windows-msvc   # or aarch64-pc-windows-msvc
 ```
 
-WSL support also requires passing the Linux CLI archive via `--wsl-runtime`; see [release runbook](./03_release.md#windows-payload-topology-and-update-validation). For signing and macOS passkeys, see [release](./03_release.md).
+WSL support also requires passing the Linux CLI archive via `--wsl-runtime`; see the [Windows build runbook](./03_release.md#wsl-runtime).

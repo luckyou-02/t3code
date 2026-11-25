@@ -64,5 +64,5 @@ anything.
 
 - [00 · Development and local builds](./operations/00_development.md)
 - [01 · Dev container](./operations/01_devcontainer.md)
-- [03 · Release](./operations/03_release.md)
+- [03 · Windows build](./operations/03_release.md)
 - [04 · Observability](./operations/04_observability.md)
