@@ -13,7 +13,6 @@ it("keeps lazy Linux imports and worker bundles from executing desktop startup t
   const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "t3-desktop-bundle-"));
   try {
     const workerEntries = [
-      "src/backend/DesktopBackendRecoveryWorker.ts",
       "src/electron/WindowsForegroundFocusWorker.ts",
       "src/snapShot/GlobalShiftShortcutWorker.ts",
       "src/snapShot/RegionSnapShotWorker.ts",

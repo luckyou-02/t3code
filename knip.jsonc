@@ -82,7 +82,6 @@
     "apps/desktop": {
       // Electron loads these bundles by filename rather than importing them.
       "entry": [
-        "src/backend/DesktopBackendRecoveryWorker.ts!",
         "src/electron/WindowsForegroundFocusWorker.ts!",
         "src/snapShot/GlobalShiftShortcutWorker.ts!",
         "src/snapShot/RegionSnapShotWorker.ts!",

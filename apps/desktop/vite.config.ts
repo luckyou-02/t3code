@@ -101,7 +101,6 @@ export default defineConfig({
       sourcemap: true,
       outExtensions: () => ({ js: ".cjs" }),
       entry: [
-        "src/backend/DesktopBackendRecoveryWorker.ts",
         "src/electron/WindowsForegroundFocusWorker.ts",
         "src/snapShot/GlobalShiftShortcutWorker.ts",
         "src/snapShot/RegionSnapShotWorker.ts",
