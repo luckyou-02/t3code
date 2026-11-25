@@ -95,8 +95,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.workflowsDeleteDefinition]: AuthTerminalOperateScope,
   // Force stop kills agent processes, as Stop on a terminal does.
   [ORCHESTRATION_V2_WS_METHODS.forceStopThread]: AuthOrchestrationOperateScope,
-  // A guest link hands thread access to someone outside, like a pairing link.
-  [WS_METHODS.guestShareCreate]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksLink]: AuthAccessWriteScope,
   [WS_METHODS.peerLinksUnlink]: AuthAccessWriteScope,
   // A link lets every agent here reach the other environment: Settings' bar.
@@ -131,9 +129,6 @@ export function clientRpcRequiredScopes(
   if (method === WS_METHODS.peerLinksPairLink && input !== undefined) {
     const held = mcpClientScopes(decodeLinkPairing(input).access);
     return [AuthAccessWriteScope, ...held];
-  }
-  if (method === WS_METHODS.guestShareCreate) {
-    return [AuthAccessWriteScope, AuthOrchestrationReadScope];
   }
   return Object.hasOwn(CLIENT_GUARDED_RPC_SCOPES, method)
     ? [CLIENT_GUARDED_RPC_SCOPES[method as ClientGuardedRpcTag]]

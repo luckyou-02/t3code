@@ -253,4 +253,14 @@ describe("OrchestrationMessageContext", () => {
       }),
     ).toThrow();
   });
+
+  it("ignores legacy guest attribution when decoding persisted message context", () => {
+    const context = decodeContext({
+      version: 1,
+      guest: { guestMessageId: "guest-message:1", name: "Sam", text: "hi" },
+      records: [knownRecords.skill],
+    });
+    expect(context).not.toHaveProperty("guest");
+    expect(context.records.map((record) => record.kind)).toEqual(["skill"]);
+  });
 });

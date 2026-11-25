@@ -1,6 +1,4 @@
 import {
-  type GuestMessageId,
-  type GuestShareId,
   type MilestoneActor,
   type MilestoneEvent,
   MilestoneId,
@@ -8,7 +6,6 @@ import {
   type OrchestrationV2AppThread,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2RuntimeRequest,
-  type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
@@ -37,7 +34,7 @@ const inputKind = (kind: OrchestrationV2RuntimeRequest["kind"]): MilestoneInputK
   }
 };
 
-/** Turns orchestration events into thread, guest and pull request watch milestones. */
+/** Turns orchestration events into thread and pull request watch milestones. */
 export class OrchestrationMilestones extends Context.Service<
   OrchestrationMilestones,
   {
@@ -54,8 +51,6 @@ const make = Effect.gen(function* () {
   const since = yield* DateTime.now;
   const isNew = (at: DateTime.Utc | string) =>
     DateTime.isGreaterThanOrEqualTo(typeof at === "string" ? DateTime.makeUnsafe(at) : at, since);
-  /** Each thread's waiting guest messages, so a resolution is told once and a closed link is seen. */
-  const guestPending = new Map<ThreadId, Map<GuestMessageId, GuestShareId>>();
 
   const envelope = (
     id: string,
@@ -72,60 +67,6 @@ const make = Effect.gen(function* () {
     isSubagentChild: thread.lineage.relationshipToParent === "subagent",
     ...(thread.workflowRun === undefined ? {} : { workflowRunId: thread.workflowRun.runId }),
   });
-
-  const guestMilestones = (
-    thread: OrchestrationV2AppThread,
-    occurredAt: DateTime.Utc,
-  ): ReadonlyArray<MilestoneEvent> => {
-    const share = thread.guestShare ?? null;
-    const before = guestPending.get(thread.id) ?? new Map<GuestMessageId, GuestShareId>();
-    const pending = new Map<GuestMessageId, GuestShareId>();
-    const out: Array<MilestoneEvent> = [];
-    const resolved = (
-      shareId: GuestShareId,
-      guestMessageId: GuestMessageId,
-      resolution: "sent" | "dismissed" | "closed",
-    ) =>
-      out.push({
-        ...envelope(`thread.guest_request_resolved:${guestMessageId}`, thread, occurredAt, {
-          type: "user",
-        }),
-        type: "thread.guest_request_resolved",
-        shareId,
-        guestMessageId,
-        resolution,
-      });
-    if (share !== null) {
-      const guest: MilestoneActor = {
-        type: "guest",
-        id: share.id,
-        ...(share.guestName === null ? {} : { label: share.guestName }),
-      };
-      for (const message of share.messages) {
-        if (message.status !== "pending") {
-          if (before.has(message.id)) resolved(share.id, message.id, message.status);
-          continue;
-        }
-        pending.set(message.id, share.id);
-        if (before.has(message.id) || !isNew(message.submittedAt)) continue;
-        out.push({
-          ...envelope(`thread.guest_request:${message.id}`, thread, occurredAt, guest),
-          type: "thread.guest_request",
-          shareId: share.id,
-          guestMessageId: message.id,
-        });
-      }
-    }
-    // Gone from the share without an answer: the link was closed or replaced.
-    for (const [guestMessageId, shareId] of before) {
-      if (share?.messages.some((message) => message.id === guestMessageId) !== true) {
-        resolved(shareId, guestMessageId, "closed");
-      }
-    }
-    if (pending.size === 0) guestPending.delete(thread.id);
-    else guestPending.set(thread.id, pending);
-    return out;
-  };
 
   // Runs for every domain event, token deltas included; most return before reading anything.
   const handle: OrchestrationMilestones["Service"]["handle"] = Effect.fnUntraced(
@@ -187,9 +128,6 @@ const make = Effect.gen(function* () {
           }
           break;
         }
-        case "thread.guest-share-updated":
-          out.push(...guestMilestones(event.payload, event.occurredAt));
-          break;
         case "message.updated": {
           const message = event.payload;
           const source = message.notification?.source;

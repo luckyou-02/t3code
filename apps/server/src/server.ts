@@ -174,7 +174,6 @@ import { ScheduledTaskWebhookOrigin } from "./scheduledTasks/ScheduledTaskServic
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as EnvironmentAuthPolicy from "./auth/EnvironmentAuthPolicy.ts";
 import * as CloudHttp from "./cloud/http.ts";
-import * as GuestHttp from "./guest/http.ts";
 import * as LinkThreadHttp from "./peer/linkThreadHttp.ts";
 import * as ServerSelfUpdate from "./cloud/selfUpdate.ts";
 import * as DesktopAppUpdate from "./desktopUpdate/DesktopAppUpdate.ts";
@@ -804,7 +803,6 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerDesktopReadinessProofRoute,
     ServerHttp.layerAssetRoute,
     ServerHttp.layerAttachmentUploadRoute,
-    GuestHttp.layer,
     LinkThreadHttp.layer,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,

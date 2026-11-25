@@ -30,7 +30,6 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
 | MCP client (outside agent, subject `mcp-client`)                              | OAuth on `/mcp`                                                          | Only `/mcp`, within a read-only grant or a runtime-mode ceiling. Every other route rejects it.                        |
 | Linked environment (peer link)                                                | OAuth client `t3code-peer-link`                                          | Work it starts carries an immutable `linkOrigin` and never exceeds the access it was paired with.                     |
 | Agent run by T3                                                               | Thread's runtime mode and thread credential                              | Within its runtime mode, managed policy, and the MCP access declared per tool.                                        |
-| Guest link                                                                    | HMAC token for one share                                                 | Read one thread and propose messages. Never a session; no RPC, WebSocket, or MCP path accepts it.                     |
 | Signed asset URL                                                              | Minted with `filesystem:read`                                            | One file, by device and inode identity, until it expires.                                                             |
 | Webhook sender                                                                | A task's webhook URL, plus its signing secret when the task requires one | Start that one task's run with content of its choosing. Nothing in the request is trusted beyond the signature check. |
 | Managed policy                                                                | Admin-deployed file, read at startup                                     | Ceilings and locks the server enforces for every client.                                                              |
@@ -47,21 +46,19 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
 3. **Mode or policy escalation.** An agent, MCP client, or peer link acting
    above its runtime-mode ceiling, `linkOrigin`, `T3-Mode-Limit`, or managed
    policy.
-4. **Guest escape.** A guest token reading another thread, acting beyond
-   proposing messages, or surviving a closed or replaced share.
-5. **Revocation that doesn't take effect.** A revoked session, device key,
+4. **Revocation that doesn't take effect.** A revoked session, device key,
    pairing link, or peer link that still works. Documented exception: signed
    asset URLs last until they expire.
-6. **Credential exposure.** Tokens or secrets reaching logs, traces, telemetry,
+5. **Credential exposure.** Tokens or secrets reaching logs, traces, telemetry,
    socket URLs (outside short-lived tickets), the access read model,
    or error messages. A token sent to an address that has not answered as the
    expected environment, or a token paired over HTTPS sent over plain HTTP.
-7. **Impersonation and egress.** Another process impersonating an
+6. **Impersonation and egress.** Another process impersonating an
    environment; endpoint discovery, previews, or webhooks used to reach
    arbitrary hosts (SSRF).
-8. **Client-side code execution.** Untrusted content running script in the web
+7. **Client-side code execution.** Untrusted content running script in the web
    origin, the desktop renderer, or with access to preload or IPC.
-9. **Filesystem writes escaping workspace path rules.** Reads are separate:
+8. **Filesystem writes escaping workspace path rules.** Reads are separate:
    `filesystem:read` intentionally covers the whole OS account.
 
 ## Intended, not vulnerabilities
@@ -125,7 +122,6 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
 - Session issuance, pairing, token exchange: [`auth/http.ts`](apps/server/src/auth/http.ts), [`auth/EnvironmentAuth.ts`](apps/server/src/auth/EnvironmentAuth.ts), [`auth/dpop.ts`](apps/server/src/auth/dpop.ts)
 - Per-RPC scopes: [`auth/RpcAuthorization.ts`](apps/server/src/auth/RpcAuthorization.ts). [`clientRpcPermissions.ts`](packages/contracts/src/clientRpcPermissions.ts) only drives client UI and is never the boundary.
 - MCP: [`auth/McpOAuth.ts`](apps/server/src/auth/McpOAuth.ts), [`mcp/McpToolAccess.ts`](apps/server/src/mcp/McpToolAccess.ts), [`mcp/threadAccess.ts`](apps/server/src/mcp/threadAccess.ts), [`mcp/linkOrigin.ts`](apps/server/src/mcp/linkOrigin.ts)
-- Guest links: [`guest/GuestShareService.ts`](apps/server/src/guest/GuestShareService.ts)
 - Files and assets: [`workspace/WorkspaceFileSystem.ts`](apps/server/src/workspace/WorkspaceFileSystem.ts), [`assets/AssetAccess.ts`](apps/server/src/assets/AssetAccess.ts)
 - Managed policy: [`apps/server/src/policy`](apps/server/src/policy)
 - Desktop preview isolation: [`preview/WebviewPreferences.ts`](apps/desktop/src/preview/WebviewPreferences.ts)

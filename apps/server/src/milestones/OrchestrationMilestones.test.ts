@@ -3,10 +3,7 @@ import {
   CommandId,
   EnvironmentId,
   EventId,
-  GuestMessageId,
-  GuestShareId,
   MessageId,
-  type OrchestrationV2AppThread,
   type OrchestrationV2DomainEvent,
   type OrchestrationV2Run,
   ProjectId,
@@ -14,7 +11,6 @@ import {
   ProviderInstanceId,
   RuntimeRequestId,
   ThreadId,
-  type ThreadGuestMessage,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -171,33 +167,6 @@ it.effect("tells each thread transition once, with its lineage", () =>
           resolvedAt: status === "pending" ? null : now,
         },
       }) satisfies OrchestrationV2DomainEvent;
-    const shareId = GuestShareId.make("share:milestone");
-    const guestMessage = (id: string, status: ThreadGuestMessage["status"]) => ({
-      id: GuestMessageId.make(id),
-      text: "Can you also check the docs?",
-      status,
-      submittedAt: DateTime.formatIso(now),
-    });
-    const shared = (
-      id: string,
-      messages: ReadonlyArray<ThreadGuestMessage> | null,
-    ): OrchestrationV2DomainEvent => {
-      const payload: OrchestrationV2AppThread = {
-        ...parent,
-        guestShare:
-          messages === null
-            ? null
-            : {
-                id: shareId,
-                host: "tunnel.example",
-                createdAt: DateTime.formatIso(now),
-                expiresAt: DateTime.formatIso(now),
-                guestName: "Sam",
-                messages,
-              },
-      };
-      return { ...base(id, parentThreadId), type: "thread.guest-share-updated", payload };
-    };
     const wake = {
       ...base("event:wake", parentThreadId),
       type: "message.updated",
@@ -239,13 +208,6 @@ it.effect("tells each thread transition once, with its lineage", () =>
       ended("event:child-failed", childRun, "failed"),
       request("event:asked", "pending"),
       request("event:answered", "resolved"),
-      shared("event:guest-asked", [guestMessage("guest:one", "pending")]),
-      shared("event:guest-sent", [guestMessage("guest:one", "sent")]),
-      shared("event:guest-asked-again", [
-        guestMessage("guest:one", "sent"),
-        guestMessage("guest:two", "pending"),
-      ]),
-      shared("event:guest-closed", null),
       wake,
       wake,
       ended("event:step-done", stepRun, "completed"),
@@ -266,10 +228,6 @@ it.effect("tells each thread transition once, with its lineage", () =>
         [`thread.run_settled:${childRun.id}`, childThreadId, parentThreadId, true],
         ["thread.needs_input:request:milestone", parentThreadId, null, false],
         ["thread.input_resolved:request:milestone", parentThreadId, null, false],
-        ["thread.guest_request:guest:one", parentThreadId, null, false],
-        ["thread.guest_request_resolved:guest:one", parentThreadId, null, false],
-        ["thread.guest_request:guest:two", parentThreadId, null, false],
-        ["thread.guest_request_resolved:guest:two", parentThreadId, null, false],
         ["pr.watch_wake:message:pr-wake", parentThreadId, null, false],
         [`thread.run_settled:${stepRun.id}`, stepThreadId, null, false],
       ],
@@ -280,12 +238,10 @@ it.effect("tells each thread transition once, with its lineage", () =>
       ),
       [stepThreadId],
     );
-    const [, child, asked, answered, , sent, , closed, woke] = events;
+    const [, child, asked, answered, woke] = events;
     assert.deepInclude(child, { outcome: "failed", projectId: parent.projectId });
     assert.deepInclude(asked, { kind: "approval" });
     assert.deepInclude(answered, { resolution: "resolved", actor: { type: "user" } });
-    assert.deepInclude(sent, { resolution: "sent" });
-    assert.deepInclude(closed, { resolution: "closed" });
     assert.deepInclude(woke, {
       pullRequests: [{ host: "github.com", repository: "me/app", number: 7 }],
       watchEnded: true,

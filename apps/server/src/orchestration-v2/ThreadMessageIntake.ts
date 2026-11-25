@@ -64,34 +64,6 @@ const releaseUnusedClaims = Effect.fn("ThreadMessageIntake.releaseUnusedClaims")
 });
 
 /**
- * A guest message goes out with the files the guest attached, never ones a client names. They
- * are already the thread's attachments. A message no longer waiting gets none; the orchestrator
- * then refuses or replays the send.
- */
-const withGuestAttachments = Effect.fn("ThreadMessageIntake.withGuestAttachments")(function* (
-  command: Extract<OrchestrationV2Command, { readonly type: "message.dispatch" }>,
-) {
-  if (command.guestMessageId === undefined) return command;
-  const threads = yield* ThreadManagement.ThreadManagementService;
-  // Only the thread record is needed; the window keeps the read small.
-  const { projection } = yield* threads
-    .getThreadSnapshotWindow(command.threadId, { rowLimit: 1 })
-    .pipe(
-      Effect.mapError(
-        (cause) =>
-          new AttachmentClaims.AttachmentClaimError({
-            message: "Failed to read the guest message.",
-            cause,
-          }),
-      ),
-    );
-  const message = projection.thread.guestShare?.messages.find(
-    (candidate) => candidate.id === command.guestMessageId && candidate.status === "pending",
-  );
-  return { ...command, attachments: message?.attachments ?? [] };
-});
-
-/**
  * For a caller without `providers:manage`. An edit that omits `attachments` keeps the queued
  * ones, so `/logout` signs out only when the queued message has none. The edit goes on with
  * the files read here, so an edit racing this one cannot strip them afterwards.
@@ -132,11 +104,9 @@ export const dispatchCommand = Effect.fn("ThreadMessageIntake.dispatchCommand")(
   sender: { readonly managesProviders: boolean },
 ) {
   const command =
-    incoming.type === "message.dispatch"
-      ? yield* withGuestAttachments(incoming)
-      : incoming.type === "queued-run.edit" && !sender.managesProviders
-        ? yield* withQueuedAttachmentsOnSignOutText(incoming)
-        : incoming;
+    incoming.type === "queued-run.edit" && !sender.managesProviders
+      ? yield* withQueuedAttachmentsOnSignOutText(incoming)
+      : incoming;
   const threads = yield* ThreadManagement.ThreadManagementService;
   if (command.type === "runtime-request.respond" && command.attachmentsByQuestionId) {
     const config = yield* ServerConfig.ServerConfig;

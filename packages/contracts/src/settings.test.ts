@@ -555,3 +555,10 @@ describe("server model preferences", () => {
     expect(decodeServerSettingsPatch(input)).toEqual(input);
   });
 });
+
+describe("legacy pruned settings compatibility", () => {
+  it("ignores removed guestSharingEnabled when decoding persisted settings", () => {
+    const decoded = decodeServerSettings({ guestSharingEnabled: true });
+    expect(decoded).not.toHaveProperty("guestSharingEnabled");
+  });
+});

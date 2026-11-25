@@ -9,8 +9,8 @@ The environment issues its own sessions and enforces their capabilities. See
   narrow a grant, never widen it. Client labels and device metadata have no authorization role.
 - **`access:write` hands out what the session holds and revokes anything.** Every route that
   returns a credential to the caller requires `access:write` and every scope that credential
-  carries: a pairing link, an MCP sign-in approval, a link code from a linked environment, and a
-  guest link (which reads a thread). Revoking is not capped by the caller's scopes.
+  carries: a pairing link, an MCP sign-in approval, and a link code from a linked environment.
+  Revoking is not capped by the caller's scopes.
 - **Why the default grant includes management scopes.** `terminal:operate` and
   `orchestration:operate` already grant OS-user execution (which can invoke `t3 auth session issue`),
   so withholding access or relay management from the default grant would not be a real boundary.
@@ -39,10 +39,6 @@ The environment issues its own sessions and enforces their capabilities. See
 
 ## Non-standard principals
 
-- **Guest links are not sessions.** [GuestShareService](../../apps/server/src/guest/GuestShareService.ts)
-  issues HMAC tokens bound to one share in the thread projection—never `SessionStore` rows—so no
-  RPC, WebSocket, or MCP route can accept one. Closing, replacing, or archiving the share revokes
-  every token.
 - **MCP clients (`mcp-client`) are a separate audience.** Outside agents authenticate on `/mcp` via
   PKCE OAuth ([McpOAuth](../../apps/server/src/auth/McpOAuth.ts)), with stateless client
   registration so unauthenticated callers cannot grow server state. Users grant read-only access or

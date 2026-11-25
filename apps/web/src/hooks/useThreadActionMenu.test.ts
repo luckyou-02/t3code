@@ -156,7 +156,6 @@ const createMenu = (options: { readonly onFind?: (threadRef: typeof target) => v
     projectCwd: "/project",
     onStartRename: () => recordEffect("rename"),
     onFind: options.onFind,
-    canShareWithGuest: false,
   });
 
 beforeEach(() => {

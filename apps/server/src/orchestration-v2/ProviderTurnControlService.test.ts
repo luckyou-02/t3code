@@ -148,7 +148,6 @@ function layerProjectionStore(
       getForkSourceRunIds: () => Effect.die("unused getForkSourceRunIds"),
       getThreadTitles: () => Effect.die("unused getThreadTitles"),
       getThreadLinkMetadata: () => Effect.die("unused getThreadLinkMetadata"),
-      findGuestShareThreadId: () => Effect.die("unused findGuestShareThreadId"),
       getThread: () => Effect.die("unused getThread"),
       findThread: () => Effect.die("unused findThread"),
       getSettlementCandidates: () => Effect.die("unused getSettlementCandidates"),

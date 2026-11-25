@@ -40,7 +40,7 @@ const DOC_RULES = [
   {
     files: "SECURITY.md",
     applyTo:
-      "{apps/server/src/auth,apps/server/src/mcp,apps/server/src/guest,apps/server/src/assets,apps/server/src/peer,apps/server/src/cloud,apps/server/src/policy}/**/*.ts",
+      "{apps/server/src/auth,apps/server/src/mcp,apps/server/src/assets,apps/server/src/peer,apps/server/src/cloud,apps/server/src/policy}/**/*.ts",
     instructions:
       "Check security boundary changes against the trust model and real-finding criteria in SECURITY.md.",
   },

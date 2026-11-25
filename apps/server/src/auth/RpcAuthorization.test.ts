@@ -348,37 +348,29 @@ it.effect("pairs a client with a linked environment only for one that may hand o
   }).pipe(Effect.scoped),
 );
 
-it.effect("hands out a link code or a guest link only within what the session itself holds", () =>
+it.effect("hands out a link code only within what the session itself holds", () =>
   Effect.gen(function* () {
     const group = WsRpcGroup.omit(
       ...[...WsRpcGroup.requests.keys()].filter(
         (
           tag,
-        ): tag is Exclude<
-          keyof typeof RPC_REQUIRED_SCOPES,
-          typeof WS_METHODS.peerLinksPairLink | typeof WS_METHODS.guestShareCreate
-        > => tag !== WS_METHODS.peerLinksPairLink && tag !== WS_METHODS.guestShareCreate,
+        ): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.peerLinksPairLink> =>
+          tag !== WS_METHODS.peerLinksPairLink,
       ),
     );
     let handled = 0;
     const environmentId = EnvironmentId.make("environment-box");
-    const threadId = ThreadId.make("thread-1");
-    const handlers = Layer.mergeAll(
-      group.toLayerHandler(WS_METHODS.peerLinksPairLink, () =>
-        Effect.sync(() => {
-          handled++;
-          return {
-            type: "unsupported" as const,
-            reason: "link_access" as const,
-            environmentId,
-            label: "Box",
-            urls: [],
-          };
-        }),
-      ),
-      group.toLayerHandler(WS_METHODS.guestShareCreate, () =>
-        Effect.sync(() => handled++).pipe(Effect.andThen(Effect.die("no share in this test"))),
-      ),
+    const handlers = group.toLayerHandler(WS_METHODS.peerLinksPairLink, () =>
+      Effect.sync(() => {
+        handled++;
+        return {
+          type: "unsupported" as const,
+          reason: "link_access" as const,
+          environmentId,
+          label: "Box",
+          urls: [],
+        };
+      }),
     );
     const clientWith = (scopes: Parameters<typeof RpcAuthorization.layer>[0]) =>
       RpcTest.makeClient(group).pipe(
@@ -391,9 +383,6 @@ it.effect("hands out a link code or a guest link only within what the session it
       yield* manager[WS_METHODS.peerLinksPairLink]({ environmentId, access: "read-only" }).pipe(
         Effect.flip,
       ),
-    ).toMatchObject({ requiredPermission: AuthOrchestrationReadScope });
-    expect(
-      yield* manager[WS_METHODS.guestShareCreate]({ threadId }).pipe(Effect.flip),
     ).toMatchObject({ requiredPermission: AuthOrchestrationReadScope });
 
     const supervisor = yield* clientWith([
@@ -413,8 +402,6 @@ it.effect("hands out a link code or a guest link only within what the session it
       (yield* supervisor[WS_METHODS.peerLinksPairLink]({ environmentId, access: "auto" })).type,
     ).toBe("unsupported");
     expect(handled).toBe(1);
-    yield* supervisor[WS_METHODS.guestShareCreate]({ threadId }).pipe(Effect.exit);
-    expect(handled).toBe(2);
   }).pipe(Effect.scoped),
 );
 

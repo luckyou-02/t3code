@@ -196,8 +196,7 @@ export function deriveThreadQueueWorkflowState(
     const message = projection.messages.find((candidate) => candidate.id === run.userMessageId);
     return {
       run,
-      // A queued guest message shows the guest's words; the agent still gets the attributed text.
-      text: message?.context?.guest?.text ?? message?.text ?? resolve(msg("Queued message")),
+      text: message?.text ?? resolve(msg("Queued message")),
       attachments: message?.attachments ?? [],
       messageId: run.userMessageId,
       ...(message?.context ? { context: message.context } : {}),

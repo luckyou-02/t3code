@@ -17,7 +17,6 @@ import { APP_DISPLAY_NAME, APP_VERSION } from "../branding";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
-import { GuestShareDialogHost } from "../components/chat/GuestShareControls";
 import { AddProjectToMachineDialogHost } from "../components/AddProjectToMachineDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { WorktreeLayoutApprovalDialogHost } from "../components/WorktreeLayoutApprovalDialogHost";
@@ -46,7 +45,6 @@ import {
 import { useUiStateStore } from "../uiStateStore";
 import { configureClientTracing } from "../observability/clientTracing";
 import { resolveInitialServerAuthGateState } from "../environments/primary";
-import { GUEST_PAGE_PATH } from "../guestPage";
 import { hasHostedPairingRequest, isHostedStaticApp } from "../hostedPairing";
 import { useHostedPromptLinkLanding } from "../components/promptLinks/HostedPromptLinkLanding";
 import { isLocalEnvironmentDisabled } from "../localEnvironment";
@@ -58,16 +56,6 @@ import { isChunkLoadError } from "../lib/chunkReloadGuard";
 
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
-    // Guest links open on the owner's tunnel host in a browser with no T3 session, and must
-    // not trigger pairing or an environment connection.
-    if (location.pathname === GUEST_PAGE_PATH) {
-      return {
-        authGateState: {
-          status: "guest",
-        } as const,
-      };
-    }
-
     if (location.pathname === "/pair" && hasHostedPairingRequest(new URL(window.location.href))) {
       return {
         authGateState: {
@@ -147,8 +135,6 @@ function RootRouteBranch() {
     authGateState.status === "hosted-static",
   );
 
-  if (pathname === GUEST_PAGE_PATH) return <Outlet />;
-
   if (pathname === "/pair" || pathname === "/connect-agent") {
     return <Outlet />;
   }
@@ -180,7 +166,6 @@ function RootRouteBranch() {
       <ConfirmDialogHost />
       <WorktreeLayoutApprovalDialogHost />
       <CustomSnoozeDialogHost />
-      <GuestShareDialogHost />
       <ProjectCloneToastCoordinator />
       <AddProjectToMachineDialogHost />
       {import.meta.env.DEV && primaryEnvironmentAuthenticated ? <DevReplayHost /> : null}

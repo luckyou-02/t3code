@@ -63,7 +63,7 @@ export function useCommandPaletteThreadActions(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly projectCwd: string | null;
 }): Array<CommandPaletteActionItem | CommandPaletteSubmenuItem> {
-  const { readMenu } = useThreadActionMenu({ ...input, canShareWithGuest: false });
+  const { readMenu } = useThreadActionMenu(input);
   const menu = readMenu();
   if (!menu) return [];
 

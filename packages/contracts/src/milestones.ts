@@ -1,8 +1,6 @@
 import * as Schema from "effect/Schema";
 
 import {
-  GuestMessageId,
-  GuestShareId,
   IsoDateTime,
   ProjectId,
   RunId,
@@ -23,7 +21,7 @@ export type MilestoneId = typeof MilestoneId.Type;
 
 /** Who caused a milestone, as far as the server knows. */
 export const MilestoneActor = Schema.Struct({
-  type: Schema.Literals(["user", "agent", "system", "guest"]),
+  type: Schema.Literals(["user", "agent", "system"]),
   id: Schema.optional(TrimmedNonEmptyString),
   label: Schema.optional(TrimmedNonEmptyString),
 });
@@ -75,20 +73,6 @@ export const MilestoneEvent = Schema.Union([
     requestId: RuntimeRequestId,
     kind: MilestoneInputKind,
     resolution: Schema.Literals(["resolved", "expired", "cancelled"]),
-  }),
-  Schema.Struct({
-    ...MilestoneEnvelope.fields,
-    type: Schema.Literal("thread.guest_request"),
-    shareId: GuestShareId,
-    guestMessageId: GuestMessageId,
-  }),
-  Schema.Struct({
-    ...MilestoneEnvelope.fields,
-    type: Schema.Literal("thread.guest_request_resolved"),
-    shareId: GuestShareId,
-    guestMessageId: GuestMessageId,
-    /** `closed` when the link was closed or replaced with the request still waiting. */
-    resolution: Schema.Literals(["sent", "dismissed", "closed"]),
   }),
   Schema.Struct({
     ...MilestoneEnvelope.fields,
@@ -145,8 +129,6 @@ export const MilestoneEventType = Schema.Literals([
   "thread.run_settled",
   "thread.needs_input",
   "thread.input_resolved",
-  "thread.guest_request",
-  "thread.guest_request_resolved",
   "pr.watch_wake",
   "workflow.run_started",
   "workflow.needs_input",
