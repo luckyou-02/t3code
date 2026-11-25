@@ -9,7 +9,7 @@ The environment issues its own sessions and enforces their capabilities. See
   narrow a grant, never widen it. Client labels and device metadata have no authorization role.
 - **`access:write` hands out what the session holds and revokes anything.** Every route that
   returns a credential to the caller requires `access:write` and every scope that credential
-  carries: a pairing link, an MCP sign-in approval, and a link code from a linked environment.
+  carries: a pairing link or an MCP sign-in approval.
   Revoking is not capped by the caller's scopes.
 - **Why the default grant includes management scopes.** `terminal:operate` and
   `orchestration:operate` already grant OS-user execution (which can invoke `t3 auth session issue`),
@@ -43,8 +43,7 @@ The environment issues its own sessions and enforces their capabilities. See
   PKCE OAuth ([McpOAuth](../../apps/server/src/auth/McpOAuth.ts)), with stateless client
   registration so unauthenticated callers cannot grow server state. Users grant read-only access or
   a runtime-mode ceiling rather than raw scopes. Every non-`/mcp` HTTP and WebSocket route rejects
-  `mcp-client` sessions (except the read-only thread relay and client-pairing routes restricted to
-  [peer links](./05_remote.md#peer-links)). Every MCP tool must statically declare its access level in
+  `mcp-client` sessions. Every MCP tool must statically declare its access level in
   [`McpToolAccess.ts`](../../apps/server/src/mcp/McpToolAccess.ts), and thread-only tools must still
   refuse outside callers in handlers—hiding from tool listings is only discovery. A workflow run
   picks its own modes, so only a caller at the broadest mode a thread may run in here (full access,
@@ -63,11 +62,6 @@ The environment issues its own sessions and enforces their capabilities. See
   read. A command that waited for another one's turn is checked again, who asked, file and
   approval, before it starts; one refused then ran nothing, so the project's `remove` does not run
   for it either.
-- **Peer-link client pairing.** Only a full-access peer link may mint a one-time client pairing on
-  the linked environment (since full-access agents can already run `t3 auth pairing create`). The
-  linked side enforces this itself, and the operation stays a human-triggered RPC/HTTP route rather
-  than an MCP tool. The same route mints a code that links another environment at a chosen access
-  level, and the linking side's RPC requires the caller to hold that level's scopes.
 
 ### Reusable dev credential
 

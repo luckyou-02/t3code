@@ -1594,22 +1594,7 @@ describe("MessagesTimeline agent messages", () => {
     setup();
     const onOpenThread = vi.fn();
     await using screen = await renderTimeline(
-      [
-        message(AGENT_MESSAGE, { createdBy: "agent", senderThreadId: SENDER_THREAD_ID }),
-        // Sent from a linked environment this client does not reach.
-        message(
-          "Linked review finished",
-          {
-            createdBy: "agent",
-            linkedSender: {
-              environmentId: EnvironmentId.make("environment-linked"),
-              threadId: SENDER_THREAD_ID,
-              title: "Release lead",
-            },
-          },
-          "message-linked",
-        ),
-      ],
+      [message(AGENT_MESSAGE, { createdBy: "agent", senderThreadId: SENDER_THREAD_ID })],
       { onOpenThread },
     );
     const row = screen.button(/^Agent/);
@@ -1625,10 +1610,6 @@ describe("MessagesTimeline agent messages", () => {
 
     await click(screen.button(/^Agent/));
     expect(screen.text()).not.toContain("drops the index");
-
-    // The linked sender shows the title it sent, and its thread cannot be opened from here.
-    await click(screen.button(/^Release lead/));
-    expect(screen.buttons("Open thread")).toHaveLength(0);
   });
 
   it("leaves messages sent by T3 Code as full bubbles", async () => {

@@ -15,7 +15,6 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
 import { Link } from "@tanstack/react-router";
 import { useQuietThreadShell } from "../../state/entities";
-import { useEnvironment } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
@@ -462,12 +461,10 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   const m = useMessages();
   const { onImageExpand, onFileOpen } = ctx;
   const coarsePointer = useMediaQuery({ pointer: "coarse" });
-  // A linked environment's agent sent it from a thread there.
   const senderRef =
-    row.message.linkedSender ??
-    (row.message.senderThreadId === undefined
+    row.message.senderThreadId === undefined
       ? null
-      : scopeThreadRef(ctx.activeThreadEnvironmentId, row.message.senderThreadId));
+      : scopeThreadRef(ctx.activeThreadEnvironmentId, row.message.senderThreadId);
   const resources = selectMessageImageResources(row.message.attachments);
   const previewUrls = useAssetUrls(ctx.activeThreadEnvironmentId, resources);
   const [projectPreviews] = useState(createMessageAttachmentPreviewProjector);
@@ -498,14 +495,10 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   const [expanded, setExpanded] = useState(false);
   const revealFoldRef = findRevealRef(() => setExpanded(true));
   const senderShell = useQuietThreadShell(folded ? senderRef : null);
-  const senderTitle = senderShell?.title.trim() || row.message.linkedSender?.title.trim();
+  const senderTitle = senderShell?.title.trim();
   const senderLabel =
     senderTitle || gt("Agent", { $context: "sender of a message from another agent" });
-  // Only an environment this client is connected to can open the sender's thread there.
-  const linkedSenderEnvironment = useEnvironment(row.message.linkedSender?.environmentId ?? null);
-  const canOpenSender =
-    senderRef !== null &&
-    (row.message.linkedSender === undefined || linkedSenderEnvironment !== null);
+  const canOpenSender = senderRef !== null;
   const resolvedContext = resolveUserMessageContext({ ...row.message, text: userMessage.text });
   const previewImages = userImages.filter((image) => image.name.startsWith("preview-annotation-"));
   const revertTurnCount = row.revertTurnCount;

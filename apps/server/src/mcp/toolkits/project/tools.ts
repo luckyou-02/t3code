@@ -6,7 +6,6 @@ import {
   TrimmedNonEmptyString,
   ThreadId,
   RunId,
-  OrchestrationV2DelegatedFrom,
   OrchestrationV2WorkflowOrigin,
   OrchestrationV2RunStatus,
   OrchestrationV2ThreadLaunchWorkspaceStrategy,
@@ -17,7 +16,6 @@ import {
   ProjectUpdatePayload,
   ProjectId,
   OrchestratorMcpClientRequestId,
-  OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
@@ -56,7 +54,6 @@ const ProjectListTool = Tool.make("t3_project_list", {
   ...shared,
   description: "List projects. Pages can shift.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     cursor: Schema.optional(NonNegativeInt),
     limit: Schema.optional(clampedPositiveInt(100)),
   }),
@@ -71,7 +68,6 @@ const ProjectReadTool = Tool.make("t3_project_read", {
   ...shared,
   description: "Read one project: workspace and saved scripts.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     projectId: ProjectId,
   }),
 })
@@ -82,7 +78,6 @@ const ProjectCreateTool = Tool.make("t3_project_create", {
   description:
     "Register a project folder. `createWorkspaceRootIfMissing` creates it; a registered folder is rejected. No `workspaceRoot`: makes a git repo from `title` with README, icon, first commit (`commitError` on failure; project still exists). Clone first with `t3_project_clone` if needed.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     ...ProjectCreatePayload.fields,
     workspaceRoot: Schema.optional(ProjectCreatePayload.fields.workspaceRoot),
   }),
@@ -93,7 +88,6 @@ const ProjectUpdateTool = Tool.make("t3_project_update", {
   ...shared,
   description: "Update one project's settings. Omitted fields are unchanged.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     projectId: ProjectId,
     ...ProjectUpdatePayload.fields,
   }),
@@ -102,7 +96,6 @@ const ProjectDeleteTool = Tool.make("t3_project_delete", {
   ...shared,
   description: "Delete one project. Nonempty needs `force: true`. Folder on disk stays.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     projectId: ProjectId,
     force: Schema.optionalKey(Schema.Boolean),
   }),
@@ -117,7 +110,6 @@ const ProjectCloneTool = Tool.make("t3_project_clone", {
   description:
     "Clone a repository (`destinationPath` new or empty). Register after with `t3_project_create`, with the same `environmentId`.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     ...SourceControlCloneRepositoryInput.fields,
   }),
   success: SourceControlCloneRepositoryResult,
@@ -133,7 +125,6 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
   description:
     "Create a top-level thread in its workspace before starting. Task in `message`. Omit `projectId`, model and modes to inherit yours (outside a thread, pass `projectId` or `scratch`); modes cannot exceed yours. On error or lost reply, reuse `clientRequestId`. Follow it with `t3_thread_read` or `t3_thread_wait`. Mention it with its `link`.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     projectId: Schema.optional(ProjectId),
     scratch: Schema.optional(
       Schema.Boolean.annotate({
@@ -165,7 +156,6 @@ const ThreadLaunchTool = Tool.make("t3_thread_launch", {
     ),
     clientRequestId: Schema.optional(OrchestratorMcpClientRequestId),
     /** Set by a linked environment launching its agent's delegated task here; ignored otherwise. */
-    delegatedFrom: Schema.optional(OrchestrationV2DelegatedFrom),
     /** Set by a linked environment whose workflow run this thread is a step of; ignored otherwise. */
     workflowRun: Schema.optional(OrchestrationV2WorkflowOrigin),
   }),

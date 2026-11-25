@@ -6,26 +6,14 @@ import { ComposerHandleContext } from "../../composerHandleContext";
 import type { SideChatParentPanel } from "../../lib/sideChatPane";
 import { useQuietThreadShell } from "../../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../../state/shell";
-import { linkedThreadRouteParams, linkedThreadSurface } from "../../linkedThreadSurface";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import ChatView from "../ChatView";
 import { BackgroundThreadContext } from "../chat/backgroundThread";
-import { LinkedThread } from "../chat/LinkedThreadPane";
-import { useWorkflowThreadOpen } from "./useWorkflowThreadOpen";
 
-/** Opens the thread as a full thread view; `linked` reads it through `viaEnvironmentId`. */
-export function useOpenThreadPage(): (
-  threadRef: ScopedThreadRef,
-  viaEnvironmentId?: EnvironmentId,
-) => void {
+export function useOpenThreadPage(): (threadRef: ScopedThreadRef) => void {
   const navigate = useNavigate();
-  return (threadRef, viaEnvironmentId) =>
-    void (viaEnvironmentId === undefined
-      ? navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(threadRef) })
-      : navigate({
-          to: "/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId",
-          params: linkedThreadRouteParams({ viaEnvironmentId, ...threadRef }),
-        }));
+  return (threadRef) =>
+    void navigate({ to: "/$environmentId/$threadId", params: buildThreadRouteParams(threadRef) });
 }
 
 /** What a transcript's tab is called: the step its agent did, or the thread's own title. */
@@ -43,27 +31,11 @@ export function WorkflowThreadTabLabel({ threadRef }: { readonly threadRef: Scop
  * person can read what the agent did and talk to it without leaving the run.
  */
 export default function WorkflowThreadPane({
-  viaEnvironmentId,
   threadRef,
 }: {
-  /** The environment running the workflow. */
-  readonly viaEnvironmentId: EnvironmentId;
+  readonly viaEnvironmentId?: EnvironmentId;
   readonly threadRef: ScopedThreadRef;
 }) {
-  const threadOpen = useWorkflowThreadOpen(viaEnvironmentId, threadRef.environmentId);
-  if (threadOpen.open === "linked" && threadOpen.label !== null) {
-    const surface = linkedThreadSurface({
-      viaEnvironmentId,
-      ...threadRef,
-      label: threadOpen.label,
-      title: null,
-    });
-    return <LinkedThread key={surface.id} panelRef={null} surface={surface} visible />;
-  }
-  return <ConnectedWorkflowThreadPane threadRef={threadRef} />;
-}
-
-function ConnectedWorkflowThreadPane({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
   const gt = useGT();
   const openThreadPage = useOpenThreadPage();
   const shell = useQuietThreadShell(threadRef);

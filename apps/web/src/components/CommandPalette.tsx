@@ -142,7 +142,6 @@ import {
 } from "../state/environments";
 import {
   useAnyEnvironmentHiding,
-  useDelegatedUnderParent,
   useHiddenThreadKeys,
   useEnvironmentThreadRefs,
   useProjects,
@@ -540,13 +539,11 @@ function OpenCommandPaletteDialog(props: {
     await copyThreadReference(activeThreadReferenceCopyTarget);
   };
   // Threads the sidebar shows under their parent open there, so opening a project never lands on one.
-  const delegatedUnderParent = useDelegatedUnderParent();
   const threads = useVisibleThreadShells().filter(
     (thread) =>
       !isShownUnderParent(
         { environmentId: thread.environmentId, threadId: thread.id },
         thread.lineage,
-        delegatedUnderParent,
       ),
   );
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);

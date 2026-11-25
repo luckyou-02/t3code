@@ -167,30 +167,6 @@ describe("searchSettings", () => {
     expect(available.map((item) => item.id).filter((id) => gatedIds.has(id))).toEqual([]);
   });
 
-  it("finds linked environments on a remote host without local maintenance access", () => {
-    const availability = {
-      hasEnvironment: true,
-      hasProviderSettingsEnvironment: true,
-      canManageLocalBackend: false,
-      localEnvironmentDisabled: true,
-      isWslSettingsRowVisible: false,
-      hasThreadAutoSettlement: false,
-    };
-    const results = (hasPeerLinkHost: boolean) =>
-      searchSettings(
-        "linked environments",
-        filterAvailableSettingsSearchItems({ ...availability, hasPeerLinkHost }),
-      );
-    expect(results(false).map((item) => item.id)).not.toContain("linked-environments");
-    expect(results(true)).toContainEqual(
-      expect.objectContaining({
-        id: "linked-environments",
-        to: "/settings/connections",
-        targetId: "linked-environments",
-      }),
-    );
-  });
-
   it("finds the Welcome page only where a primary computer can open it", () => {
     const availability = {
       hasEnvironment: true,

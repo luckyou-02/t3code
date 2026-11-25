@@ -28,7 +28,6 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
 | Full-scope client (desktop, paired browser or phone, `t3 auth session issue`) | Pairing, token exchange                                                  | Everything the server's OS user can do. This is the default grant.                                                    |
 | Narrow client                                                                 | Pairing link with explicit scopes                                        | Only the RPCs and routes its scopes allow. Can never widen its own grant.                                             |
 | MCP client (outside agent, subject `mcp-client`)                              | OAuth on `/mcp`                                                          | Only `/mcp`, within a read-only grant or a runtime-mode ceiling. Every other route rejects it.                        |
-| Linked environment (peer link)                                                | OAuth client `t3code-peer-link`                                          | Work it starts carries an immutable `linkOrigin` and never exceeds the access it was paired with.                     |
 | Agent run by T3                                                               | Thread's runtime mode and thread credential                              | Within its runtime mode, managed policy, and the MCP access declared per tool.                                        |
 | Signed asset URL                                                              | Minted with `filesystem:read`                                            | One file, by device and inode identity, until it expires.                                                             |
 | Webhook sender                                                                | A task's webhook URL, plus its signing secret when the task requires one | Start that one task's run with content of its choosing. Nothing in the request is trusted beyond the signature check. |
@@ -43,11 +42,10 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
    declared scope; pairing or token exchange widening a grant; an
    `mcp-client` session reaching a non-`/mcp` route; a read-only MCP grant
    calling a write tool.
-3. **Mode or policy escalation.** An agent, MCP client, or peer link acting
-   above its runtime-mode ceiling, `linkOrigin`, `T3-Mode-Limit`, or managed
-   policy.
+3. **Mode or policy escalation.** An agent or MCP client acting
+   above its runtime-mode ceiling or managed policy.
 4. **Revocation that doesn't take effect.** A revoked session, device key,
-   pairing link, or peer link that still works. Documented exception: signed
+   or pairing link that still works. Documented exception: signed
    asset URLs last until they expire.
 5. **Credential exposure.** Tokens or secrets reaching logs, traces, telemetry,
    socket URLs (outside short-lived tickets), the access read model,

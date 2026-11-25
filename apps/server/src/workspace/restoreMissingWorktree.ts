@@ -1,6 +1,5 @@
 import {
   ThreadId,
-  type OrchestrationV2LinkOrigin,
   type Project,
   type ProjectId,
   type TerminalCwdNotFoundError,
@@ -58,7 +57,6 @@ interface WorktreeThread {
   readonly projectId: ProjectId;
   readonly worktreePath: string | null;
   readonly branch: string | null;
-  readonly linkOrigin?: OrchestrationV2LinkOrigin | undefined;
 }
 
 export const makeRestoreMissingWorktree = Effect.gen(function* () {
@@ -204,7 +202,7 @@ export const makeRestoreMissingWorktree = Effect.gen(function* () {
         .restore({
           taskFolder,
           branch,
-          projectCommands: TaskFolders.projectCommandsForLink(thread.linkOrigin),
+          projectCommands: "permitted",
           recreate: (checkout) =>
             Effect.logWarning("recreating missing worktree", {
               threadId: thread.id,

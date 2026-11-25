@@ -9,9 +9,7 @@ import {
   type ModelSelection,
   type OrchestrationV2Actor,
   type OrchestrationV2CreationSource,
-  type OrchestrationV2DelegatedFrom,
   type OrchestrationV2WorkflowOrigin,
-  type OrchestrationV2LinkOrigin,
   type OrchestrationV2ProviderThreadNativeMetadata,
   type OrchestrationV2ThreadProjection,
   type ProviderDriverKind,
@@ -122,16 +120,14 @@ export interface ThreadLaunchInput {
   readonly createdBy: OrchestrationV2Actor;
   readonly creationSource: OrchestrationV2CreationSource;
   /** The linked environment this launch is for, if one asked for it. */
-  readonly linkOrigin?: OrchestrationV2LinkOrigin;
   /** The parent there, when that environment's agent delegated this as a task. */
-  readonly delegatedFrom?: OrchestrationV2DelegatedFrom;
   /** The workflow run this thread is an agent step of. */
   readonly workflowRun?: OrchestrationV2WorkflowOrigin;
 }
 
 type PreparationInput = Pick<
   ThreadLaunchInput,
-  "commandId" | "projectId" | "workspaceStrategy" | "initialMessage" | "linkOrigin"
+  "commandId" | "projectId" | "workspaceStrategy" | "initialMessage"
 > & {
   readonly reusedWorktree?: { readonly baseRef: string };
   /** Set when an agent asked for this run, with the thread it asked from if it has one. */
@@ -329,8 +325,7 @@ const make = Effect.gen(function* () {
     input: PreparationInput,
     threadId: ThreadId,
   ) {
-    if (input.askedByAgent === undefined)
-      return TaskFolders.projectCommandsForLink(input.linkOrigin);
+    if (input.askedByAgent === undefined) return "permitted";
     const live = (id: ThreadId) =>
       threads.getThreadShell(id).pipe(
         Effect.map((shell) => (shell === null || shell.deletedAt !== null ? null : shell)),
@@ -339,7 +334,6 @@ const make = Effect.gen(function* () {
     const asker = yield* live(input.askedByAgent.threadId ?? threadId);
     // A thread that cannot be read might be below Full access, the one that asked included.
     return TaskFolders.projectCommandsForAgent(
-      input.linkOrigin,
       asker ?? { runtimeMode: "approval-required", interactionMode: "default" },
       maxRuntimeMode,
     );
@@ -1538,10 +1532,6 @@ const make = Effect.gen(function* () {
                 ...(input.importedNativeThread === undefined
                   ? {}
                   : { importedNativeThread: input.importedNativeThread }),
-                ...(input.linkOrigin === undefined ? {} : { linkOrigin: input.linkOrigin }),
-                ...(input.delegatedFrom === undefined
-                  ? {}
-                  : { delegatedFrom: input.delegatedFrom }),
                 ...(input.workflowRun === undefined ? {} : { workflowRun: input.workflowRun }),
                 createdBy: input.createdBy,
                 creationSource: input.creationSource,
@@ -1654,7 +1644,7 @@ const make = Effect.gen(function* () {
                   : workspaceStrategy;
             // The thread's link decides, as it does when preparation is retried: a request
             // that reuses a thread names none.
-            const { linkOrigin: _requestLinkOrigin, ...preparation } = input;
+            const preparation = input;
             // The accepted run's message says who asked, as it does when preparation is
             // retried: a request that repeats the launch may name someone else.
             const acceptedRun = current?.runs.find((run) => run.id === runId);
@@ -1680,9 +1670,6 @@ const make = Effect.gen(function* () {
                 ...preparation,
                 ...askedBy,
                 workspaceStrategy: preparationStrategy,
-                ...(committedThread.linkOrigin === undefined
-                  ? {}
-                  : { linkOrigin: committedThread.linkOrigin }),
               },
               threadId,
               runId,
@@ -1778,7 +1765,6 @@ const make = Effect.gen(function* () {
         commandId: input.commandId,
         projectId: thread.projectId,
         workspaceStrategy: reuse?.strategy ?? workspacePreparation,
-        ...(thread.linkOrigin === undefined ? {} : { linkOrigin: thread.linkOrigin }),
         ...askedByAgent(thread, message),
         ...(reuse === null ? {} : { reusedWorktree: reuse.reusedWorktree }),
         ...(message === undefined

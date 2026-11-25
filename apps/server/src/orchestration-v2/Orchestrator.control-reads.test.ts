@@ -2279,25 +2279,12 @@ it.effect("records a secret and a link card without reading the thread's history
         secretStatus: "pending",
       })
       .pipe(recordStatements);
-    yield* orchestrator
-      .dispatch({
-        ...card,
-        type: "link_request.record",
-        commandId: CommandId.make("record-long-cards:link"),
-        turnItemId: TurnItemId.make("item:long-cards:link"),
-        url: "https://example.test",
-        linkStatus: "pending",
-      })
-      .pipe(recordStatements);
     const { turnItems } = yield* projections.getThreadRecords(threadId, ["turnItems"], {
-      turnItemTypes: ["secret_request", "link_request"],
+      turnItemTypes: ["secret_request"],
     });
     assert.deepEqual(
       turnItems.map((item) => [item.type, item.providerTurnId]),
-      [
-        ["secret_request", providerTurnId],
-        ["link_request", providerTurnId],
-      ],
+      [["secret_request", providerTurnId]],
     );
 
     // A card reads its own run, so the rows and VM steps of its reads, which are deterministic,

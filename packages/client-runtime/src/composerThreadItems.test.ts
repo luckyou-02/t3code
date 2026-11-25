@@ -46,7 +46,6 @@ it("ranks thread mentions like the palette and leaves out subagent threads", () 
       shell("other-environment", "Model docs", { environmentId: EnvironmentId.make("env-other") }),
     ],
     environmentId,
-    linkedEnvironments: new Map(),
     excludeThreadId: null,
     query: "model",
     now: Date.parse("2026-10-23T00:00:00.000Z"),
@@ -72,37 +71,12 @@ it("offers the composer thread's own used side chats, but not other threads' sid
       }),
     ],
     environmentId,
-    linkedEnvironments: new Map(),
     excludeThreadId: ThreadId.make("main"),
     query: "slow",
     now: Date.parse("2026-10-23T00:00:00.000Z"),
   });
   expect(items.map(({ thread, description }) => ({ id: thread.threadId, description }))).toEqual([
     { id: "mine", description: "Side chat" },
-  ]);
-});
-
-it("also offers threads on linked machines, naming the machine, but no other machine's", () => {
-  const vps = EnvironmentId.make("env-vps");
-  const items = matchComposerThreadItems({
-    shells: [
-      shell("here", "Deploy script"),
-      shell("there", "Deploy script", { environmentId: vps }),
-      shell("unlinked", "Deploy notes", { environmentId: EnvironmentId.make("env-unlinked") }),
-    ],
-    environmentId,
-    linkedEnvironments: new Map([[vps, "Hetzner VPS"]]),
-    excludeThreadId: null,
-    query: "deploy",
-    now: Date.parse("2026-10-23T00:00:00.000Z"),
-  });
-  expect(items.map(({ thread, label, description }) => ({ thread, label, description }))).toEqual([
-    { thread: { environmentId, threadId: "here" }, label: "Deploy script", description: "Thread" },
-    {
-      thread: { environmentId: vps, threadId: "there" },
-      label: "Deploy script",
-      description: "Thread on Hetzner VPS",
-    },
   ]);
 });
 
@@ -117,7 +91,6 @@ describe("matchComposerEnvironmentItems", () => {
     expect(
       matchComposerEnvironmentItems({
         environments,
-        linkedEnvironments: new Map(),
         environmentId: EnvironmentId.make("env-here"),
         query: "  vps ",
       }),
@@ -134,7 +107,6 @@ describe("matchComposerEnvironmentItems", () => {
     expect(
       matchComposerEnvironmentItems({
         environments,
-        linkedEnvironments: new Map(),
         environmentId: EnvironmentId.make("env-here"),
         query: "lap",
       }),
@@ -142,41 +114,9 @@ describe("matchComposerEnvironmentItems", () => {
     expect(
       matchComposerEnvironmentItems({
         environments,
-        linkedEnvironments: new Map(),
         environmentId: EnvironmentId.make("env-here"),
         query: "",
       }),
     ).toEqual([]);
-  });
-
-  it("offers machines the composer's environment links to that this client is not paired with", () => {
-    expect(
-      matchComposerEnvironmentItems({
-        environments: [],
-        linkedEnvironments: new Map([
-          [EnvironmentId.make("env-here"), "Laptop"],
-          [EnvironmentId.make("env-build"), "buildbox"],
-        ]),
-        environmentId: EnvironmentId.make("env-here"),
-        query: "build",
-      }),
-    ).toEqual([
-      {
-        id: "environment:env-build",
-        type: "environment",
-        environmentId: "env-build",
-        machine: "server",
-        label: "buildbox",
-        description: "Machine",
-      },
-    ]);
-    expect(
-      matchComposerEnvironmentItems({
-        environments,
-        linkedEnvironments: new Map([[EnvironmentId.make("env-vps"), "Hetzner VPS"]]),
-        environmentId: EnvironmentId.make("env-here"),
-        query: "vps",
-      }).map((item) => item.machine),
-    ).toEqual(["cloud"]);
   });
 });

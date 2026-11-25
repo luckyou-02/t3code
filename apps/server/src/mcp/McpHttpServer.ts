@@ -2,7 +2,6 @@ import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -24,7 +23,6 @@ import {
   PreviewAutomationError,
   ProviderInteractionMode,
   RuntimeMode,
-  OrchestrationV2LinkedSender,
   ThreadId,
 } from "@t3tools/contracts";
 
@@ -235,43 +233,6 @@ const withModeLimit = (
     : { ...invocation, client: { ...invocation.client, narrowedTo: limit.value } };
 };
 
-const decodeSenderThread = Schema.decodeUnknownOption(OrchestrationV2LinkedSender);
-
-/** Records the thread a linked environment calls for; a malformed header only loses the name. */
-const withSenderThread = (
-  invocation: McpInvocationContext.McpInvocationScope,
-  request: HttpServerRequest.HttpServerRequest,
-): McpInvocationContext.McpInvocationScope => {
-  const header = request.headers[McpInvocationContext.SENDER_THREAD_HEADER];
-  if (header === undefined || invocation.client?.linked !== true) return invocation;
-  const [environmentId, threadId, title, ...rest] = header.trim().split("/");
-  if (environmentId === undefined || threadId === undefined || title === undefined)
-    return invocation;
-  if (rest.length > 0) return invocation;
-  let decoded: Option.Option<OrchestrationV2LinkedSender>;
-  try {
-    decoded = decodeSenderThread({
-      environmentId: decodeURIComponent(environmentId),
-      threadId: decodeURIComponent(threadId),
-      title: decodeURIComponent(title),
-    });
-  } catch {
-    return invocation;
-  }
-  return Option.isNone(decoded)
-    ? invocation
-    : { ...invocation, client: { ...invocation.client, senderThread: decoded.value } };
-};
-
-// The Linked environments beta is off here: links wait until it is on again.
-const linkedEnvironmentsOff = HttpServerResponse.jsonUnsafe(
-  {
-    error: "linked_environments_off",
-    message: "Linked environments is off on this machine. Turn it on in its Settings → Labs.",
-  },
-  { status: 403, headers: { "cache-control": "no-store" } },
-);
-
 const makeMcpAuthMiddleware = Effect.gen(function* () {
   const registry = yield* McpSessionRegistry.McpSessionRegistry;
   const clients = yield* Effect.serviceOption(McpClientAuthenticator);
@@ -279,11 +240,9 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
   const runtimeModeCeiling = serverSettings.managedPolicy?.limits?.maxRuntimeMode;
   const settingsFlags = serverSettings.getSettings.pipe(
     Effect.map((settings) => ({
-      linkedEnvironments: settings.linkedEnvironmentsEnabled,
       workflows: settings.workflowsEnabled,
     })),
     Effect.orElseSucceed(() => ({
-      linkedEnvironments: false,
       workflows: false,
     })),
   );
@@ -356,11 +315,10 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
         offerOAuth: Option.isSome(clients) && !looksLikeProviderToken(token),
       });
     }
-    const asked = withModeLimit(withSenderThread(invocation, request), request);
+    const asked = withModeLimit(invocation, request);
     if (asked === undefined) return invalidModeLimit;
     const limited = McpInvocationContext.withRuntimeModeCeiling(asked, runtimeModeCeiling);
-    const { linkedEnvironments, workflows } = yield* settingsFlags;
-    if (limited.client?.linked === true && !linkedEnvironments) return linkedEnvironmentsOff;
+    const { workflows } = yield* settingsFlags;
     const origin = Option.getOrUndefined(Option.map(requestUrl(request), (url) => url.origin));
     const forge =
       limited.thread === undefined
@@ -368,7 +326,6 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
         : yield* Cache.get(forgeOfThread, limited.thread.threadId);
     return {
       ...limited,
-      linkedEnvironments,
       workflows,
       origin,
       ...(forge === undefined ? {} : { forge }),
@@ -382,20 +339,10 @@ const makeMcpAuthMiddleware = Effect.gen(function* () {
     const admitted = yield* authenticateRequest(request);
     if (HttpServerResponse.isHttpServerResponse(admitted)) return admitted;
     if (yield* isUndefinedNotification(request)) return HttpServerResponse.empty({ status: 202 });
-    const linkExpiresAt = admitted.client?.linkExpiresAt;
     return yield* httpEffect.pipe(
       Effect.provideService(McpInvocationContext.McpInvocationContext, admitted),
       Effect.map(normalizeMcpHttpResponse),
       Effect.map((response) => endWithSession(response, request, admitted.client)),
-      Effect.map((response) =>
-        linkExpiresAt === undefined
-          ? response
-          : HttpServerResponse.setHeader(
-              response,
-              McpInvocationContext.LINK_EXPIRES_AT_HEADER,
-              DateTime.formatIso(linkExpiresAt),
-            ),
-      ),
     );
   }) satisfies McpAuthMiddleware;
 }).pipe(Effect.withSpan("McpHttpServer.makeAuthMiddleware"));
@@ -1218,7 +1165,7 @@ const layerThemeToolkit = toolkitRegistration(ThemeToolkit, ThemeHandlers.layer)
   Layer.provide(ThreadCommandExecutor.layer),
 );
 
-export const layerProjectRegistration = toolkitRegistration(ProjectToolkit, ProjectHandlers.layer);
+const layerProjectRegistration = toolkitRegistration(ProjectToolkit, ProjectHandlers.layer);
 
 export const layerAttachmentToolkit = toolkitRegistration(
   AttachmentToolkit,

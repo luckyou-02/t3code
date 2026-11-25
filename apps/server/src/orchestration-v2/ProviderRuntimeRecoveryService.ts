@@ -116,11 +116,8 @@ function isNonterminalTurnItemStatus(status: string): boolean {
 function isAppOwnedDelegation(task: {
   readonly origin: OrchestrationV2Subagent["origin"];
   readonly childThreadId: ThreadId | null;
-  readonly remoteChild?: OrchestrationV2Subagent["remoteChild"];
 }): boolean {
-  return (
-    task.origin === "app_owned" && (task.childThreadId !== null || task.remoteChild !== undefined)
-  );
+  return task.origin === "app_owned" && task.childThreadId !== null;
 }
 
 function isAppOwnedDelegationItem(
@@ -760,7 +757,6 @@ export const make = Effect.gen(function* () {
             (candidate.nodeId === null || !messageRequestNodeIds.has(candidate.nodeId)) &&
             !isAppOwnedDelegationItem(candidate) &&
             // A link card waits on the user, not the run, and answers by message.
-            candidate.type !== "link_request" &&
             // The orchestrator queues a steer the provider never reported reading.
             !(
               candidate.type === "user_message" &&

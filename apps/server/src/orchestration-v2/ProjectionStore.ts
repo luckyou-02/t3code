@@ -79,7 +79,6 @@ import {
   RuntimeRequestId,
   CheckpointScopeId,
   CheckpointId,
-  EnvironmentId,
   ThreadId,
   TurnItemId,
   NodeId,
@@ -517,7 +516,6 @@ export interface ActiveShellIndexEntry extends Pick<
   /** False only when no run, request, work item, or watch can make the shell live. */
   readonly mayBeLive: boolean;
   /** Whether it delegated a task to a linked environment, whose clients nest that task under it. */
-  readonly hasRemoteTasks: boolean;
 }
 
 /** What thread listings filter and order an active thread by, without building its shell. */
@@ -527,7 +525,6 @@ export type ActiveThreadListEntry = Pick<
   | "projectId"
   | "title"
   | "lineage"
-  | "delegatedFrom"
   | "settledOverride"
   | "settledAt"
   | "snoozedUntil"
@@ -704,10 +701,6 @@ export interface ProjectionStoreV2Shape {
    * result yet, or cancelled or stopped here without that stop reaching there,
    * including a Stop after the task had its result.
    */
-  readonly getOpenRemoteDelegatedTasks: Effect.Effect<
-    ReadonlyArray<{ readonly parentThreadId: ThreadId; readonly taskId: NodeId }>,
-    ProjectionStoreV2Error
-  >;
   readonly getTurnStartContext: (
     threadId: ThreadId,
     runId: RunId,
@@ -772,7 +765,7 @@ export interface ProjectionStoreV2Shape {
     threadId: ThreadId,
     runId: RunId,
     nodeId: NodeId,
-    cardType: "secret_request" | "link_request",
+    cardType: "secret_request",
   ) => Effect.Effect<
     ProjectionRecords<
       "runs" | "nodes" | "providerThreads" | "providerTurns" | "attempts" | "turnItems"
@@ -1281,7 +1274,6 @@ type ShellThreadRow = {
   readonly blocking_failure_payload_json: string | null;
   readonly pending_request_payload_json: string | null;
   readonly pending_secret_request_payload_json: string | null;
-  readonly pending_link_request_payload_json: string | null;
   readonly latest_user_message_at: string | null;
   readonly latest_user_authored_message_at: string | null;
   readonly has_actionable_proposed_plan: number;
@@ -1832,8 +1824,7 @@ function pendingRuntimeRequestSummary(
 function secretRequestAsPendingInput(
   item: OrchestrationV2TurnItem | null,
 ): OrchestrationV2PendingRuntimeRequestSummary | null {
-  if ((item?.type !== "secret_request" && item?.type !== "link_request") || item.nodeId === null)
-    return null;
+  if (item?.type !== "secret_request" || item.nodeId === null) return null;
   return {
     id: RuntimeRequestId.make(item.id),
     kind: "user_input",
@@ -1843,25 +1834,8 @@ function secretRequestAsPendingInput(
   };
 }
 
-/**
- * A secret card is answered while its agent waits in the run. A link card's
- * agent asked without waiting, so the card waits on the user after its run,
- * until the user writes in the thread again and so has moved past it.
- */
-const waitsOnUser = (
-  item: OrchestrationV2TurnItem,
-  liveRunIds: ReadonlySet<RunId>,
-  latestUserAuthoredMessageAt: DateTime.Utc | null,
-) =>
-  (item.type === "link_request" && linkCardStillAsks(item, latestUserAuthoredMessageAt)) ||
-  (item.type === "secret_request" && item.runId !== null && liveRunIds.has(item.runId));
-
-const linkCardStillAsks = (
-  item: OrchestrationV2TurnItem,
-  latestUserAuthoredMessageAt: DateTime.Utc | null,
-) =>
-  latestUserAuthoredMessageAt === null ||
-  !DateTime.isGreaterThan(latestUserAuthoredMessageAt, item.startedAt ?? item.updatedAt);
+const waitsOnUser = (item: OrchestrationV2TurnItem, liveRunIds: ReadonlySet<RunId>) =>
+  item.type === "secret_request" && item.runId !== null && liveRunIds.has(item.runId);
 
 export function threadShellFromProjection(
   projection: OrchestrationV2ThreadProjection,
@@ -1911,10 +1885,7 @@ export function threadShellFromProjection(
   if (pendingRuntimeRequest === null || pendingRuntimeRequest.kind === "user_input") {
     const waitingCard = secretRequestAsPendingInput(
       projection.turnItems
-        .filter(
-          (item) =>
-            item.status === "waiting" && waitsOnUser(item, liveRunIds, latestUserAuthoredMessageAt),
-        )
+        .filter((item) => item.status === "waiting" && waitsOnUser(item, liveRunIds))
         .toSorted(
           (left, right) =>
             DateTime.toEpochMillis(right.updatedAt) - DateTime.toEpochMillis(left.updatedAt),
@@ -1967,12 +1938,6 @@ export function threadShellFromProjection(
     ...(projection.thread.historyOrigin === undefined
       ? {}
       : { historyOrigin: projection.thread.historyOrigin }),
-    ...(projection.thread.linkOrigin === undefined
-      ? {}
-      : { linkOrigin: projection.thread.linkOrigin }),
-    ...(projection.thread.delegatedFrom === undefined
-      ? {}
-      : { delegatedFrom: projection.thread.delegatedFrom }),
     ...(projection.thread.workflowRun === undefined
       ? {}
       : { workflowRun: projection.thread.workflowRun }),
@@ -2287,12 +2252,6 @@ function shellFromState(input: {
     ...(input.state.thread.historyOrigin === undefined
       ? {}
       : { historyOrigin: input.state.thread.historyOrigin }),
-    ...(input.state.thread.linkOrigin === undefined
-      ? {}
-      : { linkOrigin: input.state.thread.linkOrigin }),
-    ...(input.state.thread.delegatedFrom === undefined
-      ? {}
-      : { delegatedFrom: input.state.thread.delegatedFrom }),
     ...(input.state.thread.workflowRun === undefined
       ? {}
       : { workflowRun: input.state.thread.workflowRun }),
@@ -8578,15 +8537,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 LIMIT 1
               ) AS pending_secret_request_payload_json,
               (
-                SELECT link.payload_json
-                FROM orchestration_v2_projection_turn_items link
-                  INDEXED BY orchestration_v2_projection_turn_items_waiting_link_idx
-                WHERE link.thread_id = t.thread_id
-                  AND link.type = 'link_request' AND link.status = 'waiting'
-                ORDER BY link.updated_at DESC, link.turn_item_id DESC
-                LIMIT 1
-              ) AS pending_link_request_payload_json,
-              (
                 SELECT message.updated_at
                 FROM orchestration_v2_projection_messages message
                 WHERE message.thread_id = t.thread_id
@@ -8962,22 +8912,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 SELECT 1 FROM orchestration_v2_projection_runtime_requests request
                 WHERE request.thread_id = t.thread_id AND request.status = 'pending'
               )
-              AND NOT EXISTS (
-                SELECT 1 FROM orchestration_v2_projection_turn_items link
-                  INDEXED BY orchestration_v2_projection_turn_items_waiting_link_idx
-                WHERE link.thread_id = t.thread_id
-                  AND link.type = 'link_request' AND link.status = 'waiting'
-                  -- linkCardStillAsks: once the user writes after the card, it stops asking.
-                  AND NOT EXISTS (
-                    SELECT 1 FROM orchestration_v2_projection_messages message
-                    WHERE message.thread_id = t.thread_id AND message.role = 'user'
-                      AND json_extract(message.payload_json, '$.createdBy') = 'user'
-                      AND NOT ${isIdleCompactionMessage("message")}
-                      AND message.updated_at > COALESCE(
-                        json_extract(link.payload_json, '$.startedAt'), link.updated_at
-                      )
-                  )
-              )
             ORDER BY t.updated_at ASC, t.thread_id ASC
           `;
             if (rows.length === 0) return [];
@@ -9042,32 +8976,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           }),
         )
         .pipe(Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })));
-
-    const getOpenRemoteDelegatedTasks: ProjectionStoreV2Shape["getOpenRemoteDelegatedTasks"] = sql<{
-      readonly thread_id: string;
-      readonly subagent_id: string;
-    }>`
-      SELECT thread_id, subagent_id FROM orchestration_v2_projection_subagents
-      WHERE origin = 'app_owned'
-        AND child_thread_id IS NULL
-        AND json_type(payload_json, '$.remoteChild') = 'object'
-        AND (
-          json_type(payload_json, '$.result') = 'null'
-          OR (
-            json_extract(payload_json, '$.status') IN ('cancelled', 'interrupted')
-            AND json_type(payload_json, '$.remoteChild.stoppedThere') IS NOT 'true'
-          )
-          OR json_type(payload_json, '$.remoteChild.stoppedThere') = 'false'
-        )
-    `.pipe(
-      Effect.map((rows) =>
-        rows.map((row) => ({
-          parentThreadId: ThreadId.make(row.thread_id),
-          taskId: NodeId.make(row.subagent_id),
-        })),
-      ),
-      Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
-    );
 
     const getThreadsWithPullRequests: ProjectionStoreV2Shape["getThreadsWithPullRequests"] =
       Effect.fn("ProjectionStore.getThreadsWithPullRequests")(
@@ -9145,19 +9053,10 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           row.latest_user_authored_message_at === null
             ? null
             : DateTime.makeUnsafe(row.latest_user_authored_message_at);
-        const waitingCards = [
+        const waitingCards =
           row.pending_secret_request_payload_json === null
-            ? null
-            : yield* decodeTurnItemPayload(row.pending_secret_request_payload_json),
-          row.pending_link_request_payload_json === null
-            ? null
-            : yield* decodeTurnItemPayload(row.pending_link_request_payload_json),
-        ]
-          .filter((item) => item !== null)
-          .filter(
-            (item) =>
-              item.type !== "link_request" || linkCardStillAsks(item, latestUserAuthoredMessageAt),
-          );
+            ? []
+            : [yield* decodeTurnItemPayload(row.pending_secret_request_payload_json)];
         let pendingRuntimeRequest =
           row.pending_request_payload_json !== null
             ? pendingRuntimeRequestSummary(
@@ -9604,7 +9503,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         readonly pin_order_key: string | null;
         readonly snoozed_until: string | null;
         readonly may_be_live: number;
-        readonly has_remote_tasks: number;
       }>`
         SELECT
           t.thread_id,
@@ -9638,10 +9536,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 AND item.status NOT IN ('completed', 'interrupted', 'failed', 'cancelled')
             )
             OR t.thread_id IN (
-              SELECT link_request.thread_id FROM orchestration_v2_projection_turn_items link_request
-              WHERE link_request.type = 'link_request' AND link_request.status = 'waiting'
-            )
-            OR t.thread_id IN (
               SELECT provider_thread.thread_id
               FROM orchestration_v2_projection_provider_threads provider_thread
               WHERE CASE WHEN json_valid(provider_thread.payload_json)
@@ -9656,15 +9550,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 WHERE json_type(link.value, '$.watch') IS NOT NULL
               )
               ELSE 0 END
-          ) AS may_be_live,
-          -- One list for the whole read, found through the child_thread_id index. A lookup per
-          -- thread would parse the payload of every subagent row.
-          t.thread_id IN (
-            SELECT subagent.thread_id FROM orchestration_v2_projection_subagents subagent
-            WHERE subagent.origin = 'app_owned'
-              AND subagent.child_thread_id IS NULL
-              AND json_type(subagent.payload_json, '$.remoteChild') = 'object'
-          ) AS has_remote_tasks
+          ) AS may_be_live
         FROM orchestration_v2_projection_threads t
         WHERE t.deleted_at IS NULL
           AND t.archived_at IS NULL
@@ -9683,7 +9569,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         pinOrderKey: row.pin_order_key,
         snoozedUntil: row.snoozed_until === null ? null : DateTime.makeUnsafe(row.snoozed_until),
         mayBeLive: row.may_be_live === 1,
-        hasRemoteTasks: row.has_remote_tasks === 1,
       }));
     }, Effect.mapError(shellSnapshotReadError));
 
@@ -9700,9 +9585,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         readonly root_thread_id: string;
         readonly side_chat: number | null;
         readonly workflow_step: number | null;
-        readonly delegated_from_environment_id: string | null;
-        readonly delegated_from_thread_id: string | null;
-        readonly delegated_from_title: string | null;
         readonly settled_override: string | null;
         readonly settled_at: string | null;
         readonly snoozed_until: string | null;
@@ -9717,9 +9599,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           json_extract(t.payload_json, '$.lineage.rootThreadId') AS root_thread_id,
           json_extract(t.payload_json, '$.lineage.sideChat') AS side_chat,
           json_extract(t.payload_json, '$.lineage.workflowStep') AS workflow_step,
-          json_extract(t.payload_json, '$.delegatedFrom.environmentId') AS delegated_from_environment_id,
-          json_extract(t.payload_json, '$.delegatedFrom.threadId') AS delegated_from_thread_id,
-          json_extract(t.payload_json, '$.delegatedFrom.title') AS delegated_from_title,
           json_extract(t.payload_json, '$.settledOverride') AS settled_override,
           json_extract(t.payload_json, '$.settledAt') AS settled_at,
           json_extract(t.payload_json, '$.snoozedUntil') AS snoozed_until
@@ -9735,15 +9614,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           ...shellIndexLineage(row),
           ...(row.workflow_step === 1 ? { workflowStep: true } : {}),
         },
-        ...(row.delegated_from_environment_id === null || row.delegated_from_thread_id === null
-          ? {}
-          : {
-              delegatedFrom: {
-                environmentId: EnvironmentId.make(row.delegated_from_environment_id),
-                threadId: ThreadId.make(row.delegated_from_thread_id),
-                title: row.delegated_from_title ?? "",
-              },
-            }),
         settledOverride:
           row.settled_override === "settled" || row.settled_override === "active"
             ? row.settled_override
@@ -9944,7 +9814,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getThreadTitles: readOnReader(getThreadTitles),
       getThreadLinkMetadata: readOnReader(getThreadLinkMetadata),
       getThreadWorktreePaths: readOnReader(getThreadWorktreePaths),
-      getOpenRemoteDelegatedTasks: getOpenRemoteDelegatedTasks.pipe(NodeSqliteClient.readOnly),
       getThreadProjection: readOnReader(getThreadProjection),
       getTurnStartContext: readOnReader(getTurnStartContext),
       getTurnStartHistory: readOnReader(getTurnStartHistory),

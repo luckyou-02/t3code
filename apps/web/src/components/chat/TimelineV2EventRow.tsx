@@ -12,7 +12,6 @@ import { ChevronDownIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
 import { EnvironmentSubagentAvatar, SubagentElapsed, V2LifecycleRow } from "./V2LifecycleRow";
-import { LinkRequestCard } from "./LinkRequestCard";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { TimelineRowCtx, type TimelineRow } from "./timelineRowContext";
 import { subagentGroupTiming } from "./TimelineV2EventRow.logic";
@@ -26,15 +25,6 @@ export function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: 
   if (item.type === "secret_request") {
     return (
       <SecretRequestCard
-        environmentId={ctx.activeThreadEnvironmentId}
-        item={item}
-        visibility={visibility}
-      />
-    );
-  }
-  if (item.type === "link_request") {
-    return (
-      <LinkRequestCard
         environmentId={ctx.activeThreadEnvironmentId}
         item={item}
         visibility={visibility}
@@ -117,7 +107,6 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
                 environmentId={ctx.activeThreadEnvironmentId}
                 providerInstanceId={item.providerInstanceId}
                 driver={item.driver}
-                remote={item.remoteChild}
                 status={agents.length === 1 ? status : undefined}
               />
             ))}

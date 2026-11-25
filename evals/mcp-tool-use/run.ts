@@ -552,8 +552,6 @@ const pastedSecret = (name: string, input: Readonly<Record<string, unknown>>) =>
   savesPastedSecrets && name === "request_secret" && typeof input.value === "string";
 // T3 does not offer these to a delegated child, so its harness never lists them.
 const hiddenFromSubagents = enabledWhen(McpInvocationContext.hiddenFromSubagents);
-// The Linked environments beta starts off, and T3 lists its tools only while it is on.
-const hiddenWhileLinksOff = enabledWhen(McpInvocationContext.hiddenWhileLinksOff);
 // T3 lists PR and CI tools only to a thread whose project is on a forge it reads.
 const hiddenWithoutForge = enabledWhen(McpInvocationContext.hiddenWithoutForge);
 /**
@@ -579,7 +577,6 @@ const visibleT3Tools = (options: {
   t3Tools.filter(
     (tool) =>
       !(options.arm === "raw" && forgeToolNames.has(tool.name)) &&
-      (options.links === true || !hiddenWhileLinksOff.has(tool.name)) &&
       (options.forge !== false || !hiddenWithoutForge.has(tool.name)) &&
       !(options.subagent === true && hiddenFromSubagents.has(tool.name)),
   );

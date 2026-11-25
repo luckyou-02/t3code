@@ -165,9 +165,7 @@ export interface EnvironmentThreadShell {
   readonly worktreePath: string | null;
   readonly lineage: OrchestrationV2ThreadShell["lineage"];
   readonly forkedFrom: OrchestrationV2ThreadShell["forkedFrom"];
-  readonly linkOrigin: OrchestrationV2ThreadShell["linkOrigin"] | null;
   /** The thread in a linked environment that delegated this one, if one did. */
-  readonly delegatedFrom: OrchestrationV2ThreadShell["delegatedFrom"] | null;
   /** The workflow run this thread is an agent step of, if it is one. */
   readonly workflowRun: OrchestrationV2ThreadShell["workflowRun"] | null;
   readonly activeProviderThreadId: OrchestrationV2ThreadShell["activeProviderThreadId"];
@@ -318,8 +316,6 @@ export function presentThreadShell(
     issues: thread.issues ?? [],
     lineage: thread.lineage,
     forkedFrom: thread.forkedFrom,
-    linkOrigin: thread.linkOrigin ?? null,
-    delegatedFrom: thread.delegatedFrom ?? null,
     workflowRun: thread.workflowRun ?? null,
     activeProviderThreadId: thread.activeProviderThreadId,
     latestRun,

@@ -1,10 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import {
-  EnvironmentId,
-  type OrchestrationV2ThreadShell,
-  ProviderInstanceId,
-  ThreadId,
-} from "@t3tools/contracts";
+import { EnvironmentId, type OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -27,9 +22,6 @@ const client: McpInvocationContext.McpInvocationScope = {
   capabilities: new Set(["orchestration"]),
   issuedAt: 1,
 };
-
-const linksHint =
-  "Thread ids belong to one environment: for a thread on a linked one, find it with `t3_environment_links` and pass its `environmentId` to a tool that takes one.";
 
 const readBare = (
   existing: ReadonlyArray<OrchestrationV2ThreadShell | ThreadId>,
@@ -56,50 +48,7 @@ it.effect("points a bare uuid at the mcp: thread it belongs to", () =>
     const error = yield* readBare([ThreadId.make(`mcp:${bareId}`)]);
 
     expect(error.code).toBe("thread_not_found");
-    expect(error.message).toBe(
-      `The thread was not found. Did you mean \`mcp:${bareId}\`? ${linksHint}`,
-    );
-  }),
-);
-
-it.effect("tells a caller with linked environments that the thread may be on one of them", () =>
-  Effect.gen(function* () {
-    const error = yield* readBare([], { ...client, linkedEnvironments: true });
-
-    expect(error.code).toBe("thread_not_found");
-    expect(error.message).toContain("t3_environment_links");
-    expect(error.message).toContain("environmentId");
-
-    const linksOff = yield* readBare([], { ...client, linkedEnvironments: false });
-    expect(linksOff.message).toBe("The thread was not found.");
-    const peerLink = yield* readBare([], {
-      ...client,
-      linkedEnvironments: true,
-      client: { ...claudeCode, linked: true },
-    });
-    expect(peerLink.message).toBe("The thread was not found.");
-
-    // A thread a fenced link started may not use this environment's links.
-    const fencedThread = ThreadId.make("thread:started-by-fenced-link");
-    const fenced = yield* readBare(
-      [
-        {
-          ...liveThreadShell(fencedThread),
-          linkOrigin: { sessionId: "peer-session", label: "Laptop", access: "auto" },
-        },
-      ],
-      {
-        ...client,
-        linkedEnvironments: true,
-        client: undefined,
-        thread: {
-          threadId: fencedThread,
-          providerSessionId: "provider-session",
-          providerInstanceId: ProviderInstanceId.make("codex"),
-        },
-      },
-    );
-    expect(fenced.message).toBe("The thread was not found.");
+    expect(error.message).toBe(`The thread was not found. Did you mean \`mcp:${bareId}\`?`);
   }),
 );
 

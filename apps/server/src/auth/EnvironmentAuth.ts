@@ -52,10 +52,7 @@ import { DESKTOP_RENDERER_ORIGINS } from "../httpCors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedLimits from "../policy/managedLimits.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
-import {
-  MCP_APPROVAL_SUBJECT_PREFIX,
-  PEER_LINK_PAIRING_SUBJECT_PREFIX,
-} from "../persistence/AuthPairingLinks.ts";
+import { MCP_APPROVAL_SUBJECT_PREFIX } from "../persistence/AuthPairingLinks.ts";
 import { requestUrl } from "../requestUrl.ts";
 
 const DEFAULT_SESSION_SUBJECT = "cli-issued-session";
@@ -88,7 +85,6 @@ const MCP_CLIENT_SUBJECT = "mcp-client";
 const MCP_CLIENT_SESSION_TTL = Duration.days(30);
 // A peer link's session moves back out to its full lifetime when a call finds it this far
 // short, so a used link never expires and a busy one writes at most once per step.
-const PEER_LINK_RENEWAL_STEP = Duration.days(1);
 
 // A device pairing with its DPoP key renews the session itself, so the token can be short and
 // the device stays signed in while used. One idle for the whole window pairs again.
@@ -101,9 +97,7 @@ export interface McpClientSession {
   readonly label: string;
   readonly access: AuthMcpClientAccess;
   /** Another T3 Code environment's link, whose work here stays within it. */
-  readonly peerLink: boolean;
   /** When a peer link's session ends unless it is used again; the linking side keeps this. */
-  readonly linkExpiresAt?: DateTime.Utc;
 }
 
 /** What Connections calls a client session: its label, or its browser and system. */
@@ -651,7 +645,6 @@ export class EnvironmentAuth extends Context.Service<
     readonly issueMcpClientSession: (input: {
       readonly label: string;
       readonly access: AuthMcpClientAccess;
-      readonly peerLink: boolean;
       readonly client: AuthClientMetadata;
       /**
        * `otherSessionRevocationCount` read before the sign-in was approved. The session is
@@ -673,7 +666,6 @@ export class EnvironmentAuth extends Context.Service<
     readonly consumeMcpApprovalCode: (
       code: string,
       access: AuthMcpClientAccess,
-      peerLink?: boolean,
     ) => Effect.Effect<
       AuthMcpClientAccess,
       ServerAuthMcpApprovalCodeError | ServerAuthInternalError
@@ -1431,17 +1423,13 @@ export const make = Effect.gen(function* () {
       scopes: input?.access
         ? mcpClientScopes(input.access)
         : (input?.scopes ?? AuthStandardClientScopes),
-      subject:
-        input?.purpose === "peer-link" && input.access
-          ? `${PEER_LINK_PAIRING_SUBJECT_PREFIX}${input.access}`
-          : "one-time-token",
+      subject: "one-time-token",
       ...(input?.label ? { label: input.label } : {}),
-      ...(input?.access && input.purpose !== "peer-link" ? { mcpApproval: input.access } : {}),
+      ...(input?.access ? { mcpApproval: input.access } : {}),
     }).pipe(
       Effect.map((issued) => ({
         ...toPairingCredential(issued),
         ...(input?.access ? { access: input.access } : {}),
-        ...(input?.access && input.purpose === "peer-link" ? { purpose: input.purpose } : {}),
       })),
       Effect.withSpan("EnvironmentAuth.issuePairingCredential"),
     );
@@ -1635,30 +1623,6 @@ export const make = Effect.gen(function* () {
       return yield* authenticateRequest(request);
     });
 
-  /** The expiry of a verified peer link session, moved out when this use finds it a step short. */
-  const renewPeerLinkSession = Effect.fnUntraced(function* (
-    sessionId: AuthSessionId,
-    expiresAt: DateTime.DateTime,
-  ) {
-    const now = yield* DateTime.now;
-    const renewed = DateTime.add(now, {
-      milliseconds: Duration.toMillis(MCP_CLIENT_SESSION_TTL),
-    });
-    if (DateTime.distance(expiresAt, renewed).pipe(Duration.isLessThan(PEER_LINK_RENEWAL_STEP))) {
-      return DateTime.toUtc(expiresAt);
-    }
-    const current = yield* sessions
-      .extend(sessionId, renewed, PEER_LINK_RENEWAL_STEP)
-      .pipe(mapSessionVerificationErrors);
-    // A revoke can land between the verification and the update.
-    if (Option.isNone(current)) {
-      return yield* new ServerAuthInvalidCredentialError({
-        diagnostic: "The peer link session ended before it could be renewed.",
-      });
-    }
-    return current.value;
-  });
-
   const authenticateMcpClient: EnvironmentAuth["Service"]["authenticateMcpClient"] = (request) => {
     const token = parseBearerToken(request);
     if (token === null) return Effect.fail(new ServerAuthMissingCredentialError({}));
@@ -1671,18 +1635,12 @@ export const make = Effect.gen(function* () {
               diagnostic: "Only MCP client sessions are accepted here.",
             });
           }
-          const client = {
+          return {
             sessionId: session.sessionId,
             label: session.client.label ?? "MCP client",
             access: session.scopes.includes(AuthOrchestrationOperateScope)
               ? (session.runtimeModeCeiling ?? "approval-required")
               : "read-only",
-            peerLink: session.peerLink === true,
-          } satisfies McpClientSession;
-          if (session.peerLink !== true || session.expiresAt === undefined) return client;
-          return {
-            ...client,
-            linkExpiresAt: yield* renewPeerLinkSession(session.sessionId, session.expiresAt),
           } satisfies McpClientSession;
         }),
       ),
@@ -1716,7 +1674,6 @@ export const make = Effect.gen(function* () {
         scopes: mcpClientScopes(input.access),
         ttl: MCP_CLIENT_SESSION_TTL,
         ...(input.access === "read-only" ? {} : { runtimeModeCeiling: input.access }),
-        peerLink: input.peerLink,
         client: { ...input.client, label: input.label, deviceType: "bot" },
       })
       .pipe(
@@ -1737,11 +1694,10 @@ export const make = Effect.gen(function* () {
   const consumeMcpApprovalCode: EnvironmentAuth["Service"]["consumeMcpApprovalCode"] = (
     code,
     access,
-    peerLink = false,
   ) =>
     resolveBootstrapGrant(code.trim(), {
       requiredScopes: mcpClientScopes(access),
-      allowedSubject: `${peerLink ? PEER_LINK_PAIRING_SUBJECT_PREFIX : MCP_APPROVAL_SUBJECT_PREFIX}${access}`,
+      allowedSubject: `${MCP_APPROVAL_SUBJECT_PREFIX}${access}`,
     }).pipe(
       Effect.catchTags({
         ServerAuthInvalidCredentialError: () =>

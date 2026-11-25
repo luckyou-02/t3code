@@ -1,6 +1,5 @@
 import {
   McpCapabilityUnavailableError,
-  OrchestratorMcpEnvironmentTarget,
   OrchestratorMcpFailure,
   PositiveInt,
   PullRequestCheck,
@@ -60,7 +59,6 @@ const guideDependencies = [
 const watchDependencies = [...dependencies, PullRequestWatchService.PullRequestWatchService];
 
 export const PullRequestTargetInput = Schema.Struct({
-  environmentId: OrchestratorMcpEnvironmentTarget,
   threadId: Schema.optional(
     ThreadId.annotate({
       description: "Thread. Default: this thread.",
@@ -328,7 +326,6 @@ const LinkPullRequestsTool = Tool.make("link_pull_requests", {
   description:
     "Link several PRs to a thread. Use it instead of one `link_pull_request` per PR. URLs that are not PRs come back in `invalidUrls`.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     threadId: Schema.optional(ThreadId.annotate({ description: "Thread. Default: this thread." })),
     urls: Schema.Array(TrimmedNonEmptyString).check(Schema.isMinLength(1)),
   }),
@@ -360,7 +357,6 @@ const UnlinkPullRequestsTool = Tool.make("unlink_pull_requests", {
   description:
     "Unlink a thread's PRs whose last known state is in `states`. Use it instead of one `unlink_pull_request` per PR. PRs with no known state stay linked.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     threadId: Schema.optional(ThreadId.annotate({ description: "Thread. Default: this thread." })),
     states: Schema.Array(PullRequestState).check(Schema.isMinLength(1)),
   }),
@@ -378,7 +374,6 @@ const ListThreadPullRequestsTool = Tool.make("list_thread_pull_requests", {
   description:
     "List a thread's PRs, with last known state and stack order (bottom to top). Not an end-of-work check.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     threadId: Schema.optional(ThreadId.annotate({ description: "Thread. Default: this thread." })),
     states: Schema.optional(Schema.Array(PullRequestState)),
     cursor: Schema.optional(Schema.String),
@@ -467,7 +462,6 @@ const WritePullRequestGuidesTool = Tool.make("write_pull_request_guides", {
   description:
     "Write review guides for up to 20 PRs (the tour in the PR Guide tab). Returns once runs start. Each run takes minutes in a temporary checkout. A run for the same head is joined. Read with `read_pull_request_guide`. Fails while guides are off.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     pullRequests: Schema.Array(GuideTarget).check(Schema.isMinLength(1), Schema.isMaxLength(20)),
   }),
   success: WritePullRequestGuidesResult,
@@ -484,7 +478,6 @@ const ReadPullRequestGuideTool = Tool.make("read_pull_request_guide", {
   description:
     "Read a PR's stored review guide and run state. `guide` is null when none exists. Never starts a run.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     ...GuideTarget.fields,
   }),
   success: ReadPullRequestGuideResult,
@@ -498,7 +491,6 @@ const ReadPullRequestGuideTool = Tool.make("read_pull_request_guide", {
   .annotate(Tool.OpenWorld, true);
 
 export const ThreadPullRequestInput = Schema.Struct({
-  environmentId: OrchestratorMcpEnvironmentTarget,
   number: Schema.optional(PositiveInt.annotate({ description: "Default: the branch's PR." })),
   repository: Schema.optional(TrimmedNonEmptyString),
 });
@@ -659,7 +651,6 @@ const ReadPullRequestTool = Tool.make("pull_request_read", {
 const ListPullRequestsTool = Tool.make("pull_request_list", {
   description: "List PRs in this thread's repository, recently updated first.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     state: Schema.optional(PullRequestListState.annotate({ description: "Default: open." })),
     involvement: Schema.optional(PullRequestInvolvement),
     query: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(200))),
@@ -680,7 +671,6 @@ const ListPullRequestsTool = Tool.make("pull_request_list", {
 const CreatePullRequestTool = Tool.make("pull_request_create", {
   description: "Push this thread's branch, then open its PR and link it, or return its open PR.",
   parameters: Schema.Struct({
-    environmentId: OrchestratorMcpEnvironmentTarget,
     title: TrimmedNonEmptyString,
     body: Schema.String,
     base: Schema.optional(TrimmedNonEmptyString),

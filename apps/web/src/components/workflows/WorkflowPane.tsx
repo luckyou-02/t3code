@@ -72,11 +72,7 @@ export default function WorkflowPane({
         ? // Nowhere to go while this client neither knows the environment nor reads it through the run's.
           activeThreadOpen === "unavailable"
           ? null
-          : () =>
-              openThreadPage(
-                threadOf(active),
-                activeThreadOpen === "linked" ? environmentId : undefined,
-              )
+          : () => openThreadPage(threadOf(active))
         : activeReference === null
           ? null
           : openReferencePage(activeReference);

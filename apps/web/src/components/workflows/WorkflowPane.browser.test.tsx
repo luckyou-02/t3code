@@ -7,19 +7,9 @@ import WorkflowPane from "./WorkflowPane";
 
 const environmentId = EnvironmentId.make("laptop");
 const state = vi.hoisted(() => ({
-  linked: [] as ReadonlyArray<string>,
   openThreadPage: null as unknown as (...input: ReadonlyArray<unknown>) => void,
 }));
 
-vi.mock(import("../../state/peerLinks"), async (original) => ({
-  ...(await original()),
-  useLinkedEnvironments: ((id: EnvironmentId | null) =>
-    new Map(
-      id === environmentId
-        ? state.linked.map((link) => [EnvironmentId.make(link), "Build box"])
-        : [],
-    )) as never,
-}));
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
   useEnvironment: ((id: EnvironmentId | null) =>
@@ -42,32 +32,18 @@ const pane = (env: string | undefined) => (
 );
 
 describe("WorkflowPane", () => {
-  it("opens a thread on a linked environment through the run's environment", async () => {
-    state.linked = ["build-box"];
-    state.openThreadPage = vi.fn();
-    await using screen = await render(pane("build-box"));
-
-    await screen.getByRole("button", { name: "Open as a full thread" }).click();
-    expect(state.openThreadPage).toHaveBeenCalledWith(
-      { environmentId: "build-box", threadId: "thread-2" },
-      environmentId,
-    );
-  });
-
   it("opens a thread on the run's own environment directly", async () => {
-    state.linked = [];
     state.openThreadPage = vi.fn();
     await using screen = await render(pane(undefined));
 
     await screen.getByRole("button", { name: "Open as a full thread" }).click();
-    expect(state.openThreadPage).toHaveBeenCalledWith(
-      { environmentId, threadId: "thread-2" },
-      undefined,
-    );
+    expect(state.openThreadPage).toHaveBeenCalledWith({
+      environmentId,
+      threadId: "thread-2",
+    });
   });
 
   it("offers no full thread on an environment this client cannot reach", async () => {
-    state.linked = [];
     state.openThreadPage = vi.fn();
     await using screen = await render(pane("build-box"));
 

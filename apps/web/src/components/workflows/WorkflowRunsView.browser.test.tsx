@@ -133,15 +133,6 @@ vi.mock(import("../../state/session"), async (original) => ({
   ...(await original()),
   useEnvironmentSessionId: () => state.sessionId,
 }));
-vi.mock(import("../../state/peerLinks"), async (original) => ({
-  ...(await original()),
-  useLinkedEnvironments: ((id: EnvironmentId | null) =>
-    new Map(
-      id === environmentId
-        ? state.linked.map((link) => [EnvironmentId.make(link), "Build box"])
-        : [],
-    )) as never,
-}));
 vi.mock(import("../../state/environments"), async (original) => ({
   ...(await original()),
   useEnvironment: ((id: EnvironmentId | null) =>

@@ -2,7 +2,6 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { ScopedThreadRef } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 
-import { type LinkedThreadSurface, linkedThreadRouteParams } from "../linkedThreadSurface";
 import { type ThreadSurface, useRightPanelStore } from "../rightPanelStore";
 import { buildThreadRouteParams } from "../threadRoutes";
 
@@ -12,16 +11,9 @@ import { buildThreadRouteParams } from "../threadRoutes";
  */
 export function useOpenSurfaceInMainView(panelRef: ScopedThreadRef | null) {
   const navigate = useNavigate();
-  return (surface: ThreadSurface | LinkedThreadSurface) => {
+  return (surface: ThreadSurface) => {
     if (panelRef === null) return;
     useRightPanelStore.getState().closeSurface(panelRef, surface.id);
-    if (surface.kind === "linked-thread") {
-      void navigate({
-        to: "/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId",
-        params: linkedThreadRouteParams(surface),
-      });
-      return;
-    }
     void navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(scopeThreadRef(panelRef.environmentId, surface.threadId)),

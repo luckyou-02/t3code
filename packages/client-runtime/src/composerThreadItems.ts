@@ -35,8 +35,6 @@ export function matchComposerThreadItems(
   input: {
     shells: ReadonlyArray<ComposerThreadCandidate>;
     environmentId: EnvironmentId;
-    /** The machines the composer's environment links to, by name. */
-    linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
     excludeThreadId: ThreadId | null;
     query: string;
     /** Recency is measured against this time. */
@@ -54,8 +52,7 @@ export function matchComposerThreadItems(
     shell.latestUserMessageAt !== null;
   const candidates = input.shells.filter(
     (shell) =>
-      (shell.environmentId === input.environmentId ||
-        input.linkedEnvironments.has(shell.environmentId)) &&
+      shell.environmentId === input.environmentId &&
       shell.id !== input.excludeThreadId &&
       shell.archivedAt === null &&
       (isListedThreadLineage(shell.lineage) || isOwnSideChat(shell)),
@@ -67,23 +64,15 @@ export function matchComposerThreadItems(
     }),
   )
     .slice(0, COMPOSER_THREAD_RESULT_LIMIT)
-    .map(({ item: shell }) => {
-      const machine =
-        shell.environmentId === input.environmentId
-          ? undefined
-          : input.linkedEnvironments.get(shell.environmentId);
-      return {
-        id: `thread:${shell.environmentId}:${shell.id}`,
-        type: "thread",
-        thread: { environmentId: shell.environmentId, threadId: shell.id },
-        label: shell.title,
-        description: isOwnSideChat(shell)
-          ? resolve(msg("Side chat"))
-          : machine === undefined
-            ? resolve(msg("Thread", { $context: "noun, search result type" }))
-            : resolve(msg("Thread on {machine}", { machine })),
-      };
-    });
+    .map(({ item: shell }) => ({
+      id: `thread:${shell.environmentId}:${shell.id}`,
+      type: "thread",
+      thread: { environmentId: shell.environmentId, threadId: shell.id },
+      label: shell.title,
+      description: isOwnSideChat(shell)
+        ? resolve(msg("Side chat"))
+        : resolve(msg("Thread", { $context: "noun, search result type" })),
+    }));
 }
 
 export interface ComposerEnvironmentCandidate {
@@ -109,8 +98,6 @@ export interface ComposerEnvironmentItem {
 export function matchComposerEnvironmentItems(
   input: {
     environments: ReadonlyArray<ComposerEnvironmentCandidate>;
-    /** The machines the composer's environment links to, by name. */
-    linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
     environmentId: EnvironmentId;
     query: string;
   },
@@ -118,13 +105,7 @@ export function matchComposerEnvironmentItems(
 ): ComposerEnvironmentItem[] {
   const query = input.query.trim().toLowerCase();
   if (query.length === 0) return [];
-  const paired = new Set(input.environments.map((environment) => environment.environmentId));
-  const linkedOnly = Array.from(input.linkedEnvironments, ([environmentId, label]) => ({
-    environmentId,
-    label,
-    machine: "server" as const,
-  })).filter((environment) => !paired.has(environment.environmentId));
-  return [...input.environments, ...linkedOnly]
+  return input.environments
     .filter(
       (environment) =>
         environment.environmentId !== input.environmentId &&

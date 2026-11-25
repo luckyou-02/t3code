@@ -591,25 +591,18 @@ export async function deleteSelectedThreadEntries<
 }
 
 /**
- * `delegatedUnderParent` holds the tasks linked environments run for a thread
- * the sidebar lists, by thread key; they show under that thread, as subagents do.
  */
 export function filterSidebarV2VisibleThreads<
   T extends Pick<SidebarThreadSummary, "archivedAt" | "environmentId" | "id" | "lineage"> & {
     projectId: string;
   },
->(
-  threads: readonly T[],
-  scopedProjectKeys: ReadonlySet<string> | null,
-  delegatedUnderParent: ReadonlySet<string>,
-): T[] {
+>(threads: readonly T[], scopedProjectKeys: ReadonlySet<string> | null): T[] {
   return threads.filter(
     (thread) =>
       thread.archivedAt === null &&
       !isShownUnderParent(
         { environmentId: thread.environmentId, threadId: thread.id },
         thread.lineage,
-        delegatedUnderParent,
       ) &&
       (scopedProjectKeys === null ||
         scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
@@ -1319,10 +1312,8 @@ export function getFallbackThreadIdAfterDelete<
   sortOrder: SidebarThreadSortOrder;
   now: string;
   deletedThreadIds?: ReadonlySet<T["id"]>;
-  delegatedUnderParent: ReadonlySet<string>;
 }): T["id"] | null {
-  const { deletedThreadId, deletedThreadIds, sortOrder, now, threads, delegatedUnderParent } =
-    input;
+  const { deletedThreadId, deletedThreadIds, sortOrder, now, threads } = input;
   const deletedThread = threads.find((thread) => thread.id === deletedThreadId);
   if (!deletedThread) {
     return null;
@@ -1340,7 +1331,6 @@ export function getFallbackThreadIdAfterDelete<
           !isShownUnderParent(
             { environmentId: thread.environmentId, threadId: thread.id },
             thread.lineage,
-            delegatedUnderParent,
           ),
       ),
       sortOrder,
@@ -1435,11 +1425,10 @@ export function sortSidebarV2ProjectGroups<
   projects: readonly TProject[],
   threads: readonly TThread[],
   sortOrder: SidebarProjectSortOrder,
-  delegatedUnderParent: ReadonlySet<string>,
 ): TProject[] {
   return sortLogicalProjectsForSidebar(
     projects,
-    filterSidebarV2VisibleThreads(threads, null, delegatedUnderParent),
+    filterSidebarV2VisibleThreads(threads, null),
     sortOrder,
   );
 }

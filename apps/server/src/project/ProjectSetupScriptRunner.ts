@@ -1,4 +1,4 @@
-import { linkOriginIsFenced, ProjectId, type ProjectScript, ThreadId } from "@t3tools/contracts";
+import { ProjectId, type ProjectScript } from "@t3tools/contracts";
 import { splitsSurrogatePair } from "@t3tools/shared/assistantCitations";
 import {
   projectScriptRuntimeEnv,
@@ -18,7 +18,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import * as ProjectionStore from "../orchestration-v2/ProjectionStore.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 import * as ProjectService from "./ProjectService.ts";
@@ -261,7 +260,6 @@ function wrapCommandForCompletion(
 /** @public */
 export const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
-  const threads = yield* ProjectionStore.ProjectionStoreV2;
   const terminalManager = yield* TerminalManager.TerminalManager;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const random = yield* SecureRandom.SecureRandom;
@@ -432,19 +430,6 @@ export const make = Effect.gen(function* () {
       ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
       ...(input.projectCwd === undefined ? {} : { projectCwd: input.projectCwd }),
     };
-    // A thread whose origin cannot be read might be a link's: run nothing.
-    const thread = yield* threads.getThreadShell(ThreadId.make(input.threadId)).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProjectSetupScriptOperationError({
-            ...errorContext,
-            operation: "readThread",
-            cause,
-          }),
-      ),
-    );
-    if (thread?.linkOrigin !== undefined && linkOriginIsFenced(thread.linkOrigin))
-      return { status: "skipped-for-link" } as const;
     const suppliedProject = input.project;
     const projectById =
       suppliedProject ??

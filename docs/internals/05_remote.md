@@ -19,32 +19,6 @@ execution model.
 - Pull request routing trust covers the saved route set: adding or changing a route revokes trust;
   reordering does not.
 
-## Peer links
-
-A [peer link](../../apps/server/src/peer/PeerLinks.ts) lets one environment's agents work in another
-by signing in to the target's `/mcp` as an ordinary OAuth client (`t3code-peer-link`). The receiving
-side lists and revokes it in Sharing & access like any other session, and owns its expiry/renewal.
-
-- **Mode ceilings always narrow.** Forwarded calls carry the calling agent's modes in
-  `T3-Mode-Limit`, which the receiving `/mcp` can only intersect downward with the link's approved
-  access.
-- **Non-full-access links are fenced by `linkOrigin`.** Threads launched by a peer link (and their
-  derived forks, subagents, and spawned threads) carry an immutable `linkOrigin` stamp enforced in
-  shared access rules ([`mcp/linkOrigin.ts`](../../apps/server/src/mcp/linkOrigin.ts)). Below full
-  access, linked work can mutate only threads with the same origin, cannot touch projects, settings,
-  scheduled tasks, or further links, and skips project setup scripts and worktree layout commands
-  (in a project that declares a layout, a worktree launch or handoff for such a thread fails;
-  restoring a missing folder brings back plain checkouts). Full-access links are not fenced because
-  their agents already run as the receiving OS user. Being unfenced only answers who asked: a
-  layout command still runs only with a person's approval of its text, and for an agent only from
-  a thread in Full access, both checked in
-  [`TaskFolders`](../../apps/server/src/workspace/TaskFolders.ts) at every run.
-- **Namespace idempotency keys.** All callers on the linking side share one session on the receiving
-  side, so idempotency keys must be hashed with the caller's namespace before forwarding.
-- **Clients read linked threads as standard thread streams.**
-  [`PeerThreadRelay`](../../apps/server/src/peer/PeerThreadRelay.ts) proxies the same stream format
-  read-only so there is no second transcript schema to maintain.
-
 ## Hosted web is a client
 
 The hosted web app stores its connection catalog in the browser and connects directly to each

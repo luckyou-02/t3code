@@ -48,7 +48,6 @@ import * as ScheduledTaskService from "../scheduledTasks/ScheduledTaskService.ts
 import * as SecretRequests from "../secrets/SecretRequests.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
 import * as OrchestratorMcpService from "./OrchestratorMcpService.ts";
-import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 
 const layerOrchestratorService = OrchestratorMcpService.layer.pipe(
   Layer.provide(Layer.mock(ThreadLaunchService.ThreadLaunchService)({})),
@@ -73,9 +72,7 @@ const cancelBackgroundOnlyTask = (
   background: "subagent" | "command",
   {
     cancelAt = "settled",
-    remote = false,
   }: {
-    readonly remote?: boolean;
     readonly cancelAt?:
       | "settled"
       | "checkpoint"
@@ -236,7 +233,6 @@ const cancelBackgroundOnlyTask = (
             }),
             Layer.mock(ProjectService.ProjectService)({}),
             Layer.mock(SecretRequests.SecretRequests)({}),
-            Layer.mock(RemoteDelegation.RemoteDelegation)({}),
             ServerSettings.layerTest(),
             Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
             NodeServices.layer,
@@ -476,23 +472,6 @@ const cancelBackgroundOnlyTask = (
           yield* Queue.offer(child.events, event);
         }
         yield* Fiber.join(started);
-        if (remote) {
-          yield* orchestrator.dispatch({
-            type: "delegated_task.remote.request",
-            commandId: CommandId.make("remote-descendant"),
-            parentThreadId: task.childThreadId!,
-            parentRunId: child.turn.runId,
-            parentNodeId: child.turn.rootNodeId,
-            task: "Work in a linked environment",
-            driver,
-            modelSelection,
-            remoteChild: {
-              environmentId: EnvironmentId.make("environment:remote-descendant"),
-              threadId: ThreadId.make("thread:remote-descendant"),
-              label: "Remote",
-            },
-          });
-        }
         const turnEndEvents = [
           {
             type: "provider_turn.updated",
@@ -645,11 +624,6 @@ const cancelBackgroundOnlyTask = (
           )?.status,
           nativeStatus,
         );
-        if (remote) {
-          const descendant = childAfter.subagents.find((entry) => entry.remoteChild !== undefined);
-          assert.equal(descendant?.status, "interrupted");
-          assert.notEqual(descendant?.remoteChild?.stoppedThere, true);
-        }
         // Stop reached the provider turn that owns the shell.
         if (background === "command") assert.deepEqual(interrupted, [["bg-sleep"]]);
         assert.equal(childAfter.runs.length, cancelAt === "monitor" || cancelAt === "turn" ? 2 : 1);
@@ -724,10 +698,6 @@ it.effect("cancellation and Stop commit together and recover before the outbox r
 
 it.effect("a refused descendant stop does not settle or dispose its parent task", () =>
   cancelBackgroundOnlyTask("command", { cancelAt: "refused" }),
-);
-
-it.effect("task_cancel stops a remote descendant without reacquiring its parent lock", () =>
-  cancelBackgroundOnlyTask("command", { remote: true }),
 );
 
 it.effect("a native background subagent delegates after its parent's run completes", () =>

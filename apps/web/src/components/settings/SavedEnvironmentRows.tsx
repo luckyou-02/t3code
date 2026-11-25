@@ -62,7 +62,7 @@ type SavedBackendListRowProps = {
   initialRoutesOpen?: boolean;
 };
 
-export function savedBackendStatus(
+function savedBackendStatus(
   environment: EnvironmentPresentation,
   resolve: MessageResolver = m,
 ): {

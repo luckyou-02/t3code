@@ -27,7 +27,6 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import * as WorkflowAgentLinks from "./WorkflowAgentLinks.ts";
 import {
   isProjectPath,
   launchOnContinue,
@@ -52,7 +51,6 @@ const make = Effect.gen(function* () {
   const providers = yield* ProviderRegistry.ProviderRegistry;
   const settings = yield* ServerSettings.ServerSettingsService;
   const digest = yield* Digest.Digest;
-  const linked = yield* WorkflowAgentLinks.make;
   const forge = yield* WorkflowForge;
   const threadIssues = yield* ThreadIssueService.ThreadIssueService;
   // A tracker that is down must not cost the step its agent.
@@ -143,7 +141,10 @@ const make = Effect.gen(function* () {
     start: Effect.fn("WorkflowAgentThreads.start")(function* (input) {
       const id = yield* idOf(input.key);
       const environment = elsewhere(input.environment);
-      if (environment !== undefined) return yield* linked.start(input, environment, id, here);
+      if (environment !== undefined)
+        return yield* new WorkflowAgentError({
+          reason: "Linked environments are not supported in this build.",
+        });
       const commandId = CommandId.make(id);
       const messageId = MessageId.make(id);
       const outputSchema =
@@ -234,7 +235,10 @@ const make = Effect.gen(function* () {
     }),
     result: Effect.fn("WorkflowAgentThreads.result")(function* (turn, options) {
       const environment = elsewhere(turn.environment);
-      if (environment !== undefined) return yield* linked.result(turn, environment, options);
+      if (environment !== undefined)
+        return yield* new WorkflowAgentError({
+          reason: "Linked environments are not supported in this build.",
+        });
       const threadId = ThreadId.make(turn.threadId);
       const shell = yield* threads
         .getThreadShell(threadId)
@@ -309,7 +313,9 @@ const make = Effect.gen(function* () {
     interrupt: Effect.fn("WorkflowAgentThreads.interrupt")(function* (target) {
       const environment = elsewhere(target.environment);
       if (environment !== undefined)
-        return yield* linked.interrupt(target.threadId, environment, target.turnId);
+        return yield* new WorkflowAgentError({
+          reason: "Linked environments are not supported in this build.",
+        });
       const thread = target.threadId;
       const threadId = ThreadId.make(thread);
       const shell = yield* threads

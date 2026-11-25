@@ -38,7 +38,6 @@ import { useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref 
 import { useAssetUrls } from "../../assets/assetUrls";
 import { threadEnvironment } from "../../state/threads";
 import { useQuietThreadProjection, useQuietThreadShell } from "../../state/entities";
-import { useEnvironment } from "../../state/environments";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { isImageAttachment, type ChatImageAttachment, type ChatMessage } from "../../types";
 import { cn } from "~/lib/utils";
@@ -477,17 +476,12 @@ function QueuedMessage(props: {
   const attribution = presentation?.attribution ?? null;
   const scheduledTaskId = presentation?.scheduledTaskId;
   const senderThreadId = props.message?.senderThreadId;
-  // A linked environment's agent sent it from a thread there.
   const senderRef =
-    props.message?.linkedSender ??
-    (senderThreadId === undefined ? null : scopeThreadRef(props.environmentId, senderThreadId));
+    senderThreadId === undefined ? null : scopeThreadRef(props.environmentId, senderThreadId);
   const [expanded, setExpanded] = useState(false);
   const taskTitle = useScheduledTaskTitle(props.environmentId, scheduledTaskId);
   const senderShell = useQuietThreadShell(attribution === "agent" ? senderRef : null);
-  const linkedSenderEnvironment = useEnvironment(
-    props.message?.linkedSender?.environmentId ?? null,
-  );
-  const senderTitle = senderShell?.title.trim() || props.message?.linkedSender?.title.trim();
+  const senderTitle = senderShell?.title.trim();
   const fold =
     attribution === "automation"
       ? {
@@ -584,7 +578,7 @@ function QueuedMessage(props: {
             {attribution === "agent" &&
             senderRef &&
             // Only an environment this client is connected to can open the sender's thread there.
-            (props.message?.linkedSender === undefined || linkedSenderEnvironment !== null) ? (
+            true ? (
               <InlineButton
                 tone="muted"
                 onClick={() => props.onOpenThread(senderRef.threadId, senderRef.environmentId)}

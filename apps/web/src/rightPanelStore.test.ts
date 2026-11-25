@@ -3,7 +3,6 @@ import { EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useClosedViewStore } from "./closedViewStore";
-import { linkedThreadTitle } from "./linkedThreadSurface";
 import { reopenClosedView } from "./reopenClosedView";
 import {
   hostRightPanel,
@@ -518,41 +517,7 @@ describe("rightPanelStore", () => {
     expect(selectThreadRightPanelState(migrated.byThreadKey, refA).maximized).toBe(true);
   });
 
-  it("opens a linked thread once per thread and environment it is read through", () => {
-    const store = useRightPanelStore.getState();
-    const target = {
-      viaEnvironmentId: EnvironmentId.make("env-1"),
-      environmentId: EnvironmentId.make("env:b"),
-      threadId: ThreadId.make("there"),
-      label: "fs-17",
-      title: null,
-    };
-    store.openLinkedThread(refA, target);
-    store.open(refA, "diff");
-    store.openLinkedThread(refA, { ...target, label: "renamed", title: "Fix the build" });
-    store.openLinkedThread(refA, { ...target, title: null });
-    store.openLinkedThread(refA, { ...target, viaEnvironmentId: EnvironmentId.make("env-2") });
-    const panel = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
-    expect(panel.surfaces.map((surface) => surface.id)).toEqual([
-      "linked-thread:env-1:env%3Ab:there",
-      "diff",
-      "linked-thread:env-2:env%3Ab:there",
-    ]);
-    // A click that knows no title keeps the one an earlier click or read gave.
-    expect(panel.surfaces[0]).toMatchObject({ label: "fs-17", title: "Fix the build" });
-    store.setLinkedThreadTitle(refA, "linked-thread:env-1:env%3Ab:there", "Fix flaky test");
-    expect(
-      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces[0],
-    ).toMatchObject({ title: "Fix flaky test" });
-    // The tab is named for the thread once its title is known, else for where it is.
-    expect(linkedThreadTitle({ title: "Fix flaky test" }, "Thread on fs-17")).toBe(
-      "Fix flaky test",
-    );
-    expect(linkedThreadTitle({ title: " " }, "Thread on fs-17")).toBe("Thread on fs-17");
-    expect(linkedThreadTitle({ title: null }, "Thread on fs-17")).toBe("Thread on fs-17");
-  });
-
-  it("keeps saved linked threads it can show and drops surfaces it cannot", () => {
+  it("drops legacy linked-thread and unknown surfaces during migration", () => {
     const linked = {
       id: "linked-thread:stale-id",
       kind: "linked-thread",
@@ -568,7 +533,6 @@ describe("rightPanelStore", () => {
           activeSurfaceId: "linked-thread:stale-id",
           surfaces: [
             linked,
-            { ...linked, id: "linked-thread:no-thread", threadId: undefined },
             { id: "hologram:1", kind: "hologram" },
             null,
             { id: "diff", kind: "diff" },
@@ -578,20 +542,8 @@ describe("rightPanelStore", () => {
     });
     expect(selectThreadRightPanelState(migrated.byThreadKey, refA)).toEqual({
       isOpen: true,
-      // The saved id no longer names a surface, so the first one left is shown.
-      activeSurfaceId: "linked-thread:env-1:env-b:there",
-      surfaces: [
-        {
-          id: "linked-thread:env-1:env-b:there",
-          kind: "linked-thread",
-          viaEnvironmentId: "env-1",
-          environmentId: "env-b",
-          threadId: "there",
-          label: "fs-17",
-          title: null,
-        },
-        { id: "diff", kind: "diff" },
-      ],
+      activeSurfaceId: "diff",
+      surfaces: [{ id: "diff", kind: "diff" }],
     });
   });
 

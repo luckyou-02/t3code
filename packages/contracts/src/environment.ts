@@ -178,29 +178,8 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   commandOutputStreaming: Schema.optionalKey(Schema.Boolean),
   /** Hosts headless Chromium tabs streamed over /api/preview-stream for clients without a local runtime. */
   serverBrowser: Schema.optionalKey(Schema.Boolean),
-  /** Server links to other environments (`PeerLink`) and its agents can work
-      in them. Absent on servers from before linking, which clients must not
-      offer linking for. */
-  peerLinks: Schema.optionalKey(Schema.Boolean),
-  /** Server's `/mcp` narrows an OAuth client's modes from `T3-Mode-Limit`, so
-      a linked environment's calls keep its agent's limits. Another environment
-      links to this one only when it is set. */
-  mcpModeLimitHeader: Schema.optionalKey(Schema.Boolean),
-  /** Work a linked environment starts here stays within its link
-      (`linkOrigin`). Another environment links to this one only when it is
-      set, since without it that work could change the user's own threads. */
-  linkFence: Schema.optionalKey(Schema.Boolean),
-  /** Serves a thread's stream, history pages and item detail to a link's session
-      (`PEER_LINK_THREAD_STREAM_ROUTE`), so a client of the linking environment can read it. */
-  linkThreadStream: Schema.optionalKey(Schema.Boolean),
-  /** A full-access link can ask this server for a one-time pairing credential for a client
-      of the linking environment. Absent on servers from before it. */
-  linkClientPairing: Schema.optionalKey(Schema.Boolean),
-  /** The same route also mints a pairing code for a link from another environment. */
-  linkPairingForLink: Schema.optionalKey(Schema.Boolean),
   /** Mints pairing codes that approve one agent sign-in at a set level (`AUTO-…`). */
   mcpApprovalCodes: Schema.optionalKey(Schema.Boolean),
-  peerLinkPairingCodes: Schema.optionalKey(Schema.Boolean),
   /** Agent sign-ins on its T3 Connect address are approved on the hosted app, without a code. */
   mcpHostedApproval: Schema.optionalKey(Schema.Boolean),
   /** Server answers server.prepareTriage. */

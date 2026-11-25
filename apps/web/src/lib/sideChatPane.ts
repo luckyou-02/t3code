@@ -10,11 +10,8 @@ import type {
 } from "@t3tools/contracts";
 
 import type { ToolCallDiffTarget } from "../diffPanelStore";
-import type { LinkedThreadTarget } from "@t3tools/client-runtime/linked-thread";
-import type { useNavigate } from "@tanstack/react-router";
 
 import { getClientSettings } from "../hooks/useSettings";
-import { linkedThreadRouteParams } from "../linkedThreadSurface";
 import { rightPanelHostRef, useRightPanelStore } from "../rightPanelStore";
 
 /** Whether an event started in the side chat pane (`data-side-chat-pane`), which the main chat ignores. */
@@ -84,30 +81,4 @@ export function openSideThread(input: {
     input.navigate(threadRef);
   }
   return target;
-}
-
-/**
- * Opens the read-only view of a linked environment's thread where the click asked: as a tab in
- * `panelRef`'s right panel, or on the main screen, which is also where it goes without a panel.
- */
-export function openLinkedThreadRead(input: {
-  readonly panelRef: ScopedThreadRef | null;
-  readonly target: LinkedThreadTarget;
-  readonly intent: SideThreadOpenIntent;
-  readonly navigate: ReturnType<typeof useNavigate>;
-}) {
-  const { panelRef, target } = input;
-  const place = resolveSideThreadOpenTarget({
-    preference: getClientSettings().sideThreadOpenTarget,
-    intent: input.intent,
-    panelAvailable: panelRef !== null,
-  });
-  if (place === "panel" && panelRef !== null) {
-    useRightPanelStore.getState().openLinkedThread(panelRef, target);
-    return;
-  }
-  void input.navigate({
-    to: "/linked/$viaEnvironmentId/$linkedEnvironmentId/$linkedThreadId",
-    params: linkedThreadRouteParams(target),
-  });
 }

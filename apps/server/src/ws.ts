@@ -7,10 +7,6 @@ import * as Context from "effect/Context";
 import * as NodeHttpServerRequest from "@effect/platform-node/NodeHttpServerRequest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Orchestrator from "./orchestration-v2/Orchestrator.ts";
-import * as PeerClientPairing from "./peer/PeerClientPairing.ts";
-import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
-import * as PeerLinks from "./peer/PeerLinks.ts";
-import * as PeerThreadRelay from "./peer/PeerThreadRelay.ts";
 
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -1478,10 +1474,6 @@ export const layerWsRpc = (
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const secretResolver = yield* SecretResolver.SecretResolver;
-      const peerLinks = yield* PeerLinks.PeerLinks;
-      const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
-      const peerThreadRelay = yield* PeerThreadRelay.PeerThreadRelay;
-      const peerClientPairing = yield* PeerClientPairing.PeerClientPairing;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFolders = yield* WorkspaceFolders.WorkspaceFolders;
@@ -2677,29 +2669,6 @@ export const layerWsRpc = (
         [WS_METHODS.serverGetStorageCleanupReport]: () => storageCleanup.reports,
         [WS_METHODS.serverGetDatabaseStorage]: () => databaseStorage.status,
         [WS_METHODS.serverReclaimDatabaseSpace]: () => databaseStorage.requestReclaim,
-        [WS_METHODS.peerLinksList]: (_input) =>
-          peerLinks.list.pipe(Effect.map((links) => ({ links }))),
-        [WS_METHODS.peerLinksNames]: (_input) =>
-          peerLinks.names.pipe(Effect.map((links) => ({ links }))),
-        [WS_METHODS.peerLinksLink]: (input) => peerLinks.link(input),
-        [WS_METHODS.peerLinksUnlink]: ({ environmentId }) => peerLinks.unlink(environmentId),
-        [WS_METHODS.peerLinksSubscribeThread]: (input) => peerThreadRelay.subscribe(input),
-        [WS_METHODS.peerLinksThreadHistoryPage]: (input) =>
-          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
-            Effect.andThen(peerThreadRelay.historyPage(input)),
-          ),
-        [WS_METHODS.peerLinksThreadItem]: (input) =>
-          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
-            Effect.andThen(peerThreadRelay.item(input)),
-          ),
-        [WS_METHODS.peerLinksPairClient]: (input) =>
-          peerClientPairing.request(input, currentSession),
-        [WS_METHODS.peerLinksPairLink]: (input) =>
-          peerClientPairing.requestForLink(input, currentSession),
-        [WS_METHODS.peerLinksAnswerRequest]: (input) =>
-          Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
-            Effect.andThen(peerLinkRequests.answer(input)),
-          ),
         [WS_METHODS.serverGetSettings]: (_input) =>
           Effect.map(serverSettings.getSettings, (settings) =>
             ServerSettings.redactServerSettingsForClient(settings, settingsClient),
@@ -3648,10 +3617,6 @@ export const layer = Layer.unwrap(
     const threadIssues = yield* ThreadIssueService.ThreadIssueService;
     const issueTrackers = yield* IssueTrackerConnections.IssueTrackerConnections;
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
-    const peerLinks = yield* PeerLinks.PeerLinks;
-    const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
-    const peerThreadRelay = yield* PeerThreadRelay.PeerThreadRelay;
-    const peerClientPairing = yield* PeerClientPairing.PeerClientPairing;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3730,10 +3695,6 @@ export const layer = Layer.unwrap(
                   reviewGuides,
                 ),
               ),
-              Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
-              Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
-              Layer.provide(Layer.succeed(PeerThreadRelay.PeerThreadRelay, peerThreadRelay)),
-              Layer.provide(Layer.succeed(PeerClientPairing.PeerClientPairing, peerClientPairing)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

@@ -27,7 +27,6 @@ import * as Effect from "effect/Effect";
 import type { OrchestratorV2Error } from "../orchestration-v2/Orchestrator.ts";
 import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import { resolveInteractionMode, resolveRuntimeMode } from "./delegatedTaskModes.ts";
-import { fencingLinkOrigin } from "./linkOrigin.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 
 const delegatedTaskPrefix = "thread:delegated-task:";
@@ -82,20 +81,9 @@ export const threadNotFound = Effect.fn("OrchestratorMcpService.threadNotFound")
     });
   }
   const mcpHint = suggested === null ? "" : ` Did you mean \`${suggested}\`?`;
-  const caller =
-    scope.thread === undefined
-      ? null
-      : yield* threads.getThreadShell(scope.thread.threadId).pipe(Effect.orElseSucceed(() => null));
-  // A peer link's caller would be pointed at this machine's links, and a fenced one may not use them.
-  const linksHint =
-    scope.linkedEnvironments === false ||
-    scope.client?.linked === true ||
-    fencingLinkOrigin({ scope, caller: caller ?? undefined }) !== undefined
-      ? ""
-      : " Thread ids belong to one environment: for a thread on a linked one, find it with `t3_environment_links` and pass its `environmentId` to a tool that takes one.";
   return yield* new OrchestratorMcpFailure({
     code: "thread_not_found",
-    message: `${message}${mcpHint}${linksHint}`,
+    message: `${message}${mcpHint}`,
   });
 });
 

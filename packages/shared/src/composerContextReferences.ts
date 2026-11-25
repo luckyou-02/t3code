@@ -369,11 +369,7 @@ function formatComposerContextProviderPayload(record: KnownComposerContextRecord
       return lines.join("\n");
     }
     case "environment":
-      return [
-        `label: ${record.label}`,
-        `environmentId: ${record.environmentId}`,
-        "The user means this machine. Not linked here yet: call t3_environment_link with this environmentId. Linked: pass it as environmentId, or target.environmentId for delegate_task.",
-      ].join("\n");
+      return [`label: ${record.label}`, `environmentId: ${record.environmentId}`].join("\n");
   }
 }
 
@@ -454,13 +450,11 @@ export function composerContextProviderTextForDisplay(text: string): string {
   return result + text.slice(cursor);
 }
 
-// An agent reads threads on its own machine and on those it links to, even when a draft
-// moves between machines.
+// An agent reads threads on its own machine, even when a draft moves between machines.
 export function threadContextsOutsideEnvironment(input: {
   text: string;
   records: ReadonlyArray<ComposerContextRecord>;
   environmentId: EnvironmentId;
-  linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
 }): ThreadContextRecord[] {
   const referenced = new Set(
     collectComposerContextReferences(input.text).map((occurrence) => occurrence.contextId),
@@ -470,8 +464,7 @@ export function threadContextsOutsideEnvironment(input: {
       record.kind === "thread" &&
       "threadId" in record &&
       referenced.has(record.contextId) &&
-      record.environmentId !== input.environmentId &&
-      !input.linkedEnvironments.has(record.environmentId),
+      record.environmentId !== input.environmentId,
   );
 }
 

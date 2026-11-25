@@ -7,7 +7,6 @@ import {
   matchComposerEnvironmentItems,
   matchComposerThreadItems,
 } from "@t3tools/client-runtime/composerThreadItems";
-import { useAtomValue } from "@effect/atom-react";
 import { useState } from "react";
 import type {
   EnvironmentId,
@@ -36,7 +35,6 @@ import {
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useVisibleThreadShells } from "~/state/entities";
 import { useEnvironmentIdentities, useEnvironmentMachines } from "~/state/environments";
-import { offersLinkedEnvironmentsAtom } from "~/state/peerLinks";
 import {
   pullRequestEnvironment,
   usePullRequestList,
@@ -66,7 +64,6 @@ const EMPTY_PULL_REQUEST_LIST_TARGETS: ReadonlyArray<EnvironmentQueryTarget<Pull
 export function useComposerMenuItems({
   composerTrigger,
   environmentId,
-  linkedEnvironments,
   gitCwd,
   activeThreadId,
   pullRequestProjectId,
@@ -86,7 +83,6 @@ export function useComposerMenuItems({
 }: {
   readonly composerTrigger: ComposerTrigger | null;
   readonly environmentId: EnvironmentId;
-  readonly linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
   readonly gitCwd: string | null;
   readonly activeThreadId: ThreadId | null;
   readonly pullRequestProjectId: ProjectId | null;
@@ -128,15 +124,11 @@ export function useComposerMenuItems({
   const environmentThreadShells = useVisibleThreadShells(isPathTrigger);
   // Mounts older settled threads matching the mention, here and on linked machines, which shells
   // may leave out.
-  useThreadSearch(
-    isPathTrigger ? [environmentId, ...linkedEnvironments.keys()] : [],
-    pathTriggerQuery,
-    { titlesOnly: true },
-  );
+  useThreadSearch(isPathTrigger ? [environmentId] : [], pathTriggerQuery, { titlesOnly: true });
   // The user's machines feed `@` machine matches; the catalog summary is cheap and stable.
   const environmentIdentities = useEnvironmentIdentities();
   const environmentMachines = useEnvironmentMachines();
-  const offersMachines = useAtomValue(offersLinkedEnvironmentsAtom(environmentId));
+  const offersMachines = false;
   const mentionableEnvironments = environmentIdentities.map((identity) => ({
     ...identity,
     machine: environmentMachines.get(identity.environmentId) ?? ("server" as const),
@@ -216,7 +208,6 @@ export function useComposerMenuItems({
           {
             shells: environmentThreadShells,
             environmentId,
-            linkedEnvironments,
             excludeThreadId: activeThreadId,
             query: composerTrigger.query,
             now,
@@ -228,7 +219,6 @@ export function useComposerMenuItems({
           ? matchComposerEnvironmentItems(
               {
                 environments: mentionableEnvironments,
-                linkedEnvironments,
                 environmentId,
                 query: composerTrigger.query,
               },

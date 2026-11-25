@@ -14,6 +14,7 @@ import {
   ProviderInstanceId,
   ProviderThreadId,
   ProviderTurnId,
+  RunId,
   RuntimeRequestId,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ScheduledTaskId,
@@ -2374,43 +2375,67 @@ const restartCompletionWake = Effect.fn("restartCompletionWake")(function* (
   const firstTaskId = NodeId.make("task:steered-wake-first");
   const siblingTaskId = NodeId.make("task:steered-wake-sibling");
   const now = yield* DateTime.now;
+  const parentProjection = yield* orchestrator.getThreadProjection(threadId);
+  const originRun = parentProjection.runs.find((run) => run.id === origin.runId)!;
+  const childThreadIdFor = (taskId: NodeId) => ThreadId.make(`thread:child:${taskId}`);
   yield* sink.write({
-    events: [firstTaskId, siblingTaskId].map((taskId) => ({
-      id: EventId.make(`event:seed:${taskId}`),
-      type: "subagent.updated" as const,
-      threadId,
-      runId: origin.runId,
-      nodeId: taskId,
-      occurredAt: now,
-      payload: {
-        id: taskId,
-        threadId,
-        runId: origin.runId,
-        parentNodeId: origin.rootNodeId,
-        origin: "app_owned" as const,
-        createdBy: "agent" as const,
-        driver,
-        providerInstanceId: instanceId,
-        providerThreadId: null,
-        childThreadId: null,
-        remoteChild: {
-          environmentId: EnvironmentId.make("environment:box"),
-          threadId: ThreadId.make(`thread:remote:${taskId}`),
-          label: "box",
+    events: [firstTaskId, siblingTaskId].flatMap((taskId) => {
+      const childThreadId = childThreadIdFor(taskId);
+      return [
+        {
+          id: EventId.make(`event:seed-child:${taskId}`),
+          type: "thread.created" as const,
+          threadId: childThreadId,
+          occurredAt: now,
+          payload: {
+            ...parentProjection.thread,
+            id: childThreadId,
+            title: `Child ${taskId}`,
+            lineage: {
+              rootThreadId: threadId,
+              parentThreadId: threadId,
+              relationshipToParent: "subagent" as const,
+            },
+            forkedFrom: {
+              type: "node" as const,
+              threadId,
+              nodeId: taskId,
+            },
+          },
         },
-        nativeTaskRef: null,
-        prompt: "Do background work",
-        title: null,
-        model: null,
-        completionWake: "always" as const,
-        completionDelivery: { state: "pending" as const, observedByRunId: null },
-        status: "running" as const,
-        result: null,
-        startedAt: now,
-        completedAt: null,
-        updatedAt: now,
-      },
-    })),
+        {
+          id: EventId.make(`event:seed:${taskId}`),
+          type: "subagent.updated" as const,
+          threadId,
+          runId: origin.runId,
+          nodeId: taskId,
+          occurredAt: now,
+          payload: {
+            id: taskId,
+            threadId,
+            runId: origin.runId,
+            parentNodeId: origin.rootNodeId,
+            origin: "app_owned" as const,
+            createdBy: "agent" as const,
+            driver,
+            providerInstanceId: instanceId,
+            providerThreadId: null,
+            childThreadId,
+            nativeTaskRef: null,
+            prompt: "Do background work",
+            title: null,
+            model: null,
+            completionWake: "always" as const,
+            completionDelivery: { state: "pending" as const, observedByRunId: null },
+            status: "running" as const,
+            result: null,
+            startedAt: now,
+            completedAt: null,
+            updatedAt: now,
+          },
+        },
+      ];
+    }),
   });
   yield* finishTurn(origin);
   // The wake queues behind a user run that started after the origin run finished.
@@ -2433,14 +2458,55 @@ const restartCompletionWake = Effect.fn("restartCompletionWake")(function* (
   }
 
   const completeTask = (taskId: NodeId) =>
-    orchestrator.dispatch({
-      type: "delegated_task.remote.complete",
-      commandId: CommandId.make(`command:remote-complete:${taskId}`),
-      parentThreadId: threadId,
-      taskId,
-      status: "completed",
-      result: `${taskId} finished`,
-      stoppedThere: "ran-out",
+    Effect.gen(function* () {
+      const childThreadId = childThreadIdFor(taskId);
+      const childRunId = RunId.make(`run:child:${taskId}`);
+      const doneAt = yield* DateTime.now;
+      yield* sink.write({
+        events: [
+          {
+            id: EventId.make(`event:child-result:${taskId}`),
+            type: "message.updated" as const,
+            threadId: childThreadId,
+            runId: childRunId,
+            occurredAt: doneAt,
+            payload: {
+              id: MessageId.make(`message:child-result:${taskId}`),
+              threadId: childThreadId,
+              runId: childRunId,
+              nodeId: null,
+              role: "assistant" as const,
+              text: `${taskId} finished`,
+              attachments: [],
+              streaming: false,
+              createdBy: "agent" as const,
+              creationSource: "server" as const,
+              createdAt: doneAt,
+              updatedAt: doneAt,
+            },
+          },
+          {
+            id: EventId.make(`event:child-run-done:${taskId}`),
+            type: "run.updated" as const,
+            threadId: childThreadId,
+            runId: childRunId,
+            occurredAt: doneAt,
+            payload: {
+              ...originRun,
+              id: childRunId,
+              threadId: childThreadId,
+              ordinal: 1,
+              userMessageId: MessageId.make(`message:child-user:${taskId}`),
+              rootNodeId: NodeId.make(`node:child-root:${taskId}`),
+              delegatedTaskId: taskId,
+              status: "completed" as const,
+              startedAt: doneAt,
+              completedAt: doneAt,
+            },
+          },
+        ],
+      });
+      yield* orchestrator.recoverDelegatedTask(childThreadId);
     });
   yield* completeTask(firstTaskId);
   const firstDelivery = (yield* orchestrator.getThreadProjection(threadId)).runs.find(

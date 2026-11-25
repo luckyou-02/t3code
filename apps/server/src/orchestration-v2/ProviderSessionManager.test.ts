@@ -5139,11 +5139,6 @@ it.effect.each([
         assert.equal((yield* Ref.get(state)).resumeCount, ++resumeCount);
         yield* resumeSecondThread;
         assert.equal((yield* Ref.get(state)).resumeCount, ++resumeCount);
-        // regression: #26722 a Linked environments change reloads only the idle thread's tools.
-        yield* settings.updateSettings({ linkedEnvironmentsEnabled: true });
-        yield* resumeSecondThread;
-        assert.equal((yield* Ref.get(state)).resumeCount, ++resumeCount);
-        assert.deepEqual((yield* Ref.get(state)).unloadedNativeThreadIds, ["native-thread"]);
         const subscribe = firstRuntime.subscribeEvents;
         assert.isDefined(subscribe);
         if (subscribe === undefined) return;
@@ -5944,17 +5939,6 @@ it.effect(
 
         assert.equal(error._tag, "ProviderSessionOpenError");
         assert.equal((yield* Ref.get(state)).openCount, 1);
-
-        // regression: #26722 an exclusive runtime configures MCP at open, so it reopens.
-        yield* settings.updateSettings({ linkedEnvironmentsEnabled: true });
-        yield* manager.open({
-          threadId: firstThreadId,
-          providerSessionId,
-          modelSelection,
-          runtimePolicy,
-        });
-        assert.equal((yield* Ref.get(state)).openCount, 2);
-        assert.equal((yield* Ref.get(state)).closeCount, 1);
       });
 
       yield* effect.pipe(

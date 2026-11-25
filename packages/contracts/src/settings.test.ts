@@ -561,4 +561,9 @@ describe("legacy pruned settings compatibility", () => {
     const decoded = decodeServerSettings({ guestSharingEnabled: true });
     expect(decoded).not.toHaveProperty("guestSharingEnabled");
   });
+
+  it("ignores removed linkedEnvironmentsEnabled when decoding persisted settings", () => {
+    const decoded = decodeServerSettings({ linkedEnvironmentsEnabled: true });
+    expect(decoded).not.toHaveProperty("linkedEnvironmentsEnabled");
+  });
 });

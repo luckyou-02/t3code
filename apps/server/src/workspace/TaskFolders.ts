@@ -1,10 +1,8 @@
 import {
   GitCommandError,
   isRuntimeModeAbove,
-  linkOriginIsFenced,
   managedPolicyDeniedMessage,
   managedRuntimeModeDenial,
-  type OrchestrationV2LinkOrigin,
   type ProjectId,
   type ProjectTrackedFolder,
   type ProviderInteractionMode,
@@ -225,30 +223,18 @@ export type ProjectCommands = "permitted" | "request-not-permitted" | "agent-bel
 export type ProjectCommandsNow = ProjectCommands | Effect.Effect<ProjectCommands>;
 
 /**
- * A layout command is the project owner's own code. A link paired below full access grants T3's
- * tools only (see `mcp/linkOrigin.ts`), so work it started never runs one.
- */
-export const projectCommandsForLink = (
-  origin: OrchestrationV2LinkOrigin | undefined,
-): ProjectCommands =>
-  origin === undefined || !linkOriginIsFenced(origin) ? "permitted" : "request-not-permitted";
-
-/**
  * For a worktree an agent asked for. Below Full access the agent's own commands wait for a
  * person, so the project's do not run for it either, approved or not. `maxRuntimeMode` is the
  * administrator's limit: a thread recorded above it starts no work in that mode, so it is not in
  * Full access here whatever it records.
  */
 export const projectCommandsForAgent = (
-  origin: OrchestrationV2LinkOrigin | undefined,
   modes: {
     readonly runtimeMode: RuntimeMode;
     readonly interactionMode: ProviderInteractionMode;
   },
   maxRuntimeMode: RuntimeMode | undefined,
 ): ProjectCommands => {
-  const link = projectCommandsForLink(origin);
-  if (link !== "permitted") return link;
   return modes.runtimeMode === "full-access" &&
     !isRuntimeModeAbove(modes.runtimeMode, maxRuntimeMode) &&
     modes.interactionMode === "default"

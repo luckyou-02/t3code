@@ -3,7 +3,6 @@ import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 
 import {
-  EnvironmentId,
   NodeId,
   RunAttemptId,
   RunId,
@@ -715,19 +714,6 @@ describe("withMessageSenderNote", () => {
       thread,
       "$25 left",
       '[T3 Code: the agent in T3 thread "t" sent this message, not the user.]\n\n$25 left',
-    ],
-    [
-      {
-        createdBy: "agent",
-        creationSource: "mcp",
-        linkedSender: {
-          environmentId: EnvironmentId.make("e"),
-          threadId: ThreadId.make("r"),
-          title: "x",
-        },
-      },
-      "Hi",
-      '[T3 Code: the agent in T3 thread "r" on linked environment "e" sent this message, not the user.]\n\nHi',
     ],
     [
       { createdBy: "user", creationSource: "web", scheduledTaskId: ScheduledTaskId.make("s") },

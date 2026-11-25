@@ -184,9 +184,7 @@ const make = Effect.gen(function* () {
     // The agent asks, so its thread's modes decide what of the project's own code runs for it:
     // as they are when each piece is about to run, since the fetch in between can take a while.
     const projectCommandsNow = loadThread(scope).pipe(
-      Effect.map(({ thread }) =>
-        TaskFolders.projectCommandsForAgent(thread.linkOrigin, thread, maxRuntimeMode),
-      ),
+      Effect.map(({ thread }) => TaskFolders.projectCommandsForAgent(thread, maxRuntimeMode)),
       // A thread that cannot be read might be below Full access.
       Effect.orElseSucceed((): TaskFolders.ProjectCommands => "agent-below-full-access"),
     );

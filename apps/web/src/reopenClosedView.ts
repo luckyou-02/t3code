@@ -164,9 +164,6 @@ export async function reopenClosedView(
     case "thread":
       panels.openThread(ref, surface.threadId);
       break;
-    case "linked-thread":
-      panels.openLinkedThread(ref, surface);
-      break;
     default:
       panels.open(ref, surface.kind);
   }

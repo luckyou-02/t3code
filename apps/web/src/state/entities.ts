@@ -23,7 +23,6 @@ import type { ScopedProjectRef, ScopedThreadRef } from "@t3tools/contracts";
 import type {
   EnvironmentId,
   OrchestrationV2ProjectedTurnItem,
-  OrchestrationV2RemoteTaskChild,
   OrchestrationV2ThreadShell,
   NodeId,
   ThreadId,
@@ -138,11 +137,6 @@ export function useAllEnvironmentShellsBootstrapped(): boolean {
 
 export function useAllEnvironmentProjectSnapshotsReady(): boolean {
   return useAtomValue(allEnvironmentProjectSnapshotsReadyAtom);
-}
-
-/** Tasks linked environments run for a listed thread, by thread key; lists show them under it. */
-export function useDelegatedUnderParent(): ReadonlySet<string> {
-  return useAtomValue(environmentThreadShells.delegatedUnderParentAtom);
 }
 
 export function useThreadShellsForProjectRefs(
@@ -396,10 +390,6 @@ export function readThreadShells(): ReadonlyArray<EnvironmentThreadShell> {
   return appAtomRegistry.get(environmentThreadShells.threadShellsAtom);
 }
 
-export function readDelegatedUnderParent(): ReadonlySet<string> {
-  return appAtomRegistry.get(environmentThreadShells.delegatedUnderParentAtom);
-}
-
 function shellParentThreadId(
   thread: Pick<OrchestrationV2ThreadShell, "forkedFrom" | "lineage">,
 ): ThreadId | null {
@@ -495,29 +485,20 @@ export function readResponseSubagents(
 
   const byTask = new Map<NodeId, SubagentChild>();
   const local = new Map<ThreadId, SubagentChild>();
-  const remember = (
-    taskId: NodeId,
-    childThreadId: ThreadId | null,
-    remote: OrchestrationV2RemoteTaskChild | undefined,
-    title: string | null,
-  ) => {
+  const remember = (taskId: NodeId, childThreadId: ThreadId | null, title: string | null) => {
     if (childThreadId !== null) {
       const child = { threadId: childThreadId, title };
       byTask.set(taskId, child);
       local.set(childThreadId, child);
-    } else if (remote) {
-      // A task sent to a linked environment has no thread here; its thread lives there.
-      const { threadId, environmentId } = remote;
-      byTask.set(taskId, { threadId, environmentId, title: title ?? remote.title });
     }
   };
   for (const { item } of items) {
     if (item.type === "subagent") {
-      remember(item.subagentId, item.childThreadId, item.remoteChild, null);
+      remember(item.subagentId, item.childThreadId, null);
     }
   }
   for (const subagent of projection.subagents) {
-    remember(subagent.id, subagent.childThreadId, subagent.remoteChild, subagent.title);
+    remember(subagent.id, subagent.childThreadId, subagent.title);
   }
 
   const found = new Map<string, SubagentChild>();

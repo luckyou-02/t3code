@@ -79,7 +79,6 @@ import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as ThreadManagement from "./ThreadManagementService.ts";
 import * as ThreadTitleRegeneration from "./ThreadTitleRegenerationService.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
-import * as RemoteDelegation from "../peer/RemoteDelegation.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
 const projectId = ProjectId.make("project:launch-test");
@@ -400,7 +399,6 @@ it.effect.each(
           Scheduler.layer,
           Layer.mock(SecretRequests.SecretRequests)({}),
           ManagedPolicy.layerTest(),
-          Layer.mock(RemoteDelegation.RemoteDelegation)({}),
         ),
       ),
     );
@@ -512,17 +510,6 @@ it.effect("leaves delegated tasks and workflow agent steps out of the top-level 
     yield* launches.launch(
       launchInput({ command: "command:top-level", thread: "thread:top-level" }),
     );
-    const delegated = yield* launches.launch({
-      ...launchInput({ command: "command:delegated", thread: "thread:delegated" }),
-      createdBy: "agent",
-      creationSource: "mcp",
-      linkOrigin: { sessionId: "mcp-session:linked", label: "Linked laptop" },
-      delegatedFrom: {
-        environmentId: EnvironmentId.make("environment:linked"),
-        threadId: ThreadId.make("thread:remote-parent"),
-        title: "Remote parent",
-      },
-    });
     const workflowStep = yield* launches.launch({
       ...launchInput({ command: "command:workflow-step", thread: "thread:workflow-step" }),
       createdBy: "system",
@@ -542,7 +529,7 @@ it.effect("leaves delegated tasks and workflow agent steps out of the top-level 
     const all = yield* threads.listProjectThreads({ projectId, includeSubagents: true });
     assert.includeMembers(
       all.map((thread) => thread.id),
-      [delegated.threadId, workflowStep.threadId],
+      [workflowStep.threadId],
     );
   }).pipe(Effect.provide(harness.layer));
 });
@@ -3058,97 +3045,6 @@ const withLayoutProject = <A, E>(
     }).pipe(Effect.provide(layerTaskFolders));
   }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, layerGit)), Effect.scoped);
 };
-
-it.live(
-  "a thread started through a link below full access gets no worktree from a project's layout command",
-  () =>
-    withLayoutProject(({ ran }) =>
-      Effect.gen(function* () {
-        const launches = yield* ThreadLaunch.ThreadLaunchService;
-        const launch = Effect.fnUntraced(function* (
-          name: string,
-          access: "full-access" | "auto-accept-edits",
-        ) {
-          const launched = yield* launches.launch({
-            ...launchInput({
-              command: `launch:${name}`,
-              thread: `thread:${name}`,
-              message: "Start",
-              workspace: { type: "worktree", baseRef: "main", branch: `feature/${name}` },
-            }),
-            createdBy: "agent",
-            creationSource: "mcp",
-            linkOrigin: { sessionId: "mcp-session:linked", label: "Linked laptop", access },
-          });
-          return yield* preparationSettled(launched.threadId);
-        });
-
-        const limited = yield* launch("limited", "auto-accept-edits");
-        assert.equal(limited.runs[0]?.status, "failed");
-        assert.isNull(limited.thread.worktreePath);
-        assert.equal(yield* ran, "");
-
-        // Preparing the same run again reads the link from the thread, not from a request.
-        const threads = yield* ThreadManagement.ThreadManagementService;
-        yield* launches.retryPreparation({
-          commandId: CommandId.make("launch:limited:retry"),
-          threadId: limited.thread.id,
-          runId: limited.runs[0]!.id,
-        });
-        yield* threads.streamStoredEventsFrom({ threadId: limited.thread.id }).pipe(
-          Stream.filter(
-            (stored) =>
-              stored.event.type === "run.updated" &&
-              (stored.commandId?.endsWith(":release") === true ||
-                stored.event.payload.status === "failed"),
-          ),
-          Stream.take(2),
-          Stream.runDrain,
-        );
-        assert.equal(yield* ran, "");
-
-        // A first message sent into an empty thread the link started names no link; the
-        // thread's own link still decides.
-        const emptyThreadId = ThreadId.make("thread:limited-empty");
-        yield* threads.dispatch({
-          type: "thread.create",
-          commandId: CommandId.make("launch:limited-empty:create"),
-          threadId: emptyThreadId,
-          projectId,
-          title: "Linked",
-          modelSelection,
-          runtimeMode: "full-access",
-          interactionMode: "default",
-          branch: null,
-          worktreePath: null,
-          createdBy: "agent",
-          creationSource: "mcp",
-          linkOrigin: {
-            sessionId: "mcp-session:linked",
-            label: "Linked laptop",
-            access: "auto-accept-edits",
-          },
-        });
-        yield* launches.launch({
-          ...launchInput({
-            command: "launch:limited-empty",
-            thread: emptyThreadId,
-            message: "Start",
-            workspace: { type: "worktree", baseRef: "main", branch: "feature/limited-empty" },
-          }),
-          reuseExistingThread: true,
-        });
-        const reused = yield* preparationSettled(emptyThreadId);
-        assert.equal(reused.runs[0]?.status, "failed");
-        assert.isNull(reused.thread.worktreePath);
-        assert.equal(yield* ran, "");
-
-        const full = yield* launch("full", "full-access");
-        assert.equal(full.runs[0]?.status, "starting");
-        assert.equal(yield* ran, "create\n");
-      }),
-    ),
-);
 
 it.live(
   "an agent's launch runs a project's approved layout command only when the thread that asked is in Full access",

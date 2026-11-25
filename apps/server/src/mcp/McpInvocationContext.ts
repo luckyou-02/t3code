@@ -6,12 +6,10 @@ import {
   PreviewAutomationUnavailableError,
   type ProviderInstanceId,
   type ProviderInteractionMode,
-  type OrchestrationV2LinkedSender,
   type RuntimeMode,
   type ThreadId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import type * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { formatThreadLink, hostedThreadLink } from "@t3tools/shared/threadLinks";
@@ -40,19 +38,10 @@ export interface McpClientCaller {
   readonly label: string;
   readonly access: AuthMcpClientAccess;
   /**
-   * Another T3 Code environment's peer link. What it starts here carries its
-   * session as `linkOrigin`, and it changes only that work (`linkOrigin.ts`).
-   */
-  readonly linked?: boolean | undefined;
-  /** When a peer link's session ends unless it is used again, answered as `T3-Link-Expires-At`. */
-  readonly linkExpiresAt?: DateTime.Utc | undefined;
-  /**
    * Narrower modes the client asked for on this request (`T3-Mode-Limit`):
    * another environment passing on the limits of the agent it calls for.
    */
   readonly narrowedTo?: ClientModes | undefined;
-  /** A linked environment's thread this request is made for (`T3-Sender-Thread`). */
-  readonly senderThread?: OrchestrationV2LinkedSender | undefined;
   /** An outside client's thread links go through this hosted app, as Copy thread's do. */
   readonly hostedAppUrl?: string | undefined;
 }
@@ -64,19 +53,6 @@ export interface McpClientCaller {
  * `clientModeCeiling`), so a client gains nothing by sending a broad one.
  */
 export const MODE_LIMIT_HEADER = "t3-mode-limit";
-
-/**
- * `T3-Link-Expires-At: <ISO time>` answers a peer link's request with when its
- * session now ends. Using a link renews it, so the linking side keeps this.
- */
-export const LINK_EXPIRES_AT_HEADER = "t3-link-expires-at";
-
-/**
- * `T3-Sender-Thread: <environmentId>/<threadId>/<title>`, each URI-encoded: the
- * thread another environment makes a request for, so what it sends here can name
- * it. Read only from a linked client.
- */
-export const SENDER_THREAD_HEADER = "t3-sender-thread";
 
 export interface ClientModes {
   readonly runtimeMode: RuntimeMode;
@@ -152,8 +128,6 @@ export interface McpInvocationScope {
   readonly requestNamespace: string;
   readonly thread: McpThreadCaller | undefined;
   readonly client: McpClientCaller | undefined;
-  /** False while the Linked environments beta is off here; `/mcp` reads it per request. */
-  readonly linkedEnvironments?: boolean;
   /** The broadest runtime mode an administrator lets a thread run in here. Unset is full access. */
   readonly runtimeModeCeiling?: RuntimeMode | undefined;
   /** True while Labs → Workflows is on here; `/mcp` reads it per request. Unset is off. */
@@ -224,13 +198,6 @@ export const hiddenFromThreads = (): boolean => {
   const fiber = Fiber.getCurrent();
   const scope = fiber && Context.getOrUndefined(fiber.context, McpInvocationContext);
   return scope?.thread === undefined;
-};
-
-/** `McpSchema.EnabledWhen` for tools that only serve links, hidden while the beta is off. */
-export const hiddenWhileLinksOff = (): boolean => {
-  const fiber = Fiber.getCurrent();
-  const scope = fiber && Context.getOrUndefined(fiber.context, McpInvocationContext);
-  return scope?.linkedEnvironments !== false;
 };
 
 /** `McpSchema.EnabledWhen` for workflow event types: outside clients only, while Workflows is on. */
