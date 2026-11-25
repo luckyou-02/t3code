@@ -19,11 +19,11 @@ describe("webhookAddress", () => {
     expect(result.note).toBeNull();
   });
 
-  it("is not copyable and points at T3 Connect when no base URL exists", () => {
+  it("is not copyable and asks to connect the environment when no base URL exists", () => {
     const result = webhookAddress(endpoint, null);
     expect(result.address).toBe("/hooks/abc");
     expect(result.copyable).toBe(false);
-    expect(result.note).toContain("T3 Connect");
+    expect(result.note).toContain("Connect to the environment");
   });
 
   it("warns that loopback addresses only work on this computer", () => {
@@ -37,6 +37,6 @@ describe("webhookAddress", () => {
     const result = webhookAddress(endpoint, "https://home.example.net");
     expect(result.address).toBe("https://home.example.net/hooks/abc");
     expect(result.copyable).toBe(true);
-    expect(result.note).toContain("Tailscale");
+    expect(result.note).toContain("reach the environment");
   });
 });

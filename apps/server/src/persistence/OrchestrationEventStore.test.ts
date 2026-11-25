@@ -68,7 +68,24 @@ layer("OrchestrationEventStore", (it) => {
           updatedAt: now,
         },
       };
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO orchestration_events (
+          event_id, aggregate_kind, stream_id, stream_version, event_type,
+          occurred_at, actor_kind, payload_json, metadata_json, application_event_version
+        ) VALUES (
+          'retired-link-request-event', 'thread', ${threadId}, 1, 'turn-item.updated',
+          ${DateTime.formatIso(now)}, 'server', '{"type":"link_request"}', '{}', 2
+        )
+      `;
       const [replayed] = yield* store.appendAgentEvents({ events: [event] });
+      const first = yield* store
+        .readAgentEvents({ threadId, afterSequence, limit: 1 })
+        .pipe(Stream.runCollect);
+      assert.deepEqual(
+        first.map((row) => row.sequence),
+        [replayed!.sequence],
+      );
       const pull = yield* Stream.toPull(
         store.streamProjectedApplicationEvents({
           afterSequence,

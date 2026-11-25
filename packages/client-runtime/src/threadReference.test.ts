@@ -106,6 +106,15 @@ describe("resolveThreadReferenceCopyTarget", () => {
     });
   });
 
+  it("links to a thread on the local app origin", () => {
+    expect(
+      resolveThreadReferenceCopyTarget({
+        ...thread,
+        hostedAppUrl: "http://127.0.0.1:3773/settings",
+      })?.value,
+    ).toBe("http://127.0.0.1:3773/threads/env-1/thread-1");
+  });
+
   it("links through the build's hosted app", () => {
     expect(
       resolveThreadReferenceCopyTarget({ ...thread, hostedAppUrl: "https://preview.t3.codes" })

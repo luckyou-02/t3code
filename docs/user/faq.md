@@ -13,8 +13,6 @@ Bring your own: Claude Code, Codex, Cursor, Grok Build, OpenCode, Google Antigra
 We were inspired by the Codex desktop app, Conductor, Claude Desktop, and Cursor Glass, but none met our bar. What you get:
 
 - Bring your own sub. Claude, Codex, and whatever else you already have installed.
-- Best in class remote. Run `t3 up` on any box and drive it from anywhere.
-- Best in class mobile app.
 - Truly 100% open source code (MIT). If we go the wrong direction, fork it under your own branding.
 
 Every harness feels nearly identical in here, so you can stop worrying about harnesses and focus on building :) [Install](./install.md)
@@ -57,7 +55,7 @@ No. T3 Code is a serious developer tool. Locally runnable models are not capable
 
 ## Does my code go to T3 servers?
 
-No. Your code and prompts go from your machine to your provider (Anthropic, OpenAI, etc.), not to us. Remote connections go straight from your device to your machine over your local network, Tailscale, or SSH. T3 Code sends no product usage data. If you want diagnostics, you can export them to your own OpenTelemetry receiver. [Diagnostics export](./telemetry.md)
+No. Your code and prompts go from your machine to your provider (Anthropic, OpenAI, etc.), not to us. T3 Code sends no product usage data. If you want diagnostics, you can export them to your own OpenTelemetry receiver. [Diagnostics export](./telemetry.md)
 
 ## Worktrees are eating my disk. How do I clean them up?
 

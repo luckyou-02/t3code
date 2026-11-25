@@ -24,6 +24,7 @@ import * as Option from "effect/Option";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import { RETIRED_CONNECT_SUBJECT } from "../persistence/AuthPairingLinks.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
 import type {
   ServerAuthInternalError,
@@ -499,13 +500,21 @@ const SessionClaims = Schema.Struct({
   method: Schema.Literals(["browser-session-cookie", "bearer-access-token", "dpop-access-token"]),
   jkt: Schema.optionalKey(Schema.String),
   rtc: Schema.optionalKey(RuntimeMode),
-  /** Signed, so a client cannot shed its peer link's limits. */
+  plk: Schema.optionalKey(Schema.Literal(1)),
   /** Signed, so only sessions issued as renewable can renew. */
   rnw: Schema.optionalKey(Schema.Literal(1)),
   iat: Schema.Number,
   exp: Schema.Number,
 });
 type SessionClaims = typeof SessionClaims.Type;
+
+const AcceptedSessionClaims = SessionClaims.check(
+  Schema.makeFilter(
+    (claims) =>
+      (claims.plk === undefined && claims.sub !== RETIRED_CONNECT_SUBJECT) ||
+      "Session was issued for a retired connection.",
+  ),
+);
 
 const WebSocketClaims = Schema.Struct({
   v: Schema.Literal(1),
@@ -518,7 +527,9 @@ const WebSocketClaims = Schema.Struct({
 });
 type WebSocketClaims = typeof WebSocketClaims.Type;
 
-const decodeSessionClaims = Schema.decodeUnknownEffect(Schema.fromJsonString(SessionClaims));
+const decodeSessionClaims = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(AcceptedSessionClaims),
+);
 const decodeWebSocketClaims = Schema.decodeUnknownEffect(Schema.fromJsonString(WebSocketClaims));
 
 function createDefaultClientMetadata(): AuthClientMetadata {
@@ -1107,7 +1118,7 @@ const make = Effect.gen(function* () {
           (cause) => new WebSocketTokenVerificationError({ sessionId: claims.sid, cause }),
         ),
       );
-    if (Option.isNone(row)) {
+    if (Option.isNone(row) || row.value.subject === RETIRED_CONNECT_SUBJECT) {
       return yield* new UnknownWebSocketSessionError({ sessionId: claims.sid });
     }
     if (row.value.expiresAt.epochMilliseconds <= observedAt.epochMilliseconds) {

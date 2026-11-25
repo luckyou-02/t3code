@@ -13,7 +13,7 @@ The environment issues its own sessions and enforces their capabilities. See
   Revoking is not capped by the caller's scopes.
 - **Why the default grant includes management scopes.** `terminal:operate` and
   `orchestration:operate` already grant OS-user execution (which can invoke `t3 auth session issue`),
-  so withholding access or relay management from the default grant would not be a real boundary.
+  so withholding access management from the default grant would not be a real boundary.
   Narrower clients receive explicit scopes.
 - **No recoverable secrets in read models.** Only the creation response returns a raw pairing
   credential; access listings expose metadata only.

@@ -437,6 +437,11 @@ const makeEventStore = Effect.gen(function* () {
       }
       WHERE sequence > ${input.afterSequence}
         AND sequence <= ${input.throughSequence ?? Number.MAX_SAFE_INTEGER}
+        AND CASE
+          WHEN event_type = 'turn-item.updated' AND json_valid(payload_json)
+          THEN json_extract(payload_json, '$.type') IS NOT 'link_request'
+          ELSE 1
+        END
         AND (
           ${
             input.onlyAgentEvents === true

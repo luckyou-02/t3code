@@ -102,28 +102,29 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))(
       }).pipe(Effect.provide(layerEnvironmentAuth())),
     );
 
-    it.effect("revokes only T3 Connect clients when the policy keeps remote clients", () =>
+    it.effect("ignores retired Connect sessions and pairing credentials", () =>
       Effect.gen(function* () {
         const sessions = yield* SessionStore.SessionStore;
-        const phone = yield* sessions.issue({ subject: "one-time-token" });
-        const connect = yield* sessions.issue({ subject: "cloud-connect" });
+        const pairingLinks = yield* PairingGrantStore.PairingGrantStore;
+        const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const local = yield* environmentAuth.issueSession();
+        const retired = yield* sessions.issue({ subject: "cloud-connect" });
+        const link = yield* pairingLinks.issueOneTimeToken({ subject: "cloud-connect" });
 
-        yield* EnvironmentAuth.make.pipe(
-          Effect.provide(
-            Layer.merge(
-              ManagedPolicy.layerTest({
-                schemaVersion: 1,
-                organization: "Example Corp",
-                limits: { connect: false },
-              }),
-              layerServerConfig(),
-            ),
-          ),
+        assert.deepEqual(
+          (yield* environmentAuth.listSessions()).map((session) => session.sessionId),
+          [local.sessionId],
         );
-
-        const remaining = (yield* sessions.listActive()).map((session) => session.sessionId);
-        assert.include(remaining, phone.sessionId);
-        assert.notInclude(remaining, connect.sessionId);
+        assert.isEmpty(yield* environmentAuth.listPairingLinks());
+        assert.equal((yield* sessions.verify(local.token)).sessionId, local.sessionId);
+        assert.equal(
+          (yield* sessions.verify(retired.token).pipe(Effect.flip))._tag,
+          "InvalidSessionTokenPayloadError",
+        );
+        assert.equal(
+          (yield* pairingLinks.consume(link.credential).pipe(Effect.flip))._tag,
+          "UnknownBootstrapCredentialError",
+        );
       }).pipe(Effect.provide(layerEnvironmentAuth())),
     );
 

@@ -677,7 +677,10 @@ const make = Effect.gen(function* () {
       const matching = yield* pairingLinks
         .getByCredential({ credential: pairingCredential })
         .pipe(Effect.mapError((cause) => new BootstrapCredentialLookupError({ cause })));
-      if (Option.isNone(matching)) {
+      if (
+        Option.isNone(matching) ||
+        matching.value.subject === AuthPairingLinks.RETIRED_CONNECT_SUBJECT
+      ) {
         return yield* new UnknownBootstrapCredentialError({});
       }
 

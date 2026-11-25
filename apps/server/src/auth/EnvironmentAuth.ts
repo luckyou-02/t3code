@@ -52,13 +52,14 @@ import { DESKTOP_RENDERER_ORIGINS } from "../httpCors.ts";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import * as ManagedLimits from "../policy/managedLimits.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
-import { MCP_APPROVAL_SUBJECT_PREFIX } from "../persistence/AuthPairingLinks.ts";
+import {
+  MCP_APPROVAL_SUBJECT_PREFIX,
+  RETIRED_CONNECT_SUBJECT,
+} from "../persistence/AuthPairingLinks.ts";
 import { requestUrl } from "../requestUrl.ts";
 
 const DEFAULT_SESSION_SUBJECT = "cli-issued-session";
 export const INTERNAL_ADMINISTRATIVE_BOOTSTRAP_SUBJECT = "administrative-bootstrap";
-/** Sessions and pairing links T3 Connect minted for a device signed in to the linked account. */
-const CLOUD_CONNECT_SUBJECT = "cloud-connect";
 
 export interface IssuedPairingLink {
   readonly id: string;
@@ -83,8 +84,6 @@ export interface IssuedBearerSession {
 // MCP client tokens are restricted to /mcp; HTTP API and WebSocket RPC would bypass their access cap.
 const MCP_CLIENT_SUBJECT = "mcp-client";
 const MCP_CLIENT_SESSION_TTL = Duration.days(30);
-// A peer link's session moves back out to its full lifetime when a call finds it this far
-// short, so a used link never expires and a busy one writes at most once per step.
 
 // A device pairing with its DPoP key renews the session itself, so the token can be short and
 // the device stays signed in while used. One idle for the whole window pairs again.
@@ -96,8 +95,6 @@ export interface McpClientSession {
   readonly sessionId: AuthSessionId;
   readonly label: string;
   readonly access: AuthMcpClientAccess;
-  /** Another T3 Code environment's link, whose work here stays within it. */
-  /** When a peer link's session ends unless it is used again; the linking side keeps this. */
 }
 
 /** What Connections calls a client session: its label, or its browser and system. */
@@ -925,10 +922,8 @@ export const make = Effect.gen(function* () {
       Effect.withSpan("EnvironmentAuth.getSessionState"),
     );
 
-  // T3 Connect credential issuance, DPoP exchanges and device revocation take turns. Two mints
-  // at once would open two requests with one code, and a revoke landing between an exchange
-  // spending its credential and trusting the key would be undone by that exchange.
-  const connectTrustLock = yield* Semaphore.make(1);
+  // Serialize session issuance with bulk revocation.
+  const sessionRevocationLock = yield* Semaphore.make(1);
 
   // Counts "revoke all others" runs. An exchange or sign-in approval that began before a run
   // issues its session here, under the lock the run holds, so it cannot leave a session behind.
@@ -944,7 +939,7 @@ export const make = Effect.gen(function* () {
               }),
             ),
       ),
-      connectTrustLock.withPermits(1),
+      sessionRevocationLock.withPermits(1),
     );
 
   const createBrowserSession: EnvironmentAuth["Service"]["createBrowserSession"] = Effect.fn(
@@ -1118,15 +1113,6 @@ export const make = Effect.gen(function* () {
           requestMetadata,
           ...(requestedScopes !== undefined ? { requestedScopes } : {}),
         }).pipe(
-          // Every T3 Connect key that gets in is remembered, so turning approval on later
-          // keeps the devices already in use and lists them for review.
-          Effect.tap((grant) =>
-            grant.subject === CLOUD_CONNECT_SUBJECT && input?.proofKeyThumbprint
-              ? bootstrapCredentials
-                  .trustConnectDevice(input.proofKeyThumbprint, requestMetadata)
-                  .pipe(Effect.mapError((cause) => new ServerAuthConnectDevicesError({ cause })))
-              : Effect.void,
-          ),
           Effect.flatMap((grant) =>
             Effect.gen(function* () {
               const grantedScopes =
@@ -1136,8 +1122,6 @@ export const make = Effect.gen(function* () {
               if (grantedScopes.length === 0) {
                 return yield* new ServerAuthScopeNotGrantedError({});
               }
-              // Only plain pairing links renew. T3 Connect, CLI, desktop and peer sessions keep
-              // their own lifetimes, so unlinking Connect or rotating a credential still cuts off.
               const renewable =
                 input?.proofKeyThumbprint !== undefined &&
                 grant.method === "one-time-token" &&
@@ -1173,7 +1157,7 @@ export const make = Effect.gen(function* () {
           ),
           Effect.flatMap(toAccessTokenResult),
           (exchange) =>
-            input?.proofKeyThumbprint ? connectTrustLock.withPermits(1)(exchange) : exchange,
+            input?.proofKeyThumbprint ? sessionRevocationLock.withPermits(1)(exchange) : exchange,
         );
       return Ref.get(otherSessionRevocations).pipe(
         Effect.flatMap(exchangeSince),
@@ -1278,7 +1262,7 @@ export const make = Effect.gen(function* () {
         .revokeByProofKey(proofKeyThumbprint)
         .pipe(Effect.mapError((cause) => new ServerAuthSessionRevocationError({ cause })));
       return removed || revokedSessions > 0;
-    }).pipe(connectTrustLock.withPermits(1));
+    }).pipe(sessionRevocationLock.withPermits(1));
   });
 
   const issueSession: EnvironmentAuth["Service"]["issueSession"] = (input) =>
@@ -1312,7 +1296,11 @@ export const make = Effect.gen(function* () {
 
   const listSessions: EnvironmentAuth["Service"]["listSessions"] = () =>
     sessions.listActive().pipe(
-      Effect.map((activeSessions) => activeSessions.toSorted(bySessionPriority)),
+      Effect.map((activeSessions) =>
+        activeSessions
+          .filter((session) => session.subject !== RETIRED_CONNECT_SUBJECT)
+          .toSorted(bySessionPriority),
+      ),
       Effect.mapError((cause) => new ServerAuthSessionsListError({ cause })),
       Effect.withSpan("EnvironmentAuth.listSessions"),
     );
@@ -1433,7 +1421,7 @@ export const make = Effect.gen(function* () {
         // Counted last, after unspent links and session rows are gone, so whatever reads the
         // new count can no longer use either.
         Effect.ensuring(Ref.update(otherSessionRevocations, (count) => count + 1)),
-        connectTrustLock.withPermits(1),
+        sessionRevocationLock.withPermits(1),
       );
     });
 
@@ -1675,9 +1663,6 @@ const mcpApprovalLevel = (subject: string): AuthMcpClientAccess | undefined => {
   return isMcpClientAccess(level) ? level : undefined;
 };
 
-/** Subjects of sessions and links a pairing link created, keyed by how the client paired. */
-const LINK_PAIRED_SUBJECTS = { link: "one-time-token", connect: CLOUD_CONNECT_SUBJECT } as const;
-
 /**
  * Revokes sessions and unused links from pairing the policy no longer allows, so a policy rolled
  * out to a machine that already had phones paired takes effect on the next start.
@@ -1694,8 +1679,7 @@ const revokePairedClientsThePolicyDisallows = Effect.fn(
   const remoteAllowed = ManagedLimits.allowsRemoteClients(policy);
   const disallowed = new Set<string>();
   if (!remoteAllowed) {
-    disallowed.add(LINK_PAIRED_SUBJECTS.link);
-    disallowed.add(LINK_PAIRED_SUBJECTS.connect);
+    disallowed.add(PAIRING_LINK_SUBJECT);
   }
   if (disallowed.size === 0) return;
   const sessions = (yield* stores.sessions.listActive()).filter(

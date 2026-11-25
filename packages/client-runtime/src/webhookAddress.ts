@@ -21,7 +21,7 @@ export function webhookAddress(
     return {
       address: endpoint.path,
       copyable: false,
-      note: resolve(msg("Link this environment to T3 Connect for a public URL.")),
+      note: resolve(msg("Connect to the environment to copy the URL.")),
     };
   }
   const url = new URL(endpoint.path, httpBaseUrl);
@@ -29,11 +29,7 @@ export function webhookAddress(
     address: url.href,
     copyable: true,
     note: isLocalLoopbackHost(url.hostname)
-      ? resolve(msg("Only this computer can call this address. Link T3 Connect for a public URL."))
-      : resolve(
-          msg(
-            "Works wherever this environment's address is reachable, for example over Tailscale or your own proxy. Link T3 Connect for a public URL.",
-          ),
-        ),
+      ? resolve(msg("Only this computer can call this address."))
+      : resolve(msg("Use this URL from a client that can reach the environment.")),
   };
 }

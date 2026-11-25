@@ -3,7 +3,6 @@
 
 import * as NodeFSP from "node:fs/promises";
 import * as NodeCrypto from "node:crypto";
-import * as NodeModule from "node:module";
 import {
   createPackageWithOptions,
   extractAll,
@@ -160,22 +159,6 @@ const getDefaultArch = Effect.fn("getDefaultArch")(function* (platform: typeof B
   const resolved = yield* getDefaultBuildArch(platform, config);
   return resolved === "arm64" ? ("arm64" as const) : ("x64" as const);
 });
-
-export class ClerkPasskeyNativePackageMissingError extends Schema.TaggedError<ClerkPasskeyNativePackageMissingError>()(
-  "ClerkPasskeyNativePackageMissingError",
-  {
-    packageName: Schema.String,
-    binaryFileName: Schema.String,
-    packageEntryPath: Schema.String,
-    platform: BuildPlatform,
-    arch: BuildArch,
-    cause: Schema.Defect(),
-  },
-) {
-  override get message(): string {
-    return `Clerk passkey native package is missing: ${this.packageName}`;
-  }
-}
 
 export class UnsupportedHostBuildPlatformError extends Schema.TaggedError<UnsupportedHostBuildPlatformError>()(
   "UnsupportedHostBuildPlatformError",
@@ -887,54 +870,6 @@ export const stageCursorSdkPlatformPackages = Effect.fn("stageCursorSdkPlatformP
     }
   },
 );
-
-export interface ClerkPasskeyNativeArtifact {
-  readonly packageName: string;
-  readonly binaryFileName: string;
-}
-
-export function resolveClerkPasskeyNativeArtifacts(
-  _platform: typeof BuildPlatform.Type,
-  arch: typeof BuildArch.Type,
-): readonly ClerkPasskeyNativeArtifact[] {
-  return [
-    {
-      packageName: `@clerk/electron-passkeys-win32-${arch}-msvc`,
-      binaryFileName: `electron-passkeys.win32-${arch}-msvc.node`,
-    },
-  ];
-}
-
-// Stage pnpm-nested Clerk binaries beside index.js so the loader finds them and electron-builder unpacks them.
-const stageClerkPasskeyNativeBinaries = Effect.fn("stageClerkPasskeyNativeBinaries")(function* (
-  stageAppDir: string,
-  platform: typeof BuildPlatform.Type,
-  arch: typeof BuildArch.Type,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const packageEntryPath = yield* fs.realPath(
-    path.join(stageAppDir, "node_modules", "@clerk", "electron-passkeys", "index.js"),
-  );
-  const packageDir = path.dirname(packageEntryPath);
-  const packageRequire = NodeModule.createRequire(packageEntryPath);
-
-  for (const artifact of resolveClerkPasskeyNativeArtifacts(platform, arch)) {
-    const sourcePath = yield* Effect.try({
-      try: () => packageRequire.resolve(artifact.packageName),
-      catch: (cause) =>
-        new ClerkPasskeyNativePackageMissingError({
-          packageName: artifact.packageName,
-          binaryFileName: artifact.binaryFileName,
-          packageEntryPath,
-          platform,
-          arch,
-          cause,
-        }),
-    });
-    yield* fs.copyFile(sourcePath, path.join(packageDir, artifact.binaryFileName));
-  }
-});
 
 export function createStageWorkspaceConfig(input: {
   readonly platform: StagePlatform;
@@ -2648,7 +2583,6 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     }),
     { label: "vp install --prod", verbose: options.verbose },
   );
-  yield* stageClerkPasskeyNativeBinaries(stageAppDir, options.platform, options.arch);
 
   yield* stageWindowsServerSidecar({
     stageRoot,

@@ -3422,6 +3422,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                       ORDER BY attempt_ordinal DESC LIMIT 1
                     )
                   WHERE item.thread_id = ${threadId}
+                    AND item.type <> 'link_request'
                     AND item.ordinal <= COALESCE(
                       (
                         SELECT ordinal
@@ -3758,6 +3759,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     SELECT rowid AS item_rowid, ordinal, turn_item_id
                     FROM orchestration_v2_projection_turn_items
                     WHERE thread_id = ${threadId}
+                      AND type <> 'link_request'
                       AND ${window.anchorItemId ?? null} IS NULL
                       AND ${window.requiredRunId ?? null} IS NULL
                     ORDER BY ordinal DESC, turn_item_id DESC
@@ -3770,6 +3772,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
 
     const turnItemMatch = (threadId: ThreadId, filter: ProjectionRecordFilter | undefined) => sql`
       ${threadColumn(filter?.turnItemNodeIds)} = ${threadId}
+        AND type <> 'link_request'
         ${filter?.turnItemRequestIds === undefined ? sql`` : sql`AND json_extract(payload_json, '$.requestId') IN (SELECT value FROM json_each(${encodeIdList(filter.turnItemRequestIds)}))`}
         ${filter?.turnItemTypes === undefined ? sql`` : sql`AND type IN (SELECT value FROM json_each(${encodeIdList(filter.turnItemTypes)}))`}
         ${filter?.turnItemStatuses === undefined ? sql`` : sql`AND status IN (SELECT value FROM json_each(${encodeIdList(filter.turnItemStatuses)}))`}
@@ -5435,6 +5438,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 payload_json
               FROM ${sql(`orchestration_v2_projection_${table.name}`)}
               WHERE rowid > ${afterRowId}
+                ${table.name === "turn_items" ? sql`AND type <> 'link_request'` : sql``}
               ORDER BY rowid ASC LIMIT ${pageSize}
             `;
             for (const row of rows) {
@@ -5543,7 +5547,8 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               SELECT payload_json FROM orchestration_v2_projection_turn_items
               -- Look up one run's items by key, not by walking the thread's whole history in ordinal order.
               INDEXED BY orchestration_v2_projection_turn_items_run_ordinal_idx
-              WHERE thread_id = ${threadId} AND run_id = ${runId} ORDER BY ordinal ASC, turn_item_id ASC
+              WHERE thread_id = ${threadId} AND run_id = ${runId} AND type <> 'link_request'
+              ORDER BY ordinal ASC, turn_item_id ASC
             `.pipe(Effect.flatMap(decodeRows(decodeTurnItemPayload, threadId)));
             const providerSessions = yield* sql<PayloadRow>`
               SELECT sessions.payload_json FROM orchestration_v2_projection_provider_sessions AS sessions
@@ -5893,6 +5898,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             turnItems: sql<PayloadRow>`
               SELECT item.payload_json FROM orchestration_v2_projection_turn_items AS item
               WHERE item.thread_id = ${threadId}
+                AND item.type <> 'link_request'
                 AND item.status IN ('pending', 'running', 'waiting')
                 AND (
                   item.run_id IN (
@@ -6803,7 +6809,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
     const getTurnItem: ProjectionStoreV2Shape["getTurnItem"] = ({ threadId, itemId }) =>
       sql<{ payload_json: string }>`SELECT payload_json
         FROM orchestration_v2_projection_turn_items
-        WHERE turn_item_id = ${itemId} AND thread_id = ${threadId}`.pipe(
+        WHERE turn_item_id = ${itemId} AND thread_id = ${threadId} AND type <> 'link_request'`.pipe(
         Effect.flatMap((rows) =>
           rows[0] === undefined
             ? Effect.succeed(null)
@@ -7139,7 +7145,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         )`
             : sql``
         }
-        WHERE item.thread_id = ${threadId}
+        WHERE item.thread_id = ${threadId} AND item.type <> 'link_request'
         ORDER BY item.ordinal ASC, item.turn_item_id ASC`;
         const runStatuses = new Map(records.runs.map((run) => [String(run.id), run.status]));
         const items: Array<TimelineIndexItem> = rows.map((row) => ({
@@ -7320,7 +7326,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         )`
             : sql``
         }
-        WHERE item.thread_id = ${threadId} ${where}
+        WHERE item.thread_id = ${threadId} AND item.type <> 'link_request' ${where}
         ORDER BY item.ordinal ASC, item.turn_item_id ASC ${limit}`;
       return rows.map((row): TimelineIndexItem => ({
         id: TurnItemId.make(row.turn_item_id),
@@ -7424,7 +7430,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       const candidateColumns = sql`item.turn_item_id, item.run_id, item.node_id, item.type,
         item.ordinal, CASE WHEN item.type = 'user_message'
           THEN json_extract(item.payload_json, '$.inputIntent') END AS input_intent`;
-      const [rolledBackRows, conversationRows] = yield* Effect.all([
+      const [rolledBackRows, conversationRows, retiredRows] = yield* Effect.all([
         rolledBack.length === 0
           ? Effect.succeed([])
           : sql<HiddenCandidate>`
@@ -7432,7 +7438,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               FROM json_each(${encodeIdList(rolledBack)}) AS wanted
               CROSS JOIN orchestration_v2_projection_turn_items AS item
                 INDEXED BY orchestration_v2_projection_turn_items_thread_run_idx
-                ON item.thread_id = ${threadId} AND item.run_id = wanted.value`,
+                ON item.thread_id = ${threadId} AND item.run_id = wanted.value AND item.type <> 'link_request'`,
         // The conversation index holds the type and run of these rows, so only the matches are
         // fetched. Through the run index, every row of each such run would be.
         heldInput.length + steered.length === 0
@@ -7447,8 +7453,13 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     AND item.run_id IN (SELECT value FROM json_each(${encodeIdList(heldInput)})))
                   OR (item.type = 'run_interrupt_result'
                     AND item.run_id IN (SELECT value FROM json_each(${encodeIdList(steered)}))))`,
+        sql<{ turn_item_id: string; ordinal: number; run_id: string | null; type: "link_request" }>`
+          SELECT turn_item_id, ordinal, run_id, type
+          FROM orchestration_v2_projection_turn_items
+            INDEXED BY orchestration_v2_projection_turn_items_thread_type_idx
+          WHERE thread_id = ${threadId} AND type = 'link_request'`,
       ]);
-      const hidden = [...rolledBackRows, ...conversationRows].filter(
+      const hiddenByRun = [...rolledBackRows, ...conversationRows].filter(
         (row) =>
           !isVisible({
             type: row.type,
@@ -7457,6 +7468,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             ...(row.input_intent === null ? {} : { inputIntent: row.input_intent }),
           }),
       );
+      const hidden = [...hiddenByRun, ...retiredRows];
       /** Counts the visible rows that sort before the given ordinal and item id. */
       const visibleBefore = Effect.fn("ProjectionStore.countVisibleTimelineRows")(function* (
         ordinal: number,

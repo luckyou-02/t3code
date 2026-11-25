@@ -417,6 +417,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("SessionStore.lay
         const payload = base64UrlEncode(claims);
         return signer.sign(payload).pipe(Effect.map((signature) => `${payload}.${signature}`));
       };
+      const retiredPeerToken = yield* resign(currentClaims.replace('"v":1', '"v":1,"plk":1'));
+      expect((yield* sessions.verify(retiredPeerToken).pipe(Effect.flip))._tag).toBe(
+        "InvalidSessionTokenPayloadError",
+      );
       const legacyToken = yield* resign(currentClaims.replace('"v":1', '"v":2'));
       const editedToken = yield* resign(
         currentClaims.replace(/"scopes":\[[^\]]*\]/, '"scopes":["access:write"]'),

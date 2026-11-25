@@ -20,6 +20,8 @@ import {
  * These subjects are reserved for one kind and level of MCP authorization.
  * Keep peer-link subjects under the same prefix so older servers refuse them too.
  */
+export const RETIRED_CONNECT_SUBJECT = "cloud-connect";
+
 export const MCP_APPROVAL_SUBJECT_PREFIX = "mcp-approval:";
 
 const SqliteFlag = Schema.Literals([0, 1]);
@@ -239,6 +241,7 @@ export const make = Effect.gen(function* () {
         UPDATE auth_pairing_links
         SET consumed_at = ${consumedAt}
         WHERE credential = ${credential}
+          AND subject <> ${RETIRED_CONNECT_SUBJECT}
           AND revoked_at IS NULL
           AND consumed_at IS NULL
           AND expires_at > ${now}
@@ -313,7 +316,8 @@ export const make = Effect.gen(function* () {
           ) AS "connectApproved",
           requested_client_json AS "requestedClient"
         FROM auth_pairing_links
-        WHERE revoked_at IS NULL
+        WHERE subject <> ${RETIRED_CONNECT_SUBJECT}
+          AND revoked_at IS NULL
           AND consumed_at IS NULL
           AND expires_at > ${now}
         ORDER BY created_at DESC, id DESC

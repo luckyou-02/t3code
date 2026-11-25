@@ -7,7 +7,7 @@ The rest of this file is for agents and maintainers auditing T3 Code or triaging
 reports. It defines who is trusted with what, which boundaries a real finding
 crosses, and what is intended. The reasoning behind each boundary lives in
 [environment auth](docs/internals/04_environment-auth.md) and
-[remote environments](docs/internals/05_remote.md); read those before reporting
+[local environments](docs/internals/05_remote.md); read those before reporting
 in their area.
 
 ## The model in one paragraph
@@ -22,17 +22,17 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
 
 ## Principals
 
-| Principal                                                                     | How it gets in                                                           | What it may do                                                                                                        |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Anyone who reaches the port                                                   | Network                                                                  | Read the environment descriptor, pair with a valid one-time credential, run OAuth flows. Nothing else.                |
-| Full-scope client (desktop, paired browser or phone, `t3 auth session issue`) | Pairing, token exchange                                                  | Everything the server's OS user can do. This is the default grant.                                                    |
-| Narrow client                                                                 | Pairing link with explicit scopes                                        | Only the RPCs and routes its scopes allow. Can never widen its own grant.                                             |
-| MCP client (outside agent, subject `mcp-client`)                              | OAuth on `/mcp`                                                          | Only `/mcp`, within a read-only grant or a runtime-mode ceiling. Every other route rejects it.                        |
-| Agent run by T3                                                               | Thread's runtime mode and thread credential                              | Within its runtime mode, managed policy, and the MCP access declared per tool.                                        |
-| Signed asset URL                                                              | Minted with `filesystem:read`                                            | One file, by device and inode identity, until it expires.                                                             |
-| Webhook sender                                                                | A task's webhook URL, plus its signing secret when the task requires one | Start that one task's run with content of its choosing. Nothing in the request is trusted beyond the signature check. |
-| Managed policy                                                                | Admin-deployed file, read at startup                                     | Ceilings and locks the server enforces for every client.                                                              |
-| Preview pages, HTML renders, file previews, agent output                      | Rendered by clients                                                      | Untrusted content. It must never run script in the app's origin or reach Electron IPC or Node.                        |
+| Principal                                                            | How it gets in                                                           | What it may do                                                                                                        |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Anyone who reaches the port                                          | Network                                                                  | Read the environment descriptor, pair with a valid one-time credential, run OAuth flows. Nothing else.                |
+| Full-scope client (desktop, paired browser, `t3 auth session issue`) | Pairing, token exchange                                                  | Everything the server's OS user can do. This is the default grant.                                                    |
+| Narrow client                                                        | Pairing link with explicit scopes                                        | Only the RPCs and routes its scopes allow. Can never widen its own grant.                                             |
+| MCP client (outside agent, subject `mcp-client`)                     | OAuth on `/mcp`                                                          | Only `/mcp`, within a read-only grant or a runtime-mode ceiling. Every other route rejects it.                        |
+| Agent run by T3                                                      | Thread's runtime mode and thread credential                              | Within its runtime mode, managed policy, and the MCP access declared per tool.                                        |
+| Signed asset URL                                                     | Minted with `filesystem:read`                                            | One file, by device and inode identity, until it expires.                                                             |
+| Webhook sender                                                       | A task's webhook URL, plus its signing secret when the task requires one | Start that one task's run with content of its choosing. Nothing in the request is trusted beyond the signature check. |
+| Managed policy                                                       | Admin-deployed file, read at startup                                     | Ceilings and locks the server enforces for every client.                                                              |
+| Preview pages, HTML renders, file previews, agent output             | Rendered by clients                                                      | Untrusted content. It must never run script in the app's origin or reach Electron IPC or Node.                        |
 
 ## A real finding crosses one of these
 
@@ -76,9 +76,6 @@ revocation and ceilings hold, not what a full-scope session can do once issued.
   all others" removes them.
 - `filesystem:read` reads anything the server's OS user can read, including
   paths outside projects.
-- Plain HTTP on a LAN or tailnet is the user's choice. `t3 serve` warns when
-  advertising a non-loopback HTTP address. The iOS app allows arbitrary loads so
-  it can reach these addresses.
 - `access-control-allow-origin: *` on the environment API. Auth is a bearer
   header, so the wildcard grants nothing a caller without a token lacks.
 - Rendered Markdown loads remote images and media from the host its author

@@ -1,7 +1,6 @@
 /** Keep bundler externals aligned with the staged production dependency list. */
 const DESKTOP_RUNTIME_EXTERNAL_PREFIXES = [
   "@crowecawcaw/xa11y",
-  "@clerk/electron-passkeys",
   "ffi-rs",
   "@yuuang/",
   // Playwright reads its runtime bundle/driver from disk; inlining cannot replace those files.

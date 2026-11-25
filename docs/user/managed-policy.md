@@ -3,7 +3,7 @@
 A managed policy lets an administrator configure T3 Code for every user on a machine. It sets
 defaults and locks for settings, and limits such as the broadest permission mode or which
 providers may run. The T3 Code server on the machine enforces it for every app that connects:
-the desktop app, a browser, or the mobile app.
+the desktop app or a local browser.
 
 ## Roll out a policy
 
@@ -214,34 +214,9 @@ The limit decides which modes T3 Code asks the provider for. It is not a sandbox
 
 ### Clients
 
-`clients` lists how the server may run:
-
-- `desktop`: as the desktop app's own server.
-- `local-browser`: as a server only browsers on this machine reach, such as `npx t3`.
-- `remote`: reachable from phones and other computers over the network.
-
-`remote` is the line that matters. A server reachable from the network also accepts browsers on
-this machine, and the two local kinds differ only in how T3 Code was started. On machines with the
-desktop app, keep `desktop` in the list, or the app cannot start.
-
-Without `remote`, the server listens only on a loopback address, creates no pairing links, and
-signs out devices that paired earlier. It does not start with a host other than a loopback
-address or `localhost`. A [background service](./background-service.md) installed before
-`T3CODE_LAN` existed keeps private-network access, so without `remote` it refuses to start.
-Run `t3 up --no-lan` when its `service.env` sets no `T3CODE_HOST`, or set
-`T3CODE_HOST=127.0.0.1` in `service.env`, then run `t3 service restart`. The desktop app starts
-with network access and Tailscale Serve off, whatever the user chose.
-
-When it starts, the server also turns off each Tailscale Serve route, HTTPS or TCP, that forwards
-to it, such as one `t3 pair --tailscale` set up, and leaves other routes alone. It does not start
-while such a route stays on, or while Tailscale's answer cannot be read; the error names the
-command that turns the route off. A route whose target is a name, such as `localhost` or another
-machine on the same port, also stops it, since a name can resolve to this server; change the route
-or T3 Code's port. If Tailscale is installed but does not answer, as on a Mac where it was never set up, the
-server does not start until Tailscale is set up or removed. It does start when Tailscale is not
-installed, not running, or
-logged out, since nothing forwards then; a route Tailscale kept returns when Tailscale runs again,
-so restart T3 Code after that.
+`clients` lists the permitted client types. Keep `desktop` to run the Windows
+desktop app and `local-browser` to use the local web app. The server listens on
+loopback. The `remote` value is accepted in existing policies.
 
 ### Other capabilities
 

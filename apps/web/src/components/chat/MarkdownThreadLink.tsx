@@ -8,7 +8,7 @@ import {
 } from "@t3tools/shared/threadLinks";
 import { unknownThreadLinkLabel } from "@t3tools/shared/threadLinksCopy";
 
-import { configuredHostedAppUrl } from "../../hostedPairing";
+import { appLinkBaseUrl } from "~/lib/appLinkBaseUrl";
 import { useThreadRefs, useThreadShell } from "../../state/entities";
 import { useEnvironmentIdentities } from "../../state/environments";
 import { orchestrationEnvironment } from "../../state/orchestration";
@@ -68,7 +68,7 @@ export function MarkdownThreadLink(props: {
     <ThreadContextChip
       record={{ ...ref, title }}
       projectId={resolved?.metadata.projectId ?? null}
-      copyMarkdown={formatHostedThreadLink(ref, title, configuredHostedAppUrl())}
+      copyMarkdown={formatHostedThreadLink(ref, title, appLinkBaseUrl(ref.environmentId))}
     />
   );
 }

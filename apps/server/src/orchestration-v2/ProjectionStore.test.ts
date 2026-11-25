@@ -3851,6 +3851,38 @@ it.effect("lists every thread in the shell snapshot past SQLite's bound variable
 );
 
 it.layer(layerTest)("ProjectionStoreV2", (it) => {
+  it.effect("omits retired link requests from stored thread history", () =>
+    Effect.gen(function* () {
+      const store = yield* ProjectionStore.ProjectionStoreV2;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = yield* addRolledBackRecoveryCandidate("retired-link");
+      const itemId = TurnItemId.make("item:retired-link");
+      const now = yield* DateTime.now;
+      const before = yield* store.getTimelinePage(threadId, { limit: 10, view: "activity" });
+      yield* sql`
+        INSERT INTO orchestration_v2_projection_turn_items
+          (turn_item_id, thread_id, ordinal, type, status, updated_at, payload_json)
+        VALUES
+          (${itemId}, ${threadId}, 2, 'link_request', 'waiting', ${DateTime.formatIso(now)},
+           '{"type":"link_request","linkStatus":"pending"}')
+      `;
+
+      const projection = yield* store.getThreadProjection(threadId);
+      const bounded = yield* store.getThreadSnapshotWindow(threadId, { rowLimit: 1 });
+      const page = yield* store.getTimelinePage(threadId, { limit: 10, view: "activity" });
+      assert.notInclude(
+        projection.turnItems.map((item) => item.id),
+        itemId,
+      );
+      assert.notInclude(
+        bounded.projection.turnItems.map((item) => item.id),
+        itemId,
+      );
+      assert.deepEqual(page, before);
+      assert.isNull(yield* store.getTurnItem({ threadId, itemId }));
+    }),
+  );
+
   // regression: #21969 keep corrupt plan JSON in the typed read error
   it.effect("returns a typed read error for malformed stored plan JSON", () =>
     Effect.gen(function* () {

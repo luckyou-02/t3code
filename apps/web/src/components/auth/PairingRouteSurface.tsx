@@ -1,21 +1,16 @@
 import { Alert, AlertDescription } from "../ui/alert";
 import type { AuthSessionState } from "@t3tools/contracts";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
-import { msg, T, useGT, useMessages, Var } from "gt-react";
+import { msg, T, useGT, useMessages } from "gt-react";
 import React, { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 
-import { connectPairing } from "../../connection/onboarding";
 import {
   peekPairingTokenFromUrl,
   stripPairingTokenFromUrl,
   submitServerAuthCredential,
 } from "../../environments/primary";
-import { readHostedPairingRequest } from "../../hostedPairing";
-import { resolveRemotePairingTarget } from "@t3tools/shared/remote";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { StandalonePage, StandalonePageHeader } from "../ui/standalone-page";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { m, type MessageResolver } from "../../i18n/messages";
 
 export function PairingPendingSurface() {
@@ -137,159 +132,6 @@ export function PairingRouteSurface({
 
       <div className="mt-6 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
         {describeSupportedMethods(auth.bootstrapMethods, messages)}
-      </div>
-    </StandalonePage>
-  );
-}
-
-export function HostedPairingRouteSurface() {
-  const connectPairingEnvironment = useAtomCommand(connectPairing, {
-    reportFailure: false,
-  });
-  const [request] = useState(readHostedPairingRequest);
-  // The origin shows the scheme along with the host.
-  const [origin] = useState(() => {
-    if (!request) return null;
-    try {
-      return new URL(
-        resolveRemotePairingTarget({ host: request.host, pairingCode: request.token }).httpBaseUrl,
-      ).origin;
-    } catch {
-      return null;
-    }
-  });
-  const gt = useGT();
-  const [status, setStatus] = useState<"confirm" | "pairing" | "paired" | "error">(
-    origin ? "confirm" : "error",
-  );
-  const [message, setMessage] = useState(() =>
-    origin
-      ? m(msg("This link adds a backend to this browser. Continue only if you trust it."))
-      : request
-        ? m(msg("This pairing link has an invalid backend host."))
-        : m(msg("This pairing link is missing its backend host or token.")),
-  );
-  const [canRetry, setCanRetry] = useState(false);
-  // Nothing is sent to the link's host until the user confirms.
-  // The token stays in the URL until then: the root route picks this page from it.
-  const tokenSubmittedRef = useRef(false);
-
-  const submitHostedPairingRequest = async () => {
-    if (!request) {
-      setStatus("error");
-      setMessage(gt("This pairing link is missing its backend host or token."));
-      setCanRetry(false);
-      return;
-    }
-
-    if (tokenSubmittedRef.current) {
-      setStatus("error");
-      setMessage(
-        gt("This one-time pairing token was already submitted. Request a new pairing link."),
-      );
-      setCanRetry(false);
-      return;
-    }
-
-    setStatus("pairing");
-    setMessage(gt("Connecting to this backend."));
-    setCanRetry(false);
-    tokenSubmittedRef.current = true;
-    stripPairingTokenFromUrl();
-
-    const result = await connectPairingEnvironment({
-      host: request.host,
-      pairingCode: request.token,
-    });
-    if (result._tag === "Success") {
-      setStatus("paired");
-      setMessage(
-        request.label
-          ? gt("{environment} is saved in this browser.", { environment: request.label })
-          : gt("The environment is saved in this browser."),
-      );
-      return;
-    }
-
-    tokenSubmittedRef.current = false;
-    setStatus("error");
-    setCanRetry(true);
-    setMessage(
-      gt(
-        "{error} If the backend accepted this one-time token, request a new pairing link before retrying.",
-        { error: errorMessageFromUnknown(squashAtomCommandFailure(result)) },
-      ),
-    );
-  };
-
-  return (
-    <StandalonePage>
-      <StandalonePageHeader
-        title={
-          status === "paired"
-            ? gt("Backend paired")
-            : status === "error"
-              ? gt("Pairing failed")
-              : status === "confirm"
-                ? gt("Add this backend?")
-                : gt("Pairing backend")
-        }
-        description={message}
-      />
-
-      {request ? (
-        <div className="mt-5 rounded-lg border border-border/70 bg-background/55 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
-          <T>
-            Host:{" "}
-            <span className="font-mono text-foreground/80">
-              <Var>{origin ?? request.host}</Var>
-            </span>
-          </T>
-        </div>
-      ) : null}
-
-      {status === "error" ? (
-        <Alert variant="error" className="mt-5">
-          <AlertDescription>
-            <T>
-              Verify the backend is reachable from this browser, supports CORS for hosted clients,
-              and is served over HTTPS when opening this page from HTTPS.
-            </T>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="mt-6 flex flex-wrap gap-2">
-        {status === "confirm" ? (
-          <>
-            <Button size="sm" onClick={() => void submitHostedPairingRequest()}>
-              <T>Add backend</T>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                stripPairingTokenFromUrl();
-                window.location.href = "/";
-              }}
-            >
-              <T>Cancel</T>
-            </Button>
-          </>
-        ) : status === "pairing" ? (
-          <Button disabled size="sm">
-            <T>Pairing...</T>
-          </Button>
-        ) : canRetry ? (
-          <Button size="sm" onClick={() => void submitHostedPairingRequest()}>
-            <T>Try again</T>
-          </Button>
-        ) : null}
-        {status === "paired" ? (
-          <Button size="sm" variant="outline" onClick={() => (window.location.href = "/")}>
-            <T>Open app</T>
-          </Button>
-        ) : null}
       </div>
     </StandalonePage>
   );

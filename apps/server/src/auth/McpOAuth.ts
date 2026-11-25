@@ -285,6 +285,7 @@ const make = Effect.gen(function* () {
     if (Option.isNone(json)) return undefined;
     return Option.getOrUndefined(
       decodeClientIdPayload(json.value).pipe(
+        Option.filter((payload) => payload.p === undefined),
         Option.map((payload) => ({
           clientId,
           name: payload.n,
