@@ -192,7 +192,8 @@ const setUp = Effect.fn("cli.up")(function* (flags: {
   } else if (plan.ask.length > 0 && !flags.yes && !before.service.installed) {
     return yield* new CliError.UserError({
       cause: "routes",
-      userMessage: "No terminal. Choose access with --lan, or use --yes for the default. See `t3 up --help`.",
+      userMessage:
+        "No terminal. Choose access with --lan, or use --yes for the default. See `t3 up --help`.",
     });
   }
   if (routes.lan && !current.lan) {

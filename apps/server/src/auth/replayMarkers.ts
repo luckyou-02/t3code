@@ -11,7 +11,14 @@ import * as ServerConfig from "../config.ts";
 import { forkParked } from "../serverActivation.ts";
 import { DPOP_REPLAY_MARKER_PREFIX } from "./dpop.ts";
 
-const REPLAY_MARKER_PREFIXES = [DPOP_REPLAY_MARKER_PREFIX];
+// Cloud relay markers are no longer written, but existing installs may still hold them.
+const LEGACY_CLOUD_REPLAY_MARKER_PREFIXES = [
+  "cloud-mint-nonce-",
+  "cloud-mint-jti-",
+  "cloud-health-nonce-",
+  "cloud-health-jti-",
+];
+const REPLAY_MARKER_PREFIXES = [DPOP_REPLAY_MARKER_PREFIX, ...LEGACY_CLOUD_REPLAY_MARKER_PREFIXES];
 
 /**
  * A marker only matters while its proof can pass the time check (about 10 minutes

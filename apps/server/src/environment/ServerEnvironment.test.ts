@@ -79,9 +79,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("ServerEnvironmen
           return yield* environment.getDescriptor;
         }).pipe(
           Effect.provide(
-            ServerEnvironment.layer.pipe(
-              Layer.provide(ServerConfig.layer({ ...config, mode })),
-            ),
+            ServerEnvironment.layer.pipe(Layer.provide(ServerConfig.layer({ ...config, mode }))),
           ),
           Effect.provideService(HostProcess.Arguments, ["node", entry]),
           Effect.provideService(HostProcess.IsExecutable, false),

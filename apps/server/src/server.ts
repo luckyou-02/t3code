@@ -20,10 +20,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { EnvironmentHttpApi, type RepositoryIdentity } from "@t3tools/contracts";
 import * as FeatureFlags from "@t3tools/shared/FeatureFlags";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -1104,9 +1102,7 @@ const layerMakeServer = Layer.unwrap(
 
     return layerServerApplication.pipe(
       Layer.provideMerge(layerRuntimeServices),
-      Layer.provideMerge(
-        McpSessionRegistry.layer.pipe(Layer.provide(ServerEnvironment.layer)),
-      ),
+      Layer.provideMerge(McpSessionRegistry.layer.pipe(Layer.provide(ServerEnvironment.layer))),
       Layer.provide(layerActivation),
       Layer.provideMerge(layerHttpServer),
       Layer.provide(DatabaseMigrationProgress.layer),

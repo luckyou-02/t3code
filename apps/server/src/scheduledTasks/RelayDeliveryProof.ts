@@ -18,6 +18,8 @@ export class RelayDeliveryProof extends Context.Service<
 export const layer = Layer.succeed(
   RelayDeliveryProof,
   RelayDeliveryProof.of({
-    verify: () => Effect.succeedNone,
+    verify: Effect.fn("RelayDeliveryProof.verify")(function* () {
+      return Option.none();
+    }),
   }),
 );

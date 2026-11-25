@@ -16,7 +16,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Hex from "effect/encoding/Hex";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
@@ -716,6 +715,3 @@ export const makeCloudflaredRelayClient = Effect.fn("cloudflared.make")(function
 
   return RelayClient.of({ resolve, install, installWithProgress, pruneManagedVersions });
 });
-
-export const layerCloudflared = (options: CloudflaredRelayClientOptions) =>
-  Layer.effect(RelayClient, makeCloudflaredRelayClient(options));

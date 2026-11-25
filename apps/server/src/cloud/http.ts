@@ -9,7 +9,9 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { requireEnvironmentScope } from "../auth/http.ts";
 
 const connectDisabledError = () =>
-  Effect.fail(new EnvironmentHttpForbiddenError({ message: "T3 Connect is disabled in this build." }));
+  Effect.fail(
+    new EnvironmentHttpForbiddenError({ message: "T3 Connect is disabled in this build." }),
+  );
 
 export const layer = HttpApiBuilder.group(
   EnvironmentHttpApi,

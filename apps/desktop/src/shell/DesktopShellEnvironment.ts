@@ -128,11 +128,7 @@ const LOGIN_SHELL_ENV_NAMES = [
   "JAVA_HOME",
   "PNPM_HOME",
 ] as const;
-const WINDOWS_PROFILE_ENV_NAMES = [
-  "PATH",
-  "FNM_DIR",
-  "FNM_MULTISHELL_PATH",
-] as const;
+const WINDOWS_PROFILE_ENV_NAMES = ["PATH", "FNM_DIR", "FNM_MULTISHELL_PATH"] as const;
 const LOCALE_ENV_NAMES = ["LANG", "LC_ALL", "LC_CTYPE"] as const;
 const ANDROID_SDK_ENV_NAMES = ["ANDROID_HOME", "ANDROID_SDK_ROOT"] as const;
 const FALLBACK_LC_CTYPE = "en_US.UTF-8";
