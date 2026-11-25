@@ -1,8 +1,6 @@
 import * as PlatformNodeCrypto from "@effect/platform-node/NodeCrypto";
 import { describe, expect, it } from "@effect/vitest";
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Effect's Crypto has no generateKeyPairSync.
-import * as NodeCrypto from "node:crypto";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -13,10 +11,8 @@ import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 
-import { RELAY_HOOK_DELIVERY_TYP, signRelayJwt } from "@t3tools/shared/relayJwt";
 import {
   EnvironmentHttpApi,
-  EnvironmentId,
   ScheduledTaskWebhookDeliveryId,
   ScheduledTaskError,
 } from "@t3tools/contracts";
@@ -25,45 +21,12 @@ import {
   type WebhookTriggerRequest,
   type WebhookTriggerResult,
 } from "./ScheduledTaskService.ts";
-import * as RelayDeliveryProof from "./RelayDeliveryProof.ts";
 import { WEBHOOK_MAX_BODY_BYTES } from "./webhookRoute.ts";
 import * as WebhookRoute from "./webhookRoute.ts";
 import * as ManagedPolicy from "../policy/ManagedPolicy.ts";
 import * as Workflows from "../workflows/Workflows.ts";
 
 class WebhookTestApi extends HttpApi.make("environment").add(EnvironmentHttpApi.groups.webhooks) {}
-
-const environmentId = EnvironmentId.make("env-1");
-const relayIssuer = "https://relay.example.test";
-const mintKeys = NodeCrypto.generateKeyPairSync("ed25519", {
-  privateKeyEncoding: { format: "pem", type: "pkcs8" },
-  publicKeyEncoding: { format: "pem", type: "spki" },
-});
-
-const relayProof = Effect.fn("relayProof")(function* (claims: {
-  readonly deliveryId: string;
-  readonly receivedAt: string;
-  readonly hookId: string;
-  readonly privateKey?: string;
-}) {
-  const now = Math.floor((yield* Clock.currentTimeMillis) / 1_000);
-  return yield* signRelayJwt({
-    privateKey: claims.privateKey ?? mintKeys.privateKey,
-    typ: RELAY_HOOK_DELIVERY_TYP,
-    payload: {
-      iss: relayIssuer,
-      aud: `t3-env:${environmentId}`,
-      sub: environmentId,
-      jti: `proof:${claims.deliveryId}`,
-      iat: now,
-      exp: now + 3_600,
-      environmentId,
-      deliveryId: claims.deliveryId,
-      receivedAt: claims.receivedAt,
-      hookId: claims.hookId,
-    },
-  }).pipe(Effect.provide(PlatformNodeCrypto.layerSignature));
-});
 
 const workflowDeliveries: Array<Parameters<Workflows.Workflows["Service"]["deliver"]>[0]> = [];
 const hooks = Layer.mock(Workflows.Workflows)({
@@ -87,7 +50,6 @@ const handlerFor = (
   HttpRouter.toWebHandler(
     HttpApiBuilder.layer(WebhookTestApi).pipe(
       Layer.provide(WebhookRoute.layer),
-      Layer.provide(RelayDeliveryProof.layer),
       Layer.provide(Layer.mock(ScheduledTaskService)({ triggerWebhook: trigger })),
       Layer.provide([hooks, ManagedPolicy.layerTest()]),
       Layer.provide(
@@ -143,13 +105,12 @@ describe("webhook route", () => {
         return Effect.succeed({ _tag: "not_found" });
       });
       const receivedAt = "2026-10-04T10:00:00.000Z";
-      const proof = yield* relayProof({ deliveryId: "relay-1", receivedAt, hookId: "id" });
       yield* Effect.promise(() =>
         handler(
           post("/api/hooks/id/tok", "{}", {
             "x-t3-relay-delivery-id": "relay-1",
             "x-t3-relay-received-at": receivedAt,
-            "x-t3-relay-delivery": proof,
+            "x-t3-relay-delivery": "unverified",
           }),
         ),
       );

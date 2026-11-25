@@ -1,8 +1,3 @@
-import {
-  t3ConnectTroubleshootingUrl,
-  type T3ConnectTroubleshootingSection,
-} from "@t3tools/contracts";
-import type { RelayEnvironmentStatusResponse } from "@t3tools/contracts/relay";
 import * as DateTime from "effect/DateTime";
 
 import type {
@@ -37,11 +32,6 @@ export interface ConnectionDiagnosisInput {
   readonly state: SupervisorConnectionState;
   /** The environment's usual route, used when the failure does not name one. */
   readonly via: "relay" | "direct";
-  /** The relay's last health check, which can name a cause before any connect attempt. */
-  readonly relayStatus?: Pick<
-    RelayEnvironmentStatusResponse,
-    "status" | "endpointFailure" | "endpointStatus" | "offlineReason"
-  > | null;
   readonly clientVersion?: string | undefined;
   readonly serverVersion?: string | null | undefined;
 }
@@ -58,11 +48,6 @@ interface Located {
   /** The failure named no hop, so the hops before this one were never probed. */
   readonly guessed?: true;
 }
-
-const NOT_ANSWERING: ReadonlySet<ConnectionFailureCause> = new Set([
-  "origin_unreachable",
-  "invalid_response",
-]);
 
 function locate(input: ConnectionDiagnosisInput): Located | null {
   const failure = input.state.lastFailure;
@@ -90,11 +75,7 @@ function locate(input: ConnectionDiagnosisInput): Located | null {
       guessed: true,
     };
   }
-  const status = input.relayStatus;
-  if (status?.status !== "offline") return null;
-  if (status.offlineReason === "tunnel_released") return { hop: "tunnel", cause: "released" };
-  const cause = status.endpointFailure ?? null;
-  return { hop: cause !== null && NOT_ANSWERING.has(cause) ? "server" : "tunnel", cause };
+  return null;
 }
 
 function headline(
@@ -302,60 +283,6 @@ function steps(
   }
 }
 
-function helpSection(
-  located: Located,
-  failure: ConnectionAttemptError | null,
-): T3ConnectTroubleshootingSection {
-  switch (located.cause) {
-    case "offline":
-      return "this-device-cant-reach-t3-connect";
-    case "outdated":
-      return "the-host-runs-an-older-t3-code";
-    case "clock_skew":
-      return "the-clock-is-off";
-    case "session_pending":
-    case "approval_pending":
-    case "not_linked":
-    case "tunnel_not_enabled":
-      return "sign-in-account-or-link-problems";
-    case "relay_error":
-      return "t3-connect-returned-an-error";
-    case "released":
-    case "tunnel_down":
-    case "tunnel_pending":
-      return "the-hosts-tunnel-is-offline";
-    case "origin_unreachable":
-    case "invalid_response":
-      return "the-tunnel-works-but-t3-code-does-not-answer";
-    case "dns":
-    case "tls":
-    case "refused":
-    case "timeout":
-    case "unknown":
-      return "the-t3-connect-address-does-not-resolve-or-answer";
-    case null:
-      break;
-  }
-  const onThisDevice =
-    failure?.reason === "network" ||
-    failure?.reason === "transport" ||
-    failure?.reason === "timeout";
-  switch (located.hop) {
-    case "device":
-      return "this-device-cant-reach-t3-connect";
-    case "relay":
-      return failure?.reason === "authentication"
-        ? "sign-in-account-or-link-problems"
-        : "this-device-cant-reach-t3-connect";
-    case "tunnel":
-      return onThisDevice ? "this-device-cant-reach-t3-connect" : "the-hosts-tunnel-is-offline";
-    case "server":
-      return failure?.reason === "authentication" || failure?.reason === "permission"
-        ? "sign-in-account-or-link-problems"
-        : "the-tunnel-works-but-t3-code-does-not-answer";
-  }
-}
-
 const T3_CONNECT_NAME = "T3 Connect";
 
 const HOP_ORDER = {
@@ -389,10 +316,7 @@ export function presentConnectionDiagnosis(
   const host = input.hostLabel;
   const failure = input.state.lastFailure;
   const relayPath =
-    located.hop === "relay" ||
-    located.hop === "tunnel" ||
-    (failure === null && input.relayStatus?.status === "offline") ||
-    (failure?.via ?? input.via) === "relay";
+    located.hop === "relay" || located.hop === "tunnel" || (failure?.via ?? input.via) === "relay";
   const order: ReadonlyArray<ConnectionHop> = HOP_ORDER[relayPath ? "relay" : "direct"];
   const failedIndex = order.indexOf(located.hop);
   const hops = order.map((hop, index): ConnectionDiagnosisHop => ({
@@ -406,8 +330,7 @@ export function presentConnectionDiagnosis(
           : "unchecked",
   }));
 
-  // The relay health check only explains the state when no attempt has failed yet.
-  const httpStatus = failure !== null ? failure.httpStatus : input.relayStatus?.endpointStatus;
+  const httpStatus = failure?.httpStatus;
   const facts: Array<readonly [string, string]> = [];
   const add = (label: string, value: string | number | null | undefined) => {
     if (value !== null && value !== undefined && value !== "") facts.push([label, String(value)]);
@@ -441,9 +364,6 @@ export function presentConnectionDiagnosis(
     hops,
     steps: steps(host, located, failure, resolve),
     facts,
-    moreInfoUrl:
-      relayPath || located.cause === "session_pending"
-        ? t3ConnectTroubleshootingUrl(helpSection(located, failure))
-        : null,
+    moreInfoUrl: null,
   };
 }

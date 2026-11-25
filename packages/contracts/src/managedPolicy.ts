@@ -95,7 +95,6 @@ export const ManagedPolicySummaryLimits = Schema.Struct({
   maxRuntimeMode: Schema.optionalKey(RuntimeMode),
   clients: Schema.optionalKey(Schema.NonEmptyArray(ManagedPolicyClient)),
   /** `false` also when `clients` leaves out `remote`, since Connect is remote access. */
-  connect: Schema.optionalKey(Schema.Boolean),
   webhookTasks: Schema.optionalKey(Schema.Boolean),
   telemetry: Schema.optionalKey(Schema.Boolean),
   browserCookieImport: Schema.optionalKey(Schema.Boolean),
@@ -211,7 +210,6 @@ export function clampManagedRuntimeMode(
 
 const CAPABILITY_LABELS = {
   remoteClients: "connecting from other devices",
-  connect: "T3 Connect",
   webhookTasks: "webhook tasks",
   browserCookieImport: "importing browser cookies",
   worktreeLayoutCommands: "project worktree layout commands",

@@ -299,10 +299,7 @@ export const make = Effect.gen(function* () {
 
   return ServerEnvironment.of({
     getEnvironmentId: Effect.succeed(environmentId),
-    getDescriptor: Effect.succeed({
-      ...descriptor,
-      capabilities: { ...descriptor.capabilities, agentActivityPublishing: false },
-    }),
+    getDescriptor: Effect.succeed(descriptor),
   });
 });
 

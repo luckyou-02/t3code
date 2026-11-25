@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 
 import type { RemoteEnvironmentAuthorization } from "../authorization/service.ts";
 import type { PreparedConnection } from "../connection/model.ts";
-import * as ManagedRelay from "../relay/managedRelay.ts";
+import * as DpopProof from "../authorization/dpopProof.ts";
 import {
   executeAuthenticatedEnvironmentHttpRequest,
   withOrchestrationProtocolHeader,
@@ -20,7 +20,7 @@ export const fetchEnvironmentThreadHistoryPage = Effect.fn(
   readonly cursor: string;
   readonly throughEntryId?: string | undefined;
   readonly view?: "conversation" | "activity" | "work" | undefined;
-  readonly signer: Option.Option<ManagedRelay.ManagedRelayDpopSigner["Service"]>;
+  readonly signer: Option.Option<DpopProof.DpopSigner["Service"]>;
   readonly remoteAuthorization?: Option.Option<RemoteEnvironmentAuthorization["Service"]>;
   readonly timeoutMs?: number;
 }) {

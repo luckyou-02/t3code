@@ -24,12 +24,6 @@ allowBuilds:
   workerd: false
 
 catalog:
-  "@clerk/backend": 3.33.0
-  "@clerk/clerk-js": 6.47.0
-  "@clerk/electron": 0.1.20
-  "@clerk/electron-passkeys": 0.0.3
-  "@clerk/react": 6.19.6
-  "@clerk/shared": 4.49.0
   "@effect/atom-react": 4.1.5
   "@effect/graphql-generator": 4.1.5
   "@effect/openapi-generator": 4.1.5
@@ -103,15 +97,6 @@ overrides:
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-linux-x64-musl": "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-arm64": "-"
   "@anthropic-ai/claude-agent-sdk>@anthropic-ai/claude-agent-sdk-win32-x64": "-"
-  "@clerk/backend": "catalog:"
-  "@clerk/clerk-js": "catalog:"
-  "@clerk/clerk-js>@base-org/account": "-"
-  "@clerk/clerk-js>@coinbase/wallet-sdk": "-"
-  "@clerk/clerk-js>@wallet-standard/core": "-"
-  "@clerk/electron": "catalog:"
-  "@clerk/electron-passkeys": "catalog:"
-  "@clerk/react": "catalog:"
-  "@clerk/shared": "catalog:"
   "@effect/atom-react": "catalog:"
   "@effect/platform-bun": "catalog:"
   "@effect/platform-node": "catalog:"
@@ -254,8 +239,3 @@ minimumReleaseAgeExclude:
   - "@voidzero-dev/vite-plus-win32-arm64-msvc@1.8.0"
   - "@voidzero-dev/vite-plus-win32-x64-msvc@1.8.0"
   - vite-plus@1.8.0
-  - "@clerk/backend@3.33.0"
-  - "@clerk/clerk-js@6.47.0"
-  - "@clerk/electron@0.1.20"
-  - "@clerk/react@6.19.6"
-  - "@clerk/shared@4.49.0"

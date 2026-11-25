@@ -14,7 +14,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as RpcHttp from "../rpc/http.ts";
 import * as ClientCapabilities from "../platform/capabilities.ts";
-import * as ManagedRelay from "../relay/managedRelay.ts";
+import * as DpopProof from "../authorization/dpopProof.ts";
 import * as Persistence from "../platform/persistence.ts";
 import { fetchRemoteSessionState } from "../authorization/remote.ts";
 import {
@@ -541,8 +541,8 @@ describe("connection onboarding", () => {
           layerPairingOnboarding({ accessTokenRenewal: renews }),
           signer
             ? Layer.succeed(
-                ManagedRelay.ManagedRelayDpopSigner,
-                ManagedRelay.ManagedRelayDpopSigner.of({
+                DpopProof.DpopSigner,
+                DpopProof.DpopSigner.of({
                   thumbprint: Effect.succeed("device-key"),
                   createProof: (proof) => Effect.succeed(`proof:${proof.url}`),
                 }),

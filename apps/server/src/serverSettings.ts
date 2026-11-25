@@ -434,7 +434,6 @@ function decodeSettingsFile(
           ...managed.defaults,
           continueThreadsAfterServerUpdate: false,
           usageHistoryRetentionDays: "unlimited",
-          requireConnectDeviceApproval: true,
           enableAgentBrowserAccess: false,
           defaultRuntimeMode: "approval-required",
         };

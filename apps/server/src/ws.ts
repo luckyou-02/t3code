@@ -79,7 +79,6 @@ import {
   ProjectMutationError,
   ProviderUploadFeedbackError,
   ProviderSetupError,
-  RelayClientInstallFailedError,
   type ServerConfig as ClientServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
@@ -2697,15 +2696,6 @@ export const layerWsRpc = (
                 input,
               ),
             ),
-          ),
-        [WS_METHODS.cloudGetRelayClientStatus]: (_input) =>
-          Effect.succeed({ status: "missing" as const, version: "" }),
-        [WS_METHODS.cloudInstallRelayClient]: (_input) =>
-          Stream.fail(
-            new RelayClientInstallFailedError({
-              reason: "unsupported_platform",
-              message: "The relay client is not available in this build.",
-            }),
           ),
         [WS_METHODS.pullRequestsList]: (input) => pullRequests.list(input),
         [WS_METHODS.pullRequestsListStats]: (input) => pullRequests.listStats(input),

@@ -1,9 +1,10 @@
-// RFC 9449 DPoP proofs for relay requests. Platforms supply the key: web keeps a
-// non-extractable WebCrypto key, mobile signs with the platform's P-256 through a native module.
+import type * as HttpMethod from "effect/http/HttpMethod";
+// The browser keeps a non-extractable WebCrypto key for RFC 9449 proofs.
 import { msg } from "gt-i18n";
-import { MarkedText, translatableMessage } from "../errors/translatable.ts";
+import { MarkedText, markedTextEnglish, translatableMessage } from "../errors/translatable.ts";
 import { normalizeDpopHtu, type DpopPublicJwk } from "@t3tools/shared/dpopCommon";
 import * as Cache from "effect/Cache";
+import * as Context from "effect/Context";
 import * as Clock from "effect/Clock";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -14,11 +15,45 @@ import * as Base64Url from "effect/encoding/Base64Url";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 
-import {
-  ManagedRelayDpopKeyLoadError,
-  ManagedRelayDpopProofCreationError,
-  ManagedRelayDpopSigner,
-} from "./managedRelay.ts";
+export interface DpopProofInput {
+  readonly method: HttpMethod.HttpMethod;
+  readonly url: string;
+  readonly accessToken?: string;
+}
+
+export class DpopKeyLoadError extends Schema.TaggedError<DpopKeyLoadError>()("DpopKeyLoadError", {
+  keyStore: Schema.Literals(["expo-secure-store", "indexed-db"]),
+  cause: Schema.Defect(),
+}) {
+  override get message(): string {
+    return markedTextEnglish(this.i18nMessage);
+  }
+
+  get i18nMessage(): MarkedText {
+    return [msg("Could not load the DPoP proof key.")];
+  }
+}
+
+export class DpopProofCreationError extends Schema.TaggedError<DpopProofCreationError>()(
+  "DpopProofCreationError",
+  {
+    method: Schema.String,
+    url: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Could not create the DPoP proof for ${this.method} ${this.url}.`;
+  }
+}
+
+export class DpopSigner extends Context.Service<
+  DpopSigner,
+  {
+    readonly thumbprint: Effect.Effect<string, DpopKeyLoadError>;
+    readonly createProof: (input: DpopProofInput) => Effect.Effect<string, DpopProofCreationError>;
+  }
+>()("@t3tools/client-runtime/authorization/dpopProof/DpopSigner") {}
 
 export class DpopProofError extends Schema.TaggedError<DpopProofError>()("DpopProofError", {
   message: Schema.String,
@@ -68,11 +103,11 @@ export const createProof = Effect.fn("DpopProof.createProof")(function* (input: 
 
 /** A relay DPoP signer that loads its key once and keeps it; a failed load is retried. */
 export const layerSigner = <E, R>(options: {
-  readonly keyStore: ManagedRelayDpopKeyLoadError["keyStore"];
+  readonly keyStore: DpopKeyLoadError["keyStore"];
   readonly loadOrCreateKey: Effect.Effect<DpopProofKey, E, R>;
 }) =>
   Layer.effect(
-    ManagedRelayDpopSigner,
+    DpopSigner,
     Effect.gen(function* () {
       const random = yield* SecureRandom.SecureRandom;
       const digest = yield* Digest.Digest;
@@ -92,17 +127,15 @@ export const layerSigner = <E, R>(options: {
         },
       );
       const loadKey = Cache.get(keyCache, undefined);
-      return ManagedRelayDpopSigner.of({
+      return DpopSigner.of({
         thumbprint: loadKey.pipe(
           Effect.map((loaded) => loaded.thumbprint),
-          Effect.mapError(
-            (cause) => new ManagedRelayDpopKeyLoadError({ keyStore: options.keyStore, cause }),
-          ),
-          Effect.withSpan("managedRelayDpopSigner.loadThumbprint"),
+          Effect.mapError((cause) => new DpopKeyLoadError({ keyStore: options.keyStore, cause })),
+          Effect.withSpan("dpopSigner.loadThumbprint"),
         ),
-        createProof: Effect.fn("managedRelayDpopSigner.createProof")(function* (input) {
+        createProof: Effect.fn("dpopSigner.createProof")(function* (input) {
           const creationError = (cause: unknown) =>
-            new ManagedRelayDpopProofCreationError({ method: input.method, url: input.url, cause });
+            new DpopProofCreationError({ method: input.method, url: input.url, cause });
           const loaded = yield* loadKey.pipe(Effect.mapError(creationError));
           return yield* createProof({ ...input, key: loaded.key }).pipe(
             Effect.provideService(SecureRandom.SecureRandom, random),

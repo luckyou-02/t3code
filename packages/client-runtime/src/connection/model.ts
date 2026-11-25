@@ -1,5 +1,4 @@
 import { EnvironmentId, type ExecutionEnvironmentDescriptor } from "@t3tools/contracts";
-import { RelayEnvironmentEndpointFailure } from "@t3tools/contracts/relay";
 import * as Schema from "effect/Schema";
 
 import { MarkedText } from "../errors/translatable.ts";
@@ -74,7 +73,14 @@ export type ConnectionHop = typeof ConnectionHop.Type;
 
 /** The relay's endpoint failures plus the causes the client can name from other errors. */
 export const ConnectionFailureCause = Schema.Literals([
-  ...RelayEnvironmentEndpointFailure.literals,
+  "tunnel_down",
+  "origin_unreachable",
+  "dns",
+  "tls",
+  "refused",
+  "timeout",
+  "invalid_response",
+  "unknown",
   "clock_skew",
   "not_linked",
   "relay_error",

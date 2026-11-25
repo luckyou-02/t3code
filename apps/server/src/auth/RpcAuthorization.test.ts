@@ -4,7 +4,6 @@ import {
   AuthFilesystemReadScope,
   AuthProvidersManageScope,
   AuthSettingsWriteScope,
-  AuthAccessWriteScope,
   DEFAULT_SERVER_SETTINGS,
   ProviderDriverKind,
   ProviderInstanceId,
@@ -362,11 +361,6 @@ describe("settings mutation authorization", () => {
             patch: { secretProviders: { [SecretProviderId.make("personal")]: null } },
           }).pipe(Effect.flip),
         ).toMatchObject({ requiredPermission: AuthProvidersManageScope });
-        expect(
-          yield* client[WS_METHODS.serverUpdateSettings]({
-            patch: { requireConnectDeviceApproval: false },
-          }).pipe(Effect.flip),
-        ).toMatchObject({ requiredPermission: AuthAccessWriteScope });
         // A reference names any secret the store holds, and the host entry names where it goes.
         expect(
           yield* client[WS_METHODS.serverUpdateSettings]({

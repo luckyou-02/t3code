@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 
 import {
   AuthEnvironmentScopes,
-  AuthEnvironmentScope,
+  AuthGrantScope,
   authScopeRequiredResponse,
   AuthGrantScopes,
   AuthStandardClientScopes,
@@ -11,6 +11,9 @@ import {
   AuthSessionState,
   sessionGrantsScope,
 } from "./auth.ts";
+
+const decodeStoredScopes = Schema.decodeSync(AuthEnvironmentScopes);
+const decodeGrantScopes = Schema.decodeUnknownSync(AuthGrantScopes);
 
 describe("authorization grants", () => {
   it("decodes legacy review credentials without offering them in new grants", () => {
@@ -23,6 +26,19 @@ describe("authorization grants", () => {
     expect(AuthStandardClientScopes).not.toContain("review:write");
   });
 
+  it("reads old relay scopes without advertising or granting them", () => {
+    const retired = ["relay:read", "relay:write", "relay:configure"] as const;
+    const decoded = decodeStoredScopes(["access:read", ...retired]);
+
+    expect(authScopeResponse(decoded)).toEqual({
+      scopes: ["access:read"],
+      permissions: ["access:read"],
+    });
+    for (const scope of retired) {
+      expect(() => decodeGrantScopes([scope])).toThrow();
+    }
+  });
+
   // Keep the pre-granular vocabulary frozen to expose compatibility regressions.
   const oldScopes = Schema.Array(
     Schema.Literals([
@@ -32,14 +48,12 @@ describe("authorization grants", () => {
       "review:write",
       "access:read",
       "access:write",
-      "relay:read",
-      "relay:write",
     ]),
   );
 
   const decodeOldScopes = Schema.decodeUnknownSync(oldScopes);
 
-  it.each(AuthEnvironmentScope.literals)(
+  it.each(AuthGrantScope.literals)(
     "keeps %s permission errors decodable by old clients",
     (scope) => {
       const response = authScopeRequiredResponse(scope);

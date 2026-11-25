@@ -45,9 +45,9 @@ export const AuthFilesystemWriteScope = "filesystem:write" as const;
 const AuthReviewWriteScope = "review:write" as const;
 export const AuthAccessReadScope = "access:read" as const;
 export const AuthAccessWriteScope = "access:write" as const;
-export const AuthRelayReadScope = "relay:read" as const;
-export const AuthRelayWriteScope = "relay:write" as const;
-export const AuthRelayConfigureScope = "relay:configure" as const;
+const AuthRelayReadScope = "relay:read" as const;
+const AuthRelayWriteScope = "relay:write" as const;
+const AuthRelayConfigureScope = "relay:configure" as const;
 export const AuthEnvironmentScope = Schema.Literals([
   AuthOrchestrationReadScope,
   AuthOrchestrationOperateScope,
@@ -73,7 +73,13 @@ export const AuthEnvironmentScopes = Schema.Array(AuthEnvironmentScope);
 export type AuthEnvironmentScopes = typeof AuthEnvironmentScopes.Type;
 
 export const AuthGrantScope = Schema.Literals(
-  AuthEnvironmentScope.literals.filter((scope) => scope !== AuthReviewWriteScope),
+  AuthEnvironmentScope.literals.filter(
+    (scope) =>
+      scope !== AuthReviewWriteScope &&
+      scope !== AuthRelayReadScope &&
+      scope !== AuthRelayWriteScope &&
+      scope !== AuthRelayConfigureScope,
+  ),
 );
 export type AuthGrantScope = typeof AuthGrantScope.Type;
 export const AuthGrantScopes = Schema.Array(AuthGrantScope);
@@ -91,7 +97,13 @@ const legacyScopes = new Set<AuthEnvironmentScope>([
 ]);
 
 export function authScopeResponse(scopes: ReadonlyArray<AuthEnvironmentScope>) {
-  return { scopes: scopes.filter((scope) => legacyScopes.has(scope)), permissions: scopes };
+  const permissions = scopes.filter(
+    (scope) =>
+      scope !== AuthRelayReadScope &&
+      scope !== AuthRelayWriteScope &&
+      scope !== AuthRelayConfigureScope,
+  );
+  return { scopes: permissions.filter((scope) => legacyScopes.has(scope)), permissions };
 }
 
 const authScopeResponseFields = {
@@ -115,10 +127,7 @@ const legacyParents: Partial<Record<AuthEnvironmentScope, AuthEnvironmentScope>>
 /** Keep permission denials decodable by clients with the original scope enum. */
 export function authScopeRequiredResponse(requiredPermission: AuthEnvironmentScope) {
   return {
-    requiredScope:
-      requiredPermission === AuthRelayConfigureScope
-        ? AuthRelayWriteScope
-        : (legacyParents[requiredPermission] ?? requiredPermission),
+    requiredScope: legacyParents[requiredPermission] ?? requiredPermission,
     requiredPermission,
   };
 }
@@ -166,16 +175,11 @@ export const AuthStandardClientScopes = [
   AuthSourceControlWriteScope,
   AuthFilesystemReadScope,
   AuthFilesystemWriteScope,
-  AuthRelayReadScope,
   AuthAccessReadScope,
   AuthAccessWriteScope,
-  AuthRelayWriteScope,
 ] as const;
 
-export const AuthAdministrativeClientScopes = [
-  ...AuthStandardClientScopes,
-  AuthRelayConfigureScope,
-] as const;
+export const AuthAdministrativeClientScopes = [...AuthStandardClientScopes] as const;
 
 export const AuthTokenExchangeGrantType =
   "urn:ietf:params:oauth:grant-type:token-exchange" as const;
@@ -490,26 +494,6 @@ export const AuthRevokeClientSessionInput = Schema.Struct({
   sessionId: AuthSessionId,
 });
 export type AuthRevokeClientSessionInput = typeof AuthRevokeClientSessionInput.Type;
-
-export const AuthApproveConnectDeviceInput = Schema.Struct({
-  pairingLinkId: TrimmedNonEmptyString,
-});
-export type AuthApproveConnectDeviceInput = typeof AuthApproveConnectDeviceInput.Type;
-
-export const AuthApproveConnectDeviceResult = Schema.Struct({
-  approved: Schema.Boolean,
-});
-export type AuthApproveConnectDeviceResult = typeof AuthApproveConnectDeviceResult.Type;
-
-export const AuthRevokeConnectDeviceInput = Schema.Struct({
-  proofKeyThumbprint: TrimmedNonEmptyString,
-});
-export type AuthRevokeConnectDeviceInput = typeof AuthRevokeConnectDeviceInput.Type;
-
-export const AuthRevokeConnectDeviceResult = Schema.Struct({
-  revoked: Schema.Boolean,
-});
-export type AuthRevokeConnectDeviceResult = typeof AuthRevokeConnectDeviceResult.Type;
 
 const pairingCredentialFields = {
   label: Schema.optionalKey(TrimmedNonEmptyString),
