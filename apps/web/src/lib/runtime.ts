@@ -1,29 +1,40 @@
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
 
+import { DpopProof, ManagedRelay } from "@t3tools/client-runtime/relay";
 import { layerRemoteHttpClient } from "@t3tools/client-runtime/rpc";
+import { RelayWebClientId } from "@t3tools/contracts/relay";
 import * as PrimaryEnvironmentHttpClient from "../environments/primary/httpClient";
 import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
-
-import * as Dpop from "../cloud/dpop";
-import * as ManagedRelayLayer from "../cloud/managedRelayLayer";
-import { resolveCloudPublicConfig } from "../cloud/publicConfig";
 import * as ClientTracer from "../observability/clientTracer";
-
-function configuredRelayUrl(): string {
-  return resolveCloudPublicConfig().relayUrl ?? "http://relay.invalid";
-}
 
 const layerHttpClient = layerRemoteHttpClient((input, init) => globalThis.fetch(input, init));
 
+const layerWebCrypto = Layer.mergeAll(Digest.layerWebCrypto, Signature.layerWebCrypto).pipe(
+  Layer.provideMerge(SecureRandom.layerWebCrypto),
+);
+
+const layerDisabledRelayDpopSigner = DpopProof.layerSigner({
+  keyStore: "indexed-db",
+  loadOrCreateKey: Effect.fail(new DpopProof.DpopProofError({ message: "T3 Connect is disabled." })),
+});
+
+const layerDisabledManagedRelay = ManagedRelay.layer({
+  relayUrl: "http://relay.invalid",
+  clientId: RelayWebClientId,
+}).pipe(Layer.provideMerge(layerDisabledRelayDpopSigner));
+
 type RuntimeLayerSource =
   | typeof layerHttpClient
-  | typeof Dpop.layer
+  | typeof layerWebCrypto
   | typeof Socket.layerWebSocketConstructorGlobal
   | typeof ClientTracer.layer
-  | ReturnType<typeof ManagedRelayLayer.layer>;
+  | typeof layerDisabledManagedRelay;
 
 const primaryHttpRuntime = ManagedRuntime.make(
   PrimaryEnvironmentHttpClient.layer.pipe(Layer.provide(PrimaryEnvironmentHttpLayer.layer)),
@@ -48,12 +59,10 @@ export function __setPrimaryHttpRunnerForTests(runner?: PrimaryHttpEffectRunner)
 
 const layerRuntime = Layer.mergeAll(
   layerHttpClient,
-  Dpop.layer,
+  layerWebCrypto,
   Socket.layerWebSocketConstructorGlobal,
   ClientTracer.layer,
-  ManagedRelayLayer.layer(configuredRelayUrl()).pipe(
-    Layer.provide(Layer.mergeAll(layerHttpClient, Dpop.layer)),
-  ),
+  layerDisabledManagedRelay.pipe(Layer.provide(Layer.mergeAll(layerHttpClient, layerWebCrypto))),
 );
 
 export const runtime: ManagedRuntime.ManagedRuntime<

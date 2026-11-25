@@ -44,7 +44,6 @@ import {
   threadHtmlRenderAttachmentIds,
 } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
-import { CloudManagedEndpointRuntime } from "../cloud/ManagedEndpointRuntime.ts";
 import * as CommandOutputHub from "../orchestration-v2/CommandOutputHub.ts";
 import { GUEST_FAILURE } from "../orchestration-v2/GuestShareDecider.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
@@ -231,7 +230,6 @@ const make = Effect.gen(function* () {
   const commandOutputs = yield* CommandOutputHub.CommandOutputHub;
   const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
-  const managedEndpoint = yield* CloudManagedEndpointRuntime;
   const { attachmentsDir } = yield* ServerConfig.ServerConfig;
   const fileSystem = yield* FileSystem.FileSystem;
   const random = yield* SecureRandom.SecureRandom;
@@ -288,9 +286,7 @@ const make = Effect.gen(function* () {
     return decodeSessionClaims(base64UrlDecodeUtf8(parts.payload));
   });
 
-  const connectHostname = managedEndpoint.inspectConnector.pipe(
-    Effect.map((facts) => facts?.hostname ?? null),
-  );
+  const connectHostname: Effect.Effect<string | null> = Effect.succeed(null);
   // A beta: while it is off, no link opens and every guest request is refused.
   const sharingEnabled = serverSettings.getSettings.pipe(
     Effect.map((settings) => settings.guestSharingEnabled),

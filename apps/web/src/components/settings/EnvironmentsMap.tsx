@@ -48,7 +48,6 @@ import {
   useState,
 } from "react";
 
-import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { isElectron } from "~/env";
 import { useLiveRefresh } from "~/hooks/useLiveRefresh";
 import { useNowMinute } from "~/hooks/useNowMinute";
@@ -246,13 +245,6 @@ function useConnectMachines() {
   const m = useMessages();
   const discovery = useRelayEnvironmentDiscovery();
   const refresh = useAtomCommand(relayEnvironmentDiscovery.refresh, { reportFailure: false });
-  const discoverIfUnasked = useEffectEvent(() => {
-    if (hasCloudPublicConfig() && !discovery.listed && !discovery.refreshing) void refresh();
-  });
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- one T3 Connect listing when the map mounts, the request the list makes on mount
-  useEffect(() => {
-    discoverIfUnasked();
-  }, []);
   const machines = useRetainedRelayEnvironments();
   // A failed listing is not an account with no machines: say so, with a way to ask again.
   const message = discovery.refreshing

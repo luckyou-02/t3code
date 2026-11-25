@@ -25,9 +25,6 @@ import {
   type WebhookTriggerRequest,
   type WebhookTriggerResult,
 } from "./ScheduledTaskService.ts";
-import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
-import { CLOUD_MINT_PUBLIC_KEY, RELAY_ISSUER_SECRET } from "../cloud/config.ts";
-import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as RelayDeliveryProof from "./RelayDeliveryProof.ts";
 import { WEBHOOK_MAX_BODY_BYTES } from "./webhookRoute.ts";
 import * as WebhookRoute from "./webhookRoute.ts";
@@ -42,10 +39,6 @@ const mintKeys = NodeCrypto.generateKeyPairSync("ed25519", {
   privateKeyEncoding: { format: "pem", type: "pkcs8" },
   publicKeyEncoding: { format: "pem", type: "spki" },
 });
-const linkedSecrets: ReadonlyMap<string, string> = new Map([
-  [CLOUD_MINT_PUBLIC_KEY, mintKeys.publicKey],
-  [RELAY_ISSUER_SECRET, relayIssuer],
-]);
 
 const relayProof = Effect.fn("relayProof")(function* (claims: {
   readonly deliveryId: string;
@@ -90,7 +83,6 @@ const handlerFor = (
   trigger: (
     request: WebhookTriggerRequest,
   ) => Effect.Effect<WebhookTriggerResult, ScheduledTaskError>,
-  secrets: ReadonlyMap<string, string> = linkedSecrets,
 ) =>
   HttpRouter.toWebHandler(
     HttpApiBuilder.layer(WebhookTestApi).pipe(
@@ -98,21 +90,6 @@ const handlerFor = (
       Layer.provide(RelayDeliveryProof.layer),
       Layer.provide(Layer.mock(ScheduledTaskService)({ triggerWebhook: trigger })),
       Layer.provide([hooks, ManagedPolicy.layerTest()]),
-      Layer.provide(
-        Layer.mock(ServerSecretStore.ServerSecretStore)({
-          get: (name) =>
-            Effect.succeed(
-              Option.map(Option.fromUndefinedOr(secrets.get(name)), (value) =>
-                new TextEncoder().encode(value),
-              ),
-            ),
-        }),
-      ),
-      Layer.provide(
-        Layer.mock(ServerEnvironment.ServerEnvironment)({
-          getEnvironmentId: Effect.succeed(environmentId),
-        }),
-      ),
       Layer.provide(
         HttpPlatform.layer.pipe(
           Layer.provideMerge(NodeServices.layer),
@@ -158,64 +135,13 @@ describe("webhook route", () => {
     }),
   );
 
-  it.live("trusts the relay's delivery id and receive time only with its signed proof", () =>
-    Effect.gen(function* () {
-      const received: Array<WebhookTriggerRequest> = [];
-      const { handler, dispose } = handlerFor((request) => {
-        received.push(request);
-        return Effect.succeed({
-          _tag: "accepted",
-          deliveryId: ScheduledTaskWebhookDeliveryId.make("delivery:1"),
-          outcome: "accepted",
-        });
-      });
-      const send = (path: string, headers: Record<string, string>) =>
-        Effect.promise(() => handler(post(path, "{}", headers)));
-      const receivedAt = "2026-10-04T10:00:00.000Z";
-      const relayHeaders = {
-        "x-t3-relay-delivery-id": "relay-1",
-        "x-t3-relay-received-at": receivedAt,
-      };
-      const forged = NodeCrypto.generateKeyPairSync("ed25519", {
-        privateKeyEncoding: { format: "pem", type: "pkcs8" },
-        publicKeyEncoding: { format: "pem", type: "spki" },
-      });
-      const proof = yield* relayProof({ deliveryId: "relay-1", receivedAt, hookId: "id" });
-      const forgedProof = yield* relayProof({
-        deliveryId: "relay-1",
-        receivedAt,
-        hookId: "id",
-        privateKey: forged.privateKey,
-      });
-      yield* send("/api/hooks/id/tok", { ...relayHeaders, "x-t3-relay-delivery": proof });
-      yield* send("/api/hooks/id/tok", relayHeaders);
-      yield* send("/api/hooks/id/tok", { ...relayHeaders, "x-t3-relay-delivery": forgedProof });
-      yield* send("/api/hooks/id/tok", {
-        ...relayHeaders,
-        "x-t3-relay-delivery-id": "relay-2",
-        "x-t3-relay-delivery": proof,
-      });
-      yield* send("/api/hooks/other/tok", { ...relayHeaders, "x-t3-relay-delivery": proof });
-      yield* Effect.promise(() => dispose());
-      expect(received.map((request) => request.relayDeliveryId)).toEqual([
-        "relay-1",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      ]);
-      expect(received[0]?.receivedAt).toBe(receivedAt);
-      expect(received.slice(1).every((request) => request.receivedAt === undefined)).toBe(true);
-    }),
-  );
-
-  it.live("trusts no relay headers on an environment not linked to T3 Connect", () =>
+  it.live("trusts no relay headers on an environment without T3 Connect", () =>
     Effect.gen(function* () {
       const received: Array<WebhookTriggerRequest> = [];
       const { handler, dispose } = handlerFor((request) => {
         received.push(request);
         return Effect.succeed({ _tag: "not_found" });
-      }, new Map());
+      });
       const receivedAt = "2026-10-04T10:00:00.000Z";
       const proof = yield* relayProof({ deliveryId: "relay-1", receivedAt, hookId: "id" });
       yield* Effect.promise(() =>

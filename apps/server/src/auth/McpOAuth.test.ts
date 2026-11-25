@@ -4,7 +4,6 @@ import {
   AuthMcpClientAccess,
   AuthStandardClientScopes,
   type AuthCreatePairingCredentialInput,
-  type EnvironmentCloudLinkStateResult,
   EnvironmentHttpApi,
   MCP_PEER_LINK_SOFTWARE_ID,
   mcpClientScopes,
@@ -23,7 +22,6 @@ import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as Schema from "effect/Schema";
 
-import * as CloudLink from "../cloud/CloudLink.ts";
 import * as ServerConfig from "../config.ts";
 import { makeDpopKey } from "./dpop.testkit.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -49,16 +47,8 @@ const layerEnvironmentAuth = EnvironmentAuth.layer.pipe(
   Layer.provideMerge(ServerEnvironment.layerIdentity),
   Layer.provide(layerConfig),
 );
-const notLinked: EnvironmentCloudLinkStateResult = {
-  linked: false,
-  cloudUserId: null,
-  relayUrl: null,
-  relayIssuer: null,
-  publishAgentActivity: false,
-};
 const makeLayerRoutes = (
   capture: (auth: EnvironmentAuth.EnvironmentAuth["Service"]) => void,
-  linkState: EnvironmentCloudLinkStateResult,
 ) =>
   Layer.mergeAll(
     Layer.effectDiscard(
@@ -70,9 +60,6 @@ const makeLayerRoutes = (
         McpOAuthHttp.layer.pipe(
           Layer.provide(McpOAuth.layer),
           Layer.provide(ServerSettings.layerTest({ linkedEnvironmentsEnabled: true })),
-          Layer.provide(
-            Layer.mock(CloudLink.CloudLink)({ linkState: () => Effect.succeed(linkState) }),
-          ),
         ),
       ),
       Layer.provide(AuthHttp.layerAuthenticatedAuth),
@@ -111,7 +98,6 @@ type Handler = (request: Request) => Effect.Effect<Response>;
 
 const withRoutes = <A, E>(
   use: (handler: Handler, auth: EnvironmentAuth.EnvironmentAuth["Service"]) => Effect.Effect<A, E>,
-  linkState = notLinked,
 ) =>
   Effect.gen(function* () {
     const random = yield* SecureRandom.SecureRandom;
@@ -119,7 +105,7 @@ const withRoutes = <A, E>(
     let routerAuth: EnvironmentAuth.EnvironmentAuth["Service"] | undefined;
     const layerRoutes = makeLayerRoutes((auth) => {
       routerAuth = auth;
-    }, linkState);
+    });
     return yield* Effect.acquireUseRelease(
       Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
       (web) =>
@@ -785,49 +771,6 @@ it.live("an app approval code approves only an app sign-in, at its own level", (
       ).toBe(400);
     }),
   ),
-);
-
-it.effect(
-  "sends an app sign-in on the linked tunnel to the hosted app, and a link to its own page",
-  () =>
-    Effect.gen(function* () {
-      const handoff = (tunnelHostname: string, peerLink = false) =>
-        withRoutes(
-          (handler) =>
-            Effect.gen(function* () {
-              const registered = yield* handler(
-                at("/oauth/mcp/register", {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: encodeJson({
-                    client_name: "Agent",
-                    redirect_uris: [REDIRECT],
-                    token_endpoint_auth_method: "none",
-                    ...(peerLink ? { software_id: MCP_PEER_LINK_SOFTWARE_ID } : {}),
-                  }),
-                }),
-              ).pipe(Effect.flatMap(json<{ client_id: string }>));
-              const query = new URLSearchParams(
-                authorizeParams(registered.client_id, "http://localhost:51234/callback"),
-              );
-              const response = yield* handler(at(`/oauth/mcp/authorize?${query}`));
-              return { location: response.headers.get("location")!, query: query.toString() };
-            }),
-          { ...notLinked, linked: true, cloudUserId: "user_1", tunnelHostname },
-        );
-
-      const onTunnel = yield* handoff("box.example.ts.net");
-      const hosted = new URL(onTunnel.location);
-      expect(`${hosted.origin}${hosted.pathname}`).toBe("https://app.t3.codes/approve-agent");
-      expect(hosted.searchParams.get("environment")).toEqual(expect.any(String));
-      hosted.searchParams.delete("environment");
-      expect(hosted.searchParams.toString()).toBe(onTunnel.query);
-
-      const elsewhere = yield* handoff("other.t3coderelay.com");
-      expect(elsewhere.location).toBe(`/connect-agent?${elsewhere.query}`);
-      const peerLink = yield* handoff("box.example.ts.net", true);
-      expect(peerLink.location).toBe(`/connect-agent?${peerLink.query}`);
-    }),
 );
 
 it.live("one-click approves only access the browser session holds the scopes for", () =>
