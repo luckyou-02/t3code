@@ -177,7 +177,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: [...defaultInclude, "../../native/kde-snap-shot/src/*.test.ts"],
+          include: [...defaultInclude],
           exclude: ["**/node_modules/**", ...domTests],
           setupFiles: [
             "../../packages/shared/src/testing/longTempDir.ts",

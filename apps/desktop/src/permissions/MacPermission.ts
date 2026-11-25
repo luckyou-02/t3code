@@ -1,6 +1,6 @@
 import { msg } from "gt-i18n";
 
-export const MAC_PERMISSION_SETTINGS_URLS = {
+const MAC_PERMISSION_SETTINGS_URLS = {
   "screen-recording":
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
   accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
