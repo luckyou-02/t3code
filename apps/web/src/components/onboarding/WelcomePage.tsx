@@ -17,8 +17,6 @@ import {
 import {
   AgentSessionSource,
   AuthProvidersManageScope,
-  AuthRelayReadScope,
-  AuthRelayWriteScope,
   AuthTerminalOperateScope,
   CommandId,
   AuthOrchestrationOperateScope,
@@ -28,19 +26,11 @@ import {
 } from "@t3tools/contracts";
 import { Link, useBlocker } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  PlusIcon,
-  SmartphoneIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, TerminalIcon } from "lucide-react";
 import { msg, T, useGT, useLocale, useMessages, Var } from "gt-react";
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import { TYPOGRAPHY_ADVANCED_STORAGE_KEY } from "../../appearanceFonts";
-import { MOBILE_APP_URL } from "../../branding";
 import { isElectron } from "../../env";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePersistEnvironmentProviderInstanceMutation } from "../../hooks/useSettings";
@@ -69,7 +59,6 @@ import {
   isBrokenVersion,
   turnedOnInstance,
   welcomeAgentState,
-  welcomeOffersPhone,
 } from "../../onboarding/welcomePage.logic";
 import {
   StoredWelcomeImportSelection,
@@ -103,7 +92,6 @@ import { ACPRegistryIcon } from "../Icons";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
-import { QRCodeSvg } from "../ui/qr-code";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
 import { SidebarInset } from "../ui/sidebar";
@@ -134,17 +122,8 @@ export function WelcomePage({
     environments.find((environment) => environment.environmentId === environmentId)?.label ??
     gt("this computer");
   const agentReady = useWelcomeAgents(environmentId).readyCount > 0;
-  // The phone and `t3` on PATH belong to the primary computer, so only it offers them.
+  // `t3` on PATH belongs to the primary computer, so only it offers it.
   const isPrimary = usePrimaryEnvironmentId() === environmentId;
-  // The same access Settings → Sharing & access checks.
-  const canReadRelay = useEnvironmentScope(environmentId, AuthRelayReadScope);
-  const canWriteRelay = useEnvironmentScope(environmentId, AuthRelayWriteScope);
-  const showPhone = welcomeOffersPhone({
-    isPrimary,
-    cloud: false,
-    canShare: canReadRelay && canWriteRelay,
-    policy: useManagedPolicy(environmentId),
-  });
   const scans = useProjectScans([environmentId]);
   const [storedSelection, storeSelection] = useLocalStorage(
     welcomeImportSelectionKey(environmentId),
@@ -298,7 +277,6 @@ export function WelcomePage({
                 projectImport={projectImport}
                 isImporting={isImporting}
               />
-              {showPhone ? <PhoneSection environmentId={environmentId} /> : null}
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
               {agentReady ? (
@@ -970,64 +948,6 @@ function ProjectsSection({
         <p className="pt-1 pl-8 text-sm text-destructive">{m(visibleImportError)}</p>
       ) : null}
     </WelcomeSection>
-  );
-}
-
-function PhoneSection({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const gt = useGT();
-  const [open, setOpen] = useState(false);
-  return (
-    <WelcomeSection title={gt("Phone")}>
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <div className="flex min-h-10 items-center gap-3 py-1">
-          <RowIcon>
-            <SmartphoneIcon className="size-4" />
-          </RowIcon>
-          <span className="min-w-0 flex-1 text-sm font-medium text-foreground">
-            <T>Use T3 Code on your phone</T>
-          </span>
-          <CollapsibleTrigger render={<Button variant="ghost-muted" size="xs" />}>
-            {open ? gt("Hide") : gt("Set up")}
-            <ChevronDownIcon className={cn("size-3.5", open && "rotate-180")} />
-          </CollapsibleTrigger>
-        </div>
-        <CollapsiblePanel>
-          <div className="flex items-center gap-8 pt-2 pb-3 pl-8">
-            <ol className="min-w-0 flex-1 space-y-5">
-              <PhoneStep step={1}>
-                <p className="text-sm text-foreground">
-                  <T>Scan with your phone to get the app.</T>
-                </p>
-              </PhoneStep>
-              <PhoneStep step={2}>
-                <p className="text-sm text-muted-foreground">
-                  <T>T3 Connect is not available in this build.</T>
-                </p>
-              </PhoneStep>
-            </ol>
-            {/* One code for both stores: the link opens the store that matches the phone. */}
-            <div className="shrink-0 rounded-lg bg-white p-1.5">
-              <QRCodeSvg
-                value={MOBILE_APP_URL}
-                size={124}
-                level="M"
-                marginSize={2}
-                title={gt("T3 Code app for iPhone and Android")}
-              />
-            </div>
-          </div>
-        </CollapsiblePanel>
-      </Collapsible>
-    </WelcomeSection>
-  );
-}
-
-function PhoneStep({ step, children }: { readonly step: number; readonly children: ReactNode }) {
-  return (
-    <li className="flex gap-3">
-      <span className="w-3 shrink-0 text-sm text-muted-foreground tabular-nums">{step}</span>
-      <div className="flex min-w-0 flex-col items-start gap-2">{children}</div>
-    </li>
   );
 }
 

@@ -46,7 +46,7 @@ function RestoreDeviceDefaultsButton({ onRestored }: { onRestored: () => void })
 }
 
 function SettingsScopeBoundary({ pathname, children }: { pathname: string; children: ReactNode }) {
-  const { scope } = useSettingsScope();
+  const { scope, connectedEnvironments } = useSettingsScope();
   const { environments } = useEnvironments();
   const gt = useGT();
   const m = useMessages();

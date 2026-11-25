@@ -55,26 +55,22 @@ export function useAvailableSettingsSearchItems() {
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const canMaintain = useEnvironmentScope(primaryEnvironmentId, AuthEnvironmentMaintainScope);
   const hasPeerLinkHost = usePeerLinkHosts().length > 0;
-  const managedTunnelActive = false;
   const localEnvironmentDisabled = isLocalEnvironmentDisabled() === true;
   const canManageLocalBackend = !localEnvironmentDisabled && canMaintain;
   const desktopWsl = useEnvironmentQuery(
     isElectron && canManageLocalBackend ? desktopWslStateAtom : null,
     useMessages(),
   );
-  const cloudPublicConfig = false;
   const wslSettingsRowVisible =
     isWslSettingsRowVisible({ state: desktopWsl.data, error: desktopWsl.error }) === true;
 
   return filterAvailableSettingsSearchItems({
     localEnvironmentDisabled,
-    hasCloudPublicConfig: cloudPublicConfig,
     hasEnvironment,
     hasProviderSettingsEnvironment,
     canManageLocalBackend,
     isWslSettingsRowVisible: wslSettingsRowVisible,
     hasThreadAutoSettlement,
-    managedTunnelActive,
     hasPeerLinkHost,
     hasFastWorktreeCheckoutEnvironment,
     hasTextGeneratorsEnvironment,

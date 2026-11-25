@@ -1,4 +1,4 @@
-import { T, useGT, msg, useMessages } from "gt-react-native";
+import { T, useGT } from "gt-react-native";
 import { Button } from "../../components/ui/Button";
 import {
   AuthSettingsWriteScope,
@@ -21,7 +21,6 @@ import { useEnvironments } from "../../state/environments";
 import { mobilePreferencesAtom, saveMobilePreferences } from "../../state/preferences";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { ListChoiceRow as SettingsChoiceRow } from "../../components/ui/ListChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsScreen } from "./components/SettingsScreen";

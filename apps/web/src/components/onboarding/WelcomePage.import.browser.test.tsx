@@ -320,11 +320,6 @@ function setup() {
   state.scan.mockReset();
   state.refreshScan.mockReset();
   state.waitForProject.mockReset().mockImplementation(waitForRecordedProject);
-  state.cloud = false;
-  state.auth = { isLoaded: true, isSignedIn: false, userId: null };
-  state.linkState = Atom.make<EnvironmentCloudLinkStateResult | null>(null).pipe(Atom.keepAlive);
-  state.linkError = null;
-  state.refreshLinkState.mockReset();
   state.scanError = null;
   state.scanPending = false;
   state.runningTerminalIds = Atom.make<ReadonlyArray<string>>([]).pipe(Atom.keepAlive);

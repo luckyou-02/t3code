@@ -1,14 +1,11 @@
-import { msg } from "gt-react";
-import { managedCapabilityDenial } from "@t3tools/client-runtime/contract-labels";
 import { Link } from "@tanstack/react-router";
 import {
   DEFAULT_WORKFLOW_SKIPPED_RUNS_KEPT,
   MAX_WORKFLOW_SKIPPED_RUNS_KEPT,
 } from "@t3tools/contracts";
-import { T, useGT, useMessages } from "gt-react";
+import { T, useGT } from "gt-react";
 
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "../ui/number-field";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { commitNumberFieldOnEnter } from "./commitNumberFieldOnEnter";
 import { ScopedSwitch } from "./ScopedSwitch";
@@ -24,8 +21,7 @@ import {
   useScopedSettingsMixed,
   useUpdateScopedSettings,
 } from "./useScopedSettings";
-import { useOptionalSettingsScope, useSettingsScope } from "./SettingsScopeContext";
-import { firstManagedDenial, usePrimaryManagedPolicy } from "~/state/managedPolicy";
+import { useSettingsScope } from "./SettingsScopeContext";
 
 /** Features still settling in. */
 export function LabsSettingsPanel() {
@@ -34,7 +30,6 @@ export function LabsSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection id="beta" title={gt("Beta")}>
         <BoringSidebarRow />
-        <GuestLinksRow />
         <LinkedEnvironmentsRow />
         <WorkflowsRow />
         <WorkflowSkippedRunsRow />
@@ -93,50 +88,6 @@ function BoringSidebarMultilineRow() {
             updateSettings({ boringSidebarMultilineRows: Boolean(checked) })
           }
           aria-label={gt("Two-line folder rows")}
-        />
-      }
-    />
-  );
-}
-
-function GuestLinksRow() {
-  const searchableSetting = useSearchableSetting();
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  const gt = useGT();
-  const messages = useMessages();
-  const scope = useOptionalSettingsScope();
-  const primaryPolicy = usePrimaryManagedPolicy();
-  // Guests arrive through T3 Connect, so a policy that turns Connect off turns this off too.
-  const connectDenial = firstManagedDenial(
-    scope
-      ? scope.connectedEnvironments.map((environment) => environment.serverConfig?.managedPolicy)
-      : [primaryPolicy],
-    (policy) => managedCapabilityDenial(policy, "connect", messages),
-  );
-  return (
-    <SettingsRow
-      serverScoped
-      {...searchableSetting("guest-links")}
-      settingKeys={["guestSharingEnabled"]}
-      // Turning guest links off still works without T3 Connect.
-      managed={settings.guestSharingEnabled ? undefined : connectDenial}
-      description={
-        <T>
-          Share a thread with a guest who watches it live in a browser and sends messages you
-          approve. Needs T3 Connect: sign in and link this machine in{" "}
-          <Link to="/settings/access" className="underline underline-offset-2">
-            Sharing & access
-          </Link>
-          . Turning it off stops every guest link.
-        </T>
-      }
-      control={
-        <ScopedSwitch
-          settingKeys={["guestSharingEnabled"]}
-          checked={settings.guestSharingEnabled}
-          onCheckedChange={(checked) => updateSettings({ guestSharingEnabled: Boolean(checked) })}
-          aria-label={gt("Guest links")}
         />
       }
     />

@@ -1226,7 +1226,6 @@ function WebhookEndpointField({
         </Button>
       </div>
       {note !== null ? <p className="text-xs text-muted-foreground">{note}</p> : null}
-      {endpoint.url !== null ? null : null}
     </div>
   );
 }

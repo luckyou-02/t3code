@@ -11,8 +11,6 @@ import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthEnvironmentMaintainScope,
-  AuthRelayReadScope,
-  AuthRelayWriteScope,
   allowsPreviewTunnel,
   isManagedSettingPath,
   type AuthClientSession,
@@ -34,7 +32,6 @@ import * as Cause from "effect/Cause";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import {
   applyWslEnableSelection,
-  connectDeviceName,
   isWslSettingsRowVisible,
   missingTailscaleEndpointDescription,
   resolveLocalVersionStatusLabel,
@@ -46,7 +43,6 @@ import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsL
 import { ManagedByOrganization } from "../ManagedPolicy";
 import { LocalEnvironmentSetting } from "./LocalEnvironmentSetting";
 import { useSearchableSetting } from "./settingsSearch";
-import { ConnectDeviceApprovalSettings } from "./ConnectDeviceApprovalSettings";
 import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { EnvironmentsMap } from "./EnvironmentsMap";
@@ -143,19 +139,9 @@ import {
   PairingClientsList,
 } from "./AuthorizedClientsSettings";
 import { ITEM_ROW_CLASSNAME } from "./itemRows";
-import {
-  CloudLinkRow,
-  CloudRemoteEnvironmentRows,
-  SavedBackendListRow,
-} from "./SavedEnvironmentRows";
+import { CloudRemoteEnvironmentRows, SavedBackendListRow } from "./SavedEnvironmentRows";
 import { AddEnvironmentDialog } from "./AddEnvironmentDialog";
-import {
-  type ConnectDeviceRevokeRequest,
-  RevokeConnectDeviceDialog,
-} from "./RevokeConnectDeviceDialog";
 
-// Sessions T3 Connect minted for a device signed in to the linked account.
-const CLOUD_CONNECT_SESSION_SUBJECT = "cloud-connect";
 const DEFAULT_TAILSCALE_SERVE_PORT = 443;
 const EMPTY_ADVERTISED_ENDPOINTS: ReadonlyArray<AdvertisedEndpoint> = [];
 
@@ -430,9 +416,7 @@ function ConnectionsSettingsContent({
   );
   const canReadAccess = useEnvironmentScope(accessEnvironmentId, AuthAccessReadScope);
   const canWriteAccess = useEnvironmentScope(accessEnvironmentId, AuthAccessWriteScope);
-  const canReadRelay = useEnvironmentScope(accessEnvironmentId, AuthRelayReadScope);
   const canMaintain = useEnvironmentScope(accessEnvironmentId, AuthEnvironmentMaintainScope);
-  const canManageRelay = useEnvironmentScope(accessEnvironmentId, AuthRelayWriteScope);
   const canManageLocalBackend = isPrimaryAccess && !isLocalEnvironmentDisabled() && canMaintain;
   const showsAccess = view === "access";
   const authAccessChanges = useEnvironmentQuery(
@@ -777,58 +761,10 @@ function ConnectionsSettingsContent({
     if (confirmed === true) await removeSavedBackend(environment);
   };
 
-  // T3 Connect devices waiting for approval have their own list.
-  const visibleDesktopPairingLinks = desktopPairingLinks.filter(
-    (pairingLink) => pairingLink.connectDeviceRequest === undefined,
-  );
-  const connectDeviceRequests = desktopPairingLinks.filter(
-    (pairingLink) => pairingLink.connectDeviceRequest !== undefined,
-  );
-  // Older servers omit the list; they cannot hold devices for approval.
-  const connectDevices =
-    authAccessChanges.data?.type === "snapshot"
-      ? (authAccessChanges.data.payload.connectDevices ?? null)
-      : null;
   const updateAccessSettings = useUpdateEnvironmentSettings(accessEnvironmentId);
-  const [pendingConnectRevoke, setPendingConnectRevoke] =
-    useState<ConnectDeviceRevokeRequest | null>(null);
-  // With approval off a revoked T3 Connect device signs straight back in, so offer to turn it
-  // on. Older servers have no such setting, and revoking there goes ahead as before.
-  const connectApprovalOff =
-    accessEnvironment?.serverConfig?.settings.requireConnectDeviceApproval === false;
-  const requestConnectRevoke = (title: string, revoke: () => Promise<void>) => {
-    if (connectApprovalOff && canWriteAccess) setPendingConnectRevoke({ title, revoke });
-    else void revoke();
-  };
-  const requireConnectApproval = () =>
-    new Promise<boolean>((resolve) =>
-      updateAccessSettings(
-        { requireConnectDeviceApproval: true },
-        { onSaved: () => resolve(true), onFailed: () => resolve(false) },
-      ),
-    );
-  const requestRevokeClientSession = (sessionId: ServerClientSessionRecord["sessionId"]) => {
-    const session = desktopClientSessions.find((candidate) => candidate.sessionId === sessionId);
-    if (session?.subject === CLOUD_CONNECT_SESSION_SUBJECT) {
-      requestConnectRevoke(gt("Revoke {name}?", { name: connectDeviceName(session, m) }), () =>
-        handleRevokeDesktopClientSession(sessionId),
-      );
-    } else {
-      void handleRevokeDesktopClientSession(sessionId);
-    }
-  };
-  const requestRevokeOtherClients = () => {
-    const revokesConnectDevices =
-      (connectDevices?.length ?? 0) > 0 ||
-      desktopClientSessions.some(
-        (session) => !session.current && session.subject === CLOUD_CONNECT_SESSION_SUBJECT,
-      );
-    if (revokesConnectDevices) {
-      requestConnectRevoke(gt("Revoke all other clients?"), handleRevokeOtherDesktopClients);
-    } else {
-      void handleRevokeOtherDesktopClients();
-    }
-  };
+  const requestRevokeClientSession = (sessionId: ServerClientSessionRecord["sessionId"]) =>
+    void handleRevokeDesktopClientSession(sessionId);
+  const requestRevokeOtherClients = () => void handleRevokeOtherDesktopClients();
   const tailscaleHttpsEndpoint = desktopAdvertisedEndpoints.find(isTailscaleHttpsEndpoint) ?? null;
   const visibleDesktopNetworkAdvertisedEndpoints = isLocalBackendNetworkAccessible
     ? desktopAdvertisedEndpoints.filter((endpoint) => !isTailscaleHttpsEndpoint(endpoint))
@@ -1160,11 +1096,11 @@ function ConnectionsSettingsContent({
       managed={tailscaleHttpsEndpoint?.status === "available" ? undefined : remoteClientsDenial}
     />
   );
-  const newestPairingLink = visibleDesktopPairingLinks.find(
+  const newestPairingLink = desktopPairingLinks.find(
     (pairingLink) => pairingLink.id === newestPairingLinkId,
   );
   const renderPairingClientsList = (
-    pairingLinks: typeof visibleDesktopPairingLinks,
+    pairingLinks: typeof desktopPairingLinks,
     clientSessions: typeof desktopClientSessions,
   ) => (
     <PairingClientsList
@@ -1191,7 +1127,7 @@ function ConnectionsSettingsContent({
           <p className="text-xs text-destructive">{desktopAccessManagementError}</p>
         </div>
       ) : null}
-      {renderPairingClientsList(visibleDesktopPairingLinks, desktopClientSessions)}
+      {renderPairingClientsList(desktopPairingLinks, desktopClientSessions)}
     </>
   );
   const renderNetworkAccessRow = () => (
@@ -1386,21 +1322,6 @@ function ConnectionsSettingsContent({
             ) : canManageLocalBackend ? (
               renderDisabledNetworkAccessRow()
             ) : null}
-            {canReadRelay || canManageRelay ? (
-              <CloudLinkRow
-                environmentId={accessEnvironmentId}
-                canReadRelay={canReadRelay}
-                canManageRelay={canManageRelay}
-                connectDeviceApproval={
-                  accessServerConfig?.settings.requireConnectDeviceApproval === undefined
-                    ? null
-                    : {
-                        required: accessServerConfig.settings.requireConnectDeviceApproval,
-                        canManage: canWriteAccess,
-                      }
-                }
-              />
-            ) : null}
             {accessServerConfig?.environment.capabilities.previewTunnelSetting ? (
               <SettingsRow
                 title={searchableSetting("preview-tunnel").title}
@@ -1446,11 +1367,7 @@ function ConnectionsSettingsContent({
                   ? renderPairingClientsList([newestPairingLink], [])
                   : undefined
               }
-              summary={summarizeAuthorizedClients(
-                desktopClientSessions,
-                visibleDesktopPairingLinks,
-                m,
-              )}
+              summary={summarizeAuthorizedClients(desktopClientSessions, desktopPairingLinks, m)}
               control={
                 canWriteAccess ? (
                   <AuthorizedClientsHeaderAction
@@ -1488,22 +1405,6 @@ function ConnectionsSettingsContent({
               </ScrollArea>
             </FoldedSettingsSection>
           ) : null}
-          {canReadAccess &&
-          connectDevices !== null &&
-          (connectDeviceRequests.length > 0 || connectDevices.length > 0) ? (
-            <ConnectDeviceApprovalSettings
-              environmentId={accessEnvironmentId}
-              requests={connectDeviceRequests}
-              devices={connectDevices}
-              canWrite={canWriteAccess}
-              requestRevoke={requestConnectRevoke}
-            />
-          ) : null}
-          <RevokeConnectDeviceDialog
-            request={pendingConnectRevoke}
-            onClose={() => setPendingConnectRevoke(null)}
-            requireApproval={requireConnectApproval}
-          />
           <AlertDialog
             open={pendingDesktopServerExposureMode !== null && canManageLocalBackend}
             onOpenChange={(open) => {

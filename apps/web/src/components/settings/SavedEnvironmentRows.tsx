@@ -454,21 +454,6 @@ export function SavedBackendListRow({
   );
 }
 
-/** Older servers have no device approval, so callers pass null and the row stays hidden. */
-export interface ConnectDeviceApprovalControl {
-  readonly required: boolean;
-  readonly canManage: boolean;
-}
-
-export function CloudLinkRow(_props: {
-  readonly environmentId: EnvironmentId;
-  readonly canReadRelay: boolean;
-  readonly canManageRelay: boolean;
-  readonly connectDeviceApproval: ConnectDeviceApprovalControl | null;
-}) {
-  return null;
-}
-
 function EmptyRemoteEnvironments() {
   const gt = useGT();
   return (

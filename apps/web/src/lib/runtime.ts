@@ -21,7 +21,9 @@ const layerWebCrypto = Layer.mergeAll(Digest.layerWebCrypto, Signature.layerWebC
 
 const layerDisabledRelayDpopSigner = DpopProof.layerSigner({
   keyStore: "indexed-db",
-  loadOrCreateKey: Effect.fail(new DpopProof.DpopProofError({ message: "T3 Connect is disabled." })),
+  loadOrCreateKey: Effect.fail(
+    new DpopProof.DpopProofError({ message: "T3 Connect is disabled." }),
+  ),
 });
 
 const layerDisabledManagedRelay = ManagedRelay.layer({
@@ -65,7 +67,7 @@ const layerRuntime = Layer.mergeAll(
   layerDisabledManagedRelay.pipe(Layer.provide(Layer.mergeAll(layerHttpClient, layerWebCrypto))),
 );
 
-export const runtime: ManagedRuntime.ManagedRuntime<
+const runtime: ManagedRuntime.ManagedRuntime<
   Layer.Success<RuntimeLayerSource>,
   Layer.Error<RuntimeLayerSource>
 > = ManagedRuntime.make(layerRuntime);
