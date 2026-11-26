@@ -47,7 +47,9 @@ export function resolveChatCanvasLayout({
     ? detailsCard.left - DETAILS_CARD_CLEARANCE
     : container.width - padding;
   const normalWidth = Math.max(0, Math.min(centeredWidth, laneRight - padding));
-  const canvasCenterLeft = (container.width - normalWidth) / 2;
+  // A floating details card claims the canvas's right side, so center the chat in what remains
+  // instead of pushing it against the card and leaving all the slack on the left.
+  const canvasCenterLeft = ((detailsCard ? detailsCard.left : container.width) - normalWidth) / 2;
   const normalLeft = Math.max(padding, Math.min(canvasCenterLeft, laneRight - normalWidth));
   let chat = {
     left: normalLeft,
