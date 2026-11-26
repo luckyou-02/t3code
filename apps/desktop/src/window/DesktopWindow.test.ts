@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 
 import * as Electron from "electron";
+import * as NodePath from "node:path";
 import { vi } from "vite-plus/test";
 
 vi.mock("electron", async (importOriginal) => ({
@@ -1528,7 +1529,7 @@ describe("DesktopWindow", () => {
           assert.isTrue(webPreferences.contextIsolation);
           assert.equal(
             webPreferences.preload,
-            "/repo/apps/desktop/dist-electron/preview-pick-preload.cjs",
+            NodePath.join(environmentInput.dirname, "preview-pick-preload.cjs"),
           );
         }).pipe(Effect.provide(layer));
       }),
