@@ -404,6 +404,8 @@ import { ChatRightPanel } from "./chat/ChatRightPanel";
 import { useDraftEnvironmentRouting } from "./chat/useDraftEnvironmentRouting";
 import { branchMismatchBannerItem, extensionStatusBannerItem } from "./chat/ThreadActivityBanners";
 import { ThreadNow } from "./chat/ThreadNow";
+import { TaskChecklist } from "./chat/TaskChecklist";
+import { latestTaskChecklist } from "./chat/TaskChecklist.logic";
 import { threadRuntimeIsActive, type ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import { useDelayedStatus } from "../hooks/useDelayedStatus";
 import { useTimelineFollow } from "./chat/useTimelineFollow";
@@ -3273,6 +3275,10 @@ export default function ChatView(props: ChatViewProps) {
     workLocallyResendReady,
   ]);
 
+  const taskChecklist =
+    isWorking && activeLatestRun !== null && serverProjection !== null
+      ? latestTaskChecklist(serverProjection.turnItems, activeLatestRun.runId)
+      : null;
   const shownThreadSyncPhase = activeEnvironmentUnavailable ? null : delayedThreadSyncPhase;
   const hasThreadNow =
     attentionNow !== null || workNow !== null || goalNow !== null || shownThreadSyncPhase !== null;
@@ -3301,10 +3307,12 @@ export default function ChatView(props: ChatViewProps) {
   // its lifecycle status, then your queued messages.
   const timelineFooter =
     pendingHandoff === null &&
+    taskChecklist === null &&
     !hasThreadNow &&
     threadStatusLine === null &&
     !hasQueuedTurns ? null : (
       <>
+        {taskChecklist === null ? null : <TaskChecklist checklist={taskChecklist} />}
         {pendingHandoff === null ? null : (
           <div className="chat-content-lane">
             <HandoffRow
