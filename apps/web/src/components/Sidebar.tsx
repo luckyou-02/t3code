@@ -110,6 +110,7 @@ import { appLinkBaseUrl } from "~/lib/appLinkBaseUrl";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
 import { SidebarFolderDrop } from "./sidebar/SidebarFolderDrop";
 import {
+  getProjectOrderKey,
   pickableProjectGroups,
   selectProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
@@ -1099,6 +1100,57 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   // loaded. The stored keys are left alone, so the scope returns with its project.
   // An archived project's scope reads as all projects, matching the menu.
   const scopeGroups = pickableProjectGroups(projectGroups);
+  const projectSortOrder = useClientSettings((settings) => settings.sidebarProjectSortOrder);
+  const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const [projectDrag, setProjectDrag] = useState<{
+    readonly fromKey: string;
+    readonly overKey: string | null;
+  } | null>(null);
+  const projectOrderKeys = (group: SidebarProjectSnapshot) =>
+    group.memberProjects.map(getProjectOrderKey);
+  // Pinned projects always lead the list, so the order is edited as shown and a drop
+  // stays on its own side of that line.
+  const shownProjectGroups = [
+    ...scopeGroups,
+    ...projectGroups.filter((project) => project.archived),
+  ];
+  const draggedProject =
+    projectDrag === null
+      ? null
+      : (shownProjectGroups.find((project) => project.projectKey === projectDrag.fromKey) ?? null);
+  const canDropProjectOn = (group: SidebarProjectSnapshot) =>
+    draggedProject !== null &&
+    draggedProject.projectKey !== group.projectKey &&
+    draggedProject.pinned === group.pinned &&
+    draggedProject.archived === group.archived;
+  const projectReorder =
+    projectSortOrder === "manual"
+      ? {
+          onStart: (group: SidebarProjectSnapshot) =>
+            setProjectDrag({ fromKey: group.projectKey, overKey: null }),
+          onOver: (group: SidebarProjectSnapshot) =>
+            setProjectDrag((drag) =>
+              drag === null || drag.overKey === group.projectKey
+                ? drag
+                : { ...drag, overKey: group.projectKey },
+            ),
+          onDrop: (group: SidebarProjectSnapshot) => {
+            setProjectDrag(null);
+            if (draggedProject === null || !canDropProjectOn(group)) return;
+            reorderProjects(
+              shownProjectGroups.flatMap(projectOrderKeys),
+              projectOrderKeys(draggedProject),
+              projectOrderKeys(group),
+            );
+          },
+          onEnd: () => setProjectDrag(null),
+        }
+      : undefined;
+  const projectDropEdge = (group: SidebarProjectSnapshot): "before" | "after" | null => {
+    if (projectDrag?.overKey !== group.projectKey || !canDropProjectOn(group)) return null;
+    const keys = shownProjectGroups.map((project) => project.projectKey);
+    return keys.indexOf(projectDrag.fromKey) < keys.indexOf(group.projectKey) ? "after" : "before";
+  };
   const archivedProjectKeys = new Set(
     projectGroups.filter((project) => project.archived).map((project) => project.projectKey),
   );
@@ -3652,6 +3704,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 onToggle={toggleProjectFolder}
                                 onNewThread={startThreadInProjectFolder}
                                 onContextMenu={handleProjectFolderContextMenu}
+                                reorder={projectReorder}
+                                dropEdge={projectDropEdge(folder.group)}
                               />,
                             );
                             for (const thread of folder.threads) {

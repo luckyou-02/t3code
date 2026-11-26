@@ -28,6 +28,16 @@ const FOLDER_DOT_LABEL = {
   working: msg(", working", { $context: "project folder status, read after its name" }),
 } as const;
 
+/** Marks a sidebar drag as a project reorder, so file and thread drags pass through. */
+const PROJECT_DRAG_TYPE = "application/x-sidebar-project";
+
+export interface SidebarProjectReorderHandlers {
+  readonly onStart: (group: SidebarProjectSnapshot) => void;
+  readonly onOver: (group: SidebarProjectSnapshot) => void;
+  readonly onDrop: (group: SidebarProjectSnapshot) => void;
+  readonly onEnd: () => void;
+}
+
 /** The folder's sidebar tree row; its thread rows name it as their parent. */
 export function sidebarFolderRowId(projectKey: string) {
   return `folder:${projectKey}`;
@@ -49,10 +59,14 @@ export const SidebarProjectFolderHeader = memo(function SidebarProjectFolderHead
     position: { x: number; y: number },
     source: ContextMenuSource,
   ) => void;
+  /** Set when projects are sorted manually; headers then drag to reorder. */
+  reorder?: SidebarProjectReorderHandlers | undefined;
+  /** Where the dragged project would land relative to this one. */
+  dropEdge?: "before" | "after" | null;
 }) {
   const gt = useGT();
   const m = useMessages();
-  const { group, collapsed, hiddenThreads } = props;
+  const { group, collapsed, hiddenThreads, reorder, dropEdge = null } = props;
   const rowId = sidebarFolderRowId(group.projectKey);
   const localLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
   const dot = collapsed
@@ -72,11 +86,39 @@ export const SidebarProjectFolderHeader = memo(function SidebarProjectFolderHead
     <li
       data-testid="sidebar-project-folder"
       className="group/project-folder relative mt-2 list-none first:mt-0"
+      onDragOver={(event) => {
+        if (!reorder || !event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        reorder.onOver(group);
+      }}
+      onDrop={(event) => {
+        if (!reorder || !event.dataTransfer.types.includes(PROJECT_DRAG_TYPE)) return;
+        event.preventDefault();
+        reorder.onDrop(group);
+      }}
     >
+      {dropEdge ? (
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-primary",
+            dropEdge === "before" ? "-top-1" : "-bottom-px",
+          )}
+        />
+      ) : null}
       <button
         type="button"
         data-sidebar-row={rowId}
         aria-expanded={!collapsed}
+        draggable={reorder !== undefined}
+        onDragStart={(event) => {
+          if (!reorder) return;
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData(PROJECT_DRAG_TYPE, group.projectKey);
+          reorder.onStart(group);
+        }}
+        onDragEnd={() => reorder?.onEnd()}
         onClick={() => props.onToggle(group)}
         onContextMenu={(event) => {
           event.preventDefault();
