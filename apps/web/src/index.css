@@ -607,6 +607,23 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   will-change: var(--visible-animation-will-change, auto);
 }
 
+.task-checklist-spinner {
+  background: conic-gradient(
+    from 0deg,
+    color-mix(in srgb, currentColor 14%, transparent) 0deg,
+    color-mix(in srgb, currentColor 14%, transparent) 60deg,
+    color-mix(in srgb, currentColor 45%, transparent) 200deg,
+    currentColor 345deg,
+    color-mix(in srgb, currentColor 14%, transparent) 360deg
+  );
+  -webkit-mask-image: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 2px),
+    #000 calc(100% - 1.5px)
+  );
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+}
+
 @keyframes live-activity-focus {
   from {
     transform: translateX(0);

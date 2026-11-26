@@ -35,4 +35,8 @@ it("lists every step in order with its status announced", async () => {
   expect(items.map((item) => item.getAttribute("data-task-status"))).toEqual(
     checklist.steps.map((step) => step.status),
   );
+  const runningSpinner = items[1]?.querySelector<HTMLElement>("[data-task-spinner]");
+  expect(runningSpinner).not.toBeNull();
+  expect(runningSpinner?.className).toContain("visible-animate-spin");
+  expect(getComputedStyle(runningSpinner!).backgroundImage).toContain("conic-gradient");
 });

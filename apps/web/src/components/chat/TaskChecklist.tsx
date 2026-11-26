@@ -1,7 +1,8 @@
-import { CircleCheckIcon, CircleDashedIcon, CircleIcon } from "lucide-react";
+import { CircleCheckIcon, CircleDashedIcon } from "lucide-react";
 import { useGT } from "gt-react";
 
 import { cn } from "~/lib/utils";
+import { observeVisibleAnimation } from "~/lib/visibleAnimation";
 import type { TaskChecklistPlan } from "./TaskChecklist.logic";
 
 /** The running turn's todo list, pinned above the composer while the agent works through it. */
@@ -26,11 +27,15 @@ export function TaskChecklist({ checklist }: { readonly checklist: TaskChecklist
               step.status === "running" ? "text-foreground" : "text-muted-foreground",
             )}
           >
-            <span aria-hidden className="flex h-5 shrink-0 items-center">
+            <span aria-hidden className="flex h-5 w-4 shrink-0 items-center justify-center">
               {step.status === "completed" ? (
                 <CircleCheckIcon className="size-4 text-muted-foreground" />
               ) : step.status === "running" ? (
-                <CircleIcon strokeWidth={2.5} className="size-4 text-foreground" />
+                <span
+                  ref={observeVisibleAnimation}
+                  data-task-spinner
+                  className="task-checklist-spinner block size-3.5 rounded-full text-foreground/80 motion-safe:visible-animate-spin"
+                />
               ) : (
                 <CircleDashedIcon className="size-4 text-muted-foreground/70" />
               )}
