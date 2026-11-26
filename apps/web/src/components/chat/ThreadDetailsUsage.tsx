@@ -75,7 +75,7 @@ export function ThreadDetailsUsage({
       title={gt("Usage limits")}
       showHeading={false}
     >
-      <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
+      <div className="flex flex-col gap-0.5 text-xs">
         {resolved?.kind === "pool"
           ? resolved.windows.map((window) => <PoolRow key={window.id} window={window} now={now} />)
           : resolved &&
@@ -137,7 +137,7 @@ export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowS
       title={gt("Context window")}
       showHeading={false}
     >
-      <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
+      <div className="flex flex-col gap-0.5 text-xs">
         <UsageRow
           label={gt("Context", { $context: "context window row label" })}
           fill={used}
@@ -292,7 +292,7 @@ function PoolRow({ window, now }: { readonly window: LimitPoolWindow; readonly n
   );
 }
 
-/** One label, hairline, and value row; the whole row opens the details tooltip. With `opensUsage` it links to the usage page. */
+/** A label and value line over a bar; the whole row opens the details tooltip. With `opensUsage` it links to the usage page. */
 function UsageRow({
   label,
   fill,
@@ -320,7 +320,7 @@ function UsageRow({
   const rowProps = {
     "aria-label": gt("{label}: {value}", { label, value: ariaValue }),
     className: cn(
-      "col-span-3 grid h-6 grid-cols-subgrid items-center rounded-lg px-2.5 outline-none hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-black/[0.035] dark:hover:bg-white/[0.08] dark:data-popup-open:bg-white/[0.08]",
+      "flex flex-col gap-1.5 rounded-lg px-2.5 py-1.5 outline-none hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-black/[0.035] dark:hover:bg-white/[0.08] dark:data-popup-open:bg-white/[0.08]",
       opensUsage
         ? "group cursor-pointer active:bg-black/[0.06] dark:active:bg-white/[0.12]"
         : "cursor-default",
@@ -333,11 +333,27 @@ function UsageRow({
           opensUsage ? <Link to="/usage" {...rowProps} /> : <div tabIndex={0} {...rowProps} />
         }
       >
-        <span className="max-w-28 truncate text-muted-foreground group-hover:text-foreground">
-          {label}
+        <span className="flex min-w-0 items-baseline justify-between gap-3">
+          <span className="min-w-0 truncate text-muted-foreground group-hover:text-foreground">
+            {label}
+          </span>
+          <span
+            className={cn(
+              "shrink-0 font-medium tabular-nums",
+              tone === "error"
+                ? "text-error-foreground"
+                : tone === "warning"
+                  ? "text-warning-foreground"
+                  : fill === null
+                    ? "text-muted-foreground"
+                    : "text-foreground/80",
+            )}
+          >
+            {value}
+          </span>
         </span>
         {fill !== null ? (
-          <span className="relative h-[3px] rounded-full bg-muted-foreground/30 dark:bg-muted-foreground/20">
+          <span className="relative h-1.5 rounded-full bg-foreground/[0.07] dark:bg-white/10">
             {fill > 0 ? (
               <span
                 className={cn(
@@ -347,8 +363,8 @@ function UsageRow({
                     : tone === "warning"
                       ? "bg-warning"
                       : muted
-                        ? "bg-muted-foreground"
-                        : "bg-foreground/80",
+                        ? "bg-foreground/25"
+                        : "bg-foreground/45",
                 )}
                 style={{ width: `max(${fill}%, 6px)` }}
               />
@@ -356,28 +372,12 @@ function UsageRow({
             {tick !== null ? (
               <span
                 aria-hidden
-                className="absolute -top-[3px] h-[9px] w-px -translate-x-1/2 bg-foreground/75"
-                style={{ left: `clamp(0.5px, ${tick}%, calc(100% - 0.5px))` }}
+                className="absolute -inset-y-0.5 w-0.5 -translate-x-1/2 rounded-full bg-foreground/70"
+                style={{ left: `clamp(1px, ${tick}%, calc(100% - 1px))` }}
               />
             ) : null}
           </span>
         ) : null}
-        <span
-          className={cn(
-            // Text-only rows span the bar column so they never widen the shared value column.
-            "text-end font-medium tabular-nums",
-            fill === null && "col-span-2",
-            tone === "error"
-              ? "text-error-foreground"
-              : tone === "warning"
-                ? "text-warning-foreground"
-                : fill === null
-                  ? "text-muted-foreground"
-                  : "text-foreground/80",
-          )}
-        >
-          {value}
-        </span>
       </TooltipTrigger>
       {/* Rows sit 8px inside the card; clear its edge instead of overlapping it. */}
       <TooltipPopup side="left" sideOffset={16}>
