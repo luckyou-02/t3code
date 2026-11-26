@@ -136,3 +136,55 @@ it("opens a shared tooltip in place the first time", async () => {
     .filter((property) => ["top", "left", "right", "bottom", "transform"].includes(property));
   expect(moving).toEqual([]);
 });
+
+it("restores an enclosing shared tooltip when moving off a nested trigger back onto it", async () => {
+  await using screen = await render(
+    <SharedTooltipProvider>
+      <SharedTooltipTrigger
+        label="Thread details"
+        side="right"
+        render={<div className="flex w-60 items-center justify-between p-2" />}
+      >
+        <span>Thread title</span>
+        <SharedTooltipTrigger label="Settle thread" render={<button type="button" />}>
+          Settle
+        </SharedTooltipTrigger>
+      </SharedTooltipTrigger>
+    </SharedTooltipProvider>,
+  );
+
+  await userEvent.hover(screen.getByText("Thread title"));
+  await expect.element(page.getByText("Thread details")).toBeVisible();
+
+  await userEvent.hover(screen.getByRole("button", { name: "Settle" }));
+  await expect.element(page.getByText("Settle thread")).toBeVisible();
+
+  await userEvent.hover(screen.getByText("Thread title"));
+  await expect.element(page.getByText("Thread details")).toBeVisible();
+});
+
+it("closes a nested tooltip when exiting both nested and enclosing triggers directly", async () => {
+  await using screen = await render(
+    <SharedTooltipProvider>
+      <div className="flex flex-col gap-8 p-4">
+        <SharedTooltipTrigger
+          label="Thread details"
+          side="right"
+          render={<div className="flex w-60 items-center justify-between p-2" />}
+        >
+          <span>Thread title</span>
+          <SharedTooltipTrigger label="Settle thread" render={<button type="button" />}>
+            Settle
+          </SharedTooltipTrigger>
+        </SharedTooltipTrigger>
+        <button type="button">Outside</button>
+      </div>
+    </SharedTooltipProvider>,
+  );
+
+  await userEvent.hover(screen.getByRole("button", { name: "Settle" }));
+  await expect.element(page.getByText("Settle thread")).toBeVisible();
+
+  await userEvent.hover(screen.getByRole("button", { name: "Outside" }));
+  await expect.element(page.getByText("Settle thread")).not.toBeInTheDocument();
+});
