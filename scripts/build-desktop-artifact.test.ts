@@ -503,6 +503,14 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("packages with Node inspector flags off", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig("win", "nsis", "0.0.33", false, false, undefined);
+
+      assert.deepEqual(config.electronFuses, { enableNodeCliInspectArguments: false });
+    }),
+  );
+
   // pnpm writes "set this to true or false" placeholders into allowBuilds when a
   // tarball changes. pnpm ignores them, but the release build decode rejects them.
   it.effect("decodes the repo allowBuilds and every file: tarball it names exists", () =>
