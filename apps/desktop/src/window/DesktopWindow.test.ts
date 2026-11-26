@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off -- The preload path assertion must use the host separator the Electron window builds with.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
