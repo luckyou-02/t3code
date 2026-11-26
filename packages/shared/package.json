@@ -411,10 +411,6 @@
       "types": "./src/desktopAppControl.ts",
       "import": "./src/desktopAppControl.ts"
     },
-    "./thirdPartyLicenses": {
-      "types": "./src/thirdPartyLicenses.ts",
-      "import": "./src/thirdPartyLicenses.ts"
-    },
     "./commandOutput": {
       "types": "./src/commandOutput.ts",
       "import": "./src/commandOutput.ts"

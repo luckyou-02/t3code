@@ -35,7 +35,7 @@ export function HostedEmptyState() {
               {localEnvironmentOff ? (
                 <T>Turn it back on, or connect a different computer.</T>
               ) : (
-                <T>Your agents run on your computer. Start T3 Code there first.</T>
+                <T>Your agents run on your computer. Start yl code there first.</T>
               )}
             </EmptyDescription>
           </EmptyHeader>

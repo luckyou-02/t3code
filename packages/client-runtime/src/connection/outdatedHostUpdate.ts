@@ -103,7 +103,7 @@ export const updateOutdatedHost = Effect.fn("clientRuntime.connection.updateOutd
       return yield* new OutdatedHostUpdateError({
         environmentId,
         ...translatableMessage(
-          msg("Update T3 Code on {host} manually; it cannot update itself.", {
+          msg("Update yl code on {host} manually; it cannot update itself.", {
             host: descriptor.label,
           }),
         ),
@@ -228,7 +228,7 @@ export const updateOutdatedHost = Effect.fn("clientRuntime.connection.updateOutd
       return yield* new OutdatedHostUpdateError({
         environmentId,
         ...translatableMessage(
-          msg("{host} did not come back on a compatible T3 Code version.", {
+          msg("{host} did not come back on a compatible yl code version.", {
             host: descriptor.label,
           }),
         ),

@@ -42,7 +42,7 @@ const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, Net
 
 export const makeCli = () =>
   Command.make("t3", { ...sharedServerCommandFlags }).pipe(
-    Command.withDescription("Run T3 Code in this terminal and open it in your browser."),
+    Command.withDescription("Run yl code in this terminal and open it in your browser."),
     Command.withHandler(runDefaultServerCommand),
     Command.withSubcommands([
       Command.make("help").pipe(
