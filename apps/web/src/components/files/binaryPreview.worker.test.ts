@@ -7,6 +7,22 @@ import {
   type BinaryWorkerResult,
 } from "./binaryPreviewProtocol";
 
+async function startWorker() {
+  const worker = new EventTarget();
+  let receive = (_result: BinaryWorkerResult) => {};
+  vi.stubGlobal(
+    "self",
+    Object.assign(worker, { postMessage: (result: BinaryWorkerResult) => receive(result) }),
+  );
+  vi.resetModules();
+  await import("./binaryPreview.worker");
+  return (input: BinaryWorkerRequest) =>
+    new Promise<BinaryWorkerResult>((resolve) => {
+      receive = resolve;
+      worker.dispatchEvent(new MessageEvent("message", { data: input }));
+    });
+}
+
 it.each([ARCHIVE_ENTRY_MAX_BYTES, ARCHIVE_ENTRY_MAX_BYTES + 1])(
   "only copies previewable TAR payloads with a %i-byte entry",
   async (size) => {
@@ -48,20 +64,8 @@ it.each([ARCHIVE_ENTRY_MAX_BYTES, ARCHIVE_ENTRY_MAX_BYTES + 1])(
       offset += 512 + Math.ceil(entry.bytes.length / 512) * 512;
     }
 
-    const worker = new EventTarget();
-    let receive = (_result: BinaryWorkerResult) => {};
-    vi.stubGlobal(
-      "self",
-      Object.assign(worker, { postMessage: (result: BinaryWorkerResult) => receive(result) }),
-    );
     try {
-      vi.resetModules();
-      await import("./binaryPreview.worker");
-      const request = (input: BinaryWorkerRequest) =>
-        new Promise<BinaryWorkerResult>((resolve) => {
-          receive = resolve;
-          worker.dispatchEvent(new MessageEvent("message", { data: input }));
-        });
+      const request = await startWorker();
       using copies = vi.spyOn(Uint8Array.prototype, "slice");
       expect(
         await request({ type: "open", kind: "archive", name: "mixed.tar", bytes: bytes.buffer }),
