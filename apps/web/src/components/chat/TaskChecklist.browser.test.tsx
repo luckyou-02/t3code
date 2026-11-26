@@ -1,30 +1,19 @@
 import "~/index.css";
-import { PlanId, RunId, ThreadId, TurnItemId } from "@t3tools/contracts";
-import * as DateTime from "effect/DateTime";
+import { NodeId, PlanId, RunId, ThreadId } from "@t3tools/contracts";
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
 import { render } from "../../../test/render";
 import { TaskChecklist } from "./TaskChecklist";
-import type { TaskChecklistItem } from "./TaskChecklist.logic";
+import type { TaskChecklistPlan } from "./TaskChecklist.logic";
 
-const checklist: TaskChecklistItem = {
-  id: TurnItemId.make("todo"),
+const checklist: TaskChecklistPlan = {
+  id: PlanId.make("plan"),
   threadId: ThreadId.make("thread"),
   runId: RunId.make("run"),
-  nodeId: null,
-  providerThreadId: null,
-  providerTurnId: null,
-  nativeItemRef: null,
-  parentItemId: null,
-  ordinal: 1,
-  status: "completed",
-  title: null,
-  startedAt: null,
-  completedAt: null,
-  updatedAt: DateTime.makeUnsafe("2026-11-26T00:00:00Z"),
-  type: "todo_list",
-  planId: PlanId.make("plan"),
+  nodeId: NodeId.make("node"),
+  status: "active",
+  kind: "todo_list",
   steps: [
     { id: "1", text: "Read the handoff", status: "completed" },
     { id: "2", text: "Port the theme fix", status: "running" },

@@ -1,17 +1,19 @@
-import type { RunId } from "@t3tools/contracts";
-import type { ThreadStructureTurnItem } from "@t3tools/client-runtime/state/models";
+import type { OrchestrationV2PlanArtifact, RunId } from "@t3tools/contracts";
 
-export type TaskChecklistItem = Extract<ThreadStructureTurnItem, { type: "todo_list" }>;
+export type TaskChecklistPlan = Extract<OrchestrationV2PlanArtifact, { kind: "todo_list" }>;
 
-/** The run's latest todo list: each update the agent writes is a new item that replaces the last. */
+/**
+ * The executing run's todo list. Read from plans, not turn items: history paging can drop the
+ * list's row from the loaded window, but the server always keeps the latest list in plans.
+ */
 export function latestTaskChecklist(
-  turnItems: ReadonlyArray<ThreadStructureTurnItem>,
+  plans: ReadonlyArray<OrchestrationV2PlanArtifact>,
   runId: RunId,
-): TaskChecklistItem | null {
-  for (let index = turnItems.length - 1; index >= 0; index -= 1) {
-    const item = turnItems[index]!;
-    if (item.type === "todo_list" && item.runId === runId) {
-      return item.steps.length > 0 ? item : null;
+): TaskChecklistPlan | null {
+  for (let index = plans.length - 1; index >= 0; index -= 1) {
+    const plan = plans[index]!;
+    if (plan.kind === "todo_list" && plan.runId === runId && plan.status !== "superseded") {
+      return plan.steps.length > 0 ? plan : null;
     }
   }
   return null;

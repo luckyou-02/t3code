@@ -2,10 +2,10 @@ import { CircleCheckIcon, CircleDashedIcon, CircleIcon } from "lucide-react";
 import { useGT } from "gt-react";
 
 import { cn } from "~/lib/utils";
-import type { TaskChecklistItem } from "./TaskChecklist.logic";
+import type { TaskChecklistPlan } from "./TaskChecklist.logic";
 
 /** The running turn's todo list, pinned above the composer while the agent works through it. */
-export function TaskChecklist({ checklist }: { readonly checklist: TaskChecklistItem }) {
+export function TaskChecklist({ checklist }: { readonly checklist: TaskChecklistPlan }) {
   const gt = useGT();
   const done = checklist.steps.filter((step) => step.status === "completed").length;
   return (

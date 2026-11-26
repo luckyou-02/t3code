@@ -3275,9 +3275,11 @@ export default function ChatView(props: ChatViewProps) {
     workLocallyResendReady,
   ]);
 
+  // The executing run, not the latest: a queued follow-up becomes the latest run while this one works.
+  const executingRunId = isWorking ? (activeRuntime?.activeRunId ?? null) : null;
   const taskChecklist =
-    isWorking && activeLatestRun !== null && serverProjection !== null
-      ? latestTaskChecklist(serverProjection.turnItems, activeLatestRun.runId)
+    executingRunId !== null && serverProjection !== null
+      ? latestTaskChecklist(serverProjection.plans, executingRunId)
       : null;
   const shownThreadSyncPhase = activeEnvironmentUnavailable ? null : delayedThreadSyncPhase;
   const hasThreadNow =

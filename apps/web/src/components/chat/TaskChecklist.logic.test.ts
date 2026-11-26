@@ -1,77 +1,73 @@
-import { PlanId, RunId, ThreadId, TurnItemId } from "@t3tools/contracts";
-import type { ThreadStructureTurnItem } from "@t3tools/client-runtime/state/models";
-import * as DateTime from "effect/DateTime";
+import {
+  NodeId,
+  PlanId,
+  RunId,
+  ThreadId,
+  type OrchestrationV2PlanArtifact,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { latestTaskChecklist } from "./TaskChecklist.logic";
 
-const runA = RunId.make("run-a");
-const runB = RunId.make("run-b");
+const executing = RunId.make("run-executing");
+const queued = RunId.make("run-queued");
+
+type Step = { id: string; text: string; status: "pending" | "running" | "completed" };
 
 const todoList = (
   id: string,
   runId: RunId,
-  steps: ReadonlyArray<{ id: string; text: string; status: "pending" | "running" | "completed" }>,
-): ThreadStructureTurnItem => ({
-  id: TurnItemId.make(id),
+  steps: ReadonlyArray<Step>,
+  status: OrchestrationV2PlanArtifact["status"] = "active",
+): OrchestrationV2PlanArtifact => ({
+  id: PlanId.make(id),
   threadId: ThreadId.make("thread"),
   runId,
-  nodeId: null,
-  providerThreadId: null,
-  providerTurnId: null,
-  nativeItemRef: null,
-  parentItemId: null,
-  ordinal: 1,
-  status: "completed",
-  title: null,
-  startedAt: null,
-  completedAt: null,
-  updatedAt: DateTime.makeUnsafe("2026-11-26T00:00:00Z"),
-  type: "todo_list",
-  planId: PlanId.make(`plan-${id}`),
+  nodeId: NodeId.make("node"),
+  status,
+  kind: "todo_list",
   steps,
 });
 
-const commandItem = (runId: RunId): ThreadStructureTurnItem => ({
-  id: TurnItemId.make("command"),
+const proposedPlan = (runId: RunId): OrchestrationV2PlanArtifact => ({
+  id: PlanId.make("proposal"),
   threadId: ThreadId.make("thread"),
   runId,
-  nodeId: null,
-  providerThreadId: null,
-  providerTurnId: null,
-  nativeItemRef: null,
-  parentItemId: null,
-  ordinal: 2,
-  status: "completed",
-  title: null,
-  startedAt: null,
-  completedAt: null,
-  updatedAt: DateTime.makeUnsafe("2026-11-26T00:00:00Z"),
-  type: "command_execution",
-  input: "ls",
-  output: "",
+  nodeId: NodeId.make("node"),
+  status: "active",
+  kind: "proposed_plan",
+  markdown: "# Plan",
 });
 
-describe("latestTaskChecklist", () => {
-  it("returns the run's most recent todo list, past later work", () => {
-    const first = todoList("first", runA, [{ id: "1", text: "Read", status: "running" }]);
-    const second = todoList("second", runA, [{ id: "1", text: "Read", status: "completed" }]);
+const read: Step = { id: "1", text: "Read", status: "running" };
 
-    const result = latestTaskChecklist([first, second, commandItem(runA)], runA);
+describe("latestTaskChecklist", () => {
+  it("returns the executing run's latest list, past other plan kinds", () => {
+    const first = todoList("first", executing, [read], "completed");
+    const second = todoList("second", executing, [{ ...read, status: "completed" }]);
+
+    const result = latestTaskChecklist([first, second, proposedPlan(executing)], executing);
 
     expect(result?.id).toBe(second.id);
   });
 
-  it("ignores todo lists written by another run", () => {
-    const earlier = todoList("earlier", runA, [{ id: "1", text: "Read", status: "pending" }]);
+  it("keeps the executing run's list while a follow-up is queued", () => {
+    const list = todoList("list", executing, [read]);
 
-    expect(latestTaskChecklist([earlier, commandItem(runB)], runB)).toBeNull();
+    expect(latestTaskChecklist([list], executing)?.id).toBe(list.id);
+    expect(latestTaskChecklist([list], queued)).toBeNull();
+  });
+
+  it("hides a list the agent withdrew instead of showing its old steps", () => {
+    const withdrawn = todoList("withdrawn", executing, [read], "superseded");
+
+    expect(latestTaskChecklist([withdrawn], executing)).toBeNull();
   });
 
   it("hides a cleared list instead of falling back to an older one", () => {
-    const filled = todoList("filled", runA, [{ id: "1", text: "Read", status: "pending" }]);
-    const cleared = todoList("cleared", runA, []);
+    const filled = todoList("filled", executing, [read], "completed");
+    const cleared = todoList("cleared", executing, []);
 
-    expect(latestTaskChecklist([filled, cleared], runA)).toBeNull();
+    expect(latestTaskChecklist([filled, cleared], executing)).toBeNull();
   });
 });
