@@ -85,6 +85,7 @@ import { useTallEnoughToFold } from "./useTallEnoughToFold";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
 import {
   MESSAGE_HEADING_LEVEL,
+  MESSAGE_TEXT_CLASS_NAME,
   MessageAuthorHeading,
   TimelineRowTimestamp,
 } from "./TimelineRowParts";
@@ -1272,7 +1273,7 @@ const UserMessageBody = memo(function UserMessageBody(props: {
       cwd={props.markdownCwd}
       threadRef={ctx.threadRef ?? undefined}
       skills={props.skills}
-      className="text-message-foreground user-message-markdown"
+      className={cn("text-message-foreground user-message-markdown", MESSAGE_TEXT_CLASS_NAME)}
       lineBreaks
       parseRawHtml={false}
       extensions={USER_MESSAGE_MARKDOWN}

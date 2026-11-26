@@ -23,7 +23,11 @@ import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../times
 import { readThreadTurnItems } from "../../state/entities";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
-import { MESSAGE_HEADING_LEVEL, MessageAuthorHeading } from "./TimelineRowParts";
+import {
+  MESSAGE_HEADING_LEVEL,
+  MESSAGE_TEXT_CLASS_NAME,
+  MessageAuthorHeading,
+} from "./TimelineRowParts";
 
 export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
@@ -51,6 +55,7 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
           >
             <ChatMarkdown
               text={messageText}
+              className={MESSAGE_TEXT_CLASS_NAME}
               renderInsights
               cwd={ctx.markdownCwd}
               agentDirectories={() =>
@@ -110,6 +115,7 @@ export function SentMessageTimelineRow({
       >
         <ChatMarkdown
           text={row.text}
+          className={MESSAGE_TEXT_CLASS_NAME}
           cwd={ctx.markdownCwd}
           threadRef={ctx.threadRef ?? undefined}
           lineBreaks={shouldPreserveAssistantLineBreaks(row.text)}
