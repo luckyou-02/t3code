@@ -1,6 +1,10 @@
+// @effect-diagnostics nodeBuiltinImport:off - Junctions need Node's symlink type argument.
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Layer from "effect/Layer";
+import * as NodeFSP from "node:fs/promises";
+import { lock } from "proper-lockfile";
+import * as Cause from "effect/Cause";
 import { expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Digest from "effect/crypto/Digest";
@@ -13,6 +17,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -109,7 +114,16 @@ interface HarnessOptions {
   readonly nativeManifest?: (manifest: { version: string; url: string; sha512: string }) => unknown;
   readonly beforeManifest?: Effect.Effect<void>;
   readonly updateChecksEnabled?: Effect.Effect<boolean>;
+  /** Answer Range requests with 206 like Google's storage; otherwise every GET returns the whole body. */
+  readonly ranges?: boolean;
+  readonly rangeBody?: (
+    from: number,
+    end: number,
+  ) => Stream.Stream<Uint8Array, Cause.TimeoutError> | undefined;
+  readonly download?: AntigravityInstallation.AntigravityInstallationOptions["download"];
 }
+
+const testDownload = { segmentBytes: 8, concurrency: 3, retrySchedule: Schedule.forever };
 
 const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
   options: HarnessOptions = {},
@@ -147,6 +161,7 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
   }
   const stagingReleased = yield* Deferred.make<void>();
   const requests: string[] = [];
+  const rangeRequests: string[] = [];
   const validations: Array<{
     executable: AntigravityInstallation.AntigravityExecutable;
     version: string;
@@ -166,6 +181,7 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
   const installation = yield* AntigravityInstallation.makeAntigravityInstallation({
     baseDir,
     ...(options.native ? {} : { releaseAsset: asset }),
+    download: options.download ?? testDownload,
     ...(options.updateChecksEnabled === undefined
       ? {}
       : { updateChecksEnabled: options.updateChecksEnabled }),
@@ -223,6 +239,26 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
               }),
             );
           }
+          const range = /^bytes=(\d+)-(\d+)$/u.exec(request.headers["range"] ?? "");
+          if (options.ranges && range !== null) {
+            rangeRequests.push(range[0]);
+            const from = Number(range[1]);
+            const end = Math.min(Number(range[2]), archive.length - 1);
+            const partial = HttpClientResponse.fromWeb(
+              request,
+              new Response(null, {
+                status: 206,
+                headers: { "content-range": `bytes ${from}-${end}/${archive.length}` },
+              }),
+            );
+            return Effect.succeed(
+              Object.defineProperty(partial, "stream", {
+                value:
+                  options.rangeBody?.(from, end) ??
+                  Stream.make(new Uint8Array(archive.subarray(from, end + 1))),
+              }),
+            );
+          }
           const response = HttpClientResponse.fromWeb(request, new Response(null));
           return Effect.succeed(
             Object.defineProperty(response, "stream", {
@@ -239,7 +275,17 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
       ),
     ),
   );
-  return { installation, fs, path, baseDir, requests, validations, stagingReleased };
+  return {
+    installation,
+    fs,
+    path,
+    baseDir,
+    archive,
+    requests,
+    rangeRequests,
+    validations,
+    stagingReleased,
+  };
 });
 
 const terminalState = (installation: AntigravityInstallation.AntigravityInstallation["Service"]) =>
@@ -622,6 +668,302 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("Antigravity inst
       expect(yield* fs.readDirectory(path.join(installation.managedDirectory, "versions"))).toEqual(
         [previousReleaseId],
       );
+    }),
+  );
+
+  it.effect("downloads Range-capable assets in bounded parallel segments", () =>
+    Effect.gen(function* () {
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const allStarted = yield* Deferred.make<void>();
+      const { installation, fs, path, archive, rangeRequests, stagingReleased } =
+        yield* makeHarness({
+          previous: true,
+          ranges: true,
+          rangeBody: (from, end) =>
+            from === 0 && end === 0
+              ? undefined
+              : Stream.fromEffect(
+                  Effect.gen(function* () {
+                    inFlight += 1;
+                    maxInFlight = Math.max(maxInFlight, inFlight);
+                    if (inFlight === testDownload.concurrency) {
+                      yield* Deferred.succeed(allStarted, undefined);
+                    }
+                    yield* Deferred.await(allStarted);
+                    inFlight -= 1;
+                    return new Uint8Array(completeArchive.subarray(from, end + 1));
+                  }),
+                ),
+        });
+      yield* installation.start;
+      expect(yield* terminalState(installation)).toMatchObject({
+        phase: "succeeded",
+        installedVersion: assetVersion,
+        totalBytes: archive.length,
+      });
+      yield* Deferred.await(stagingReleased);
+      const segments: string[] = [];
+      for (let start = 0; start < archive.length; start += testDownload.segmentBytes) {
+        segments.push(
+          `bytes=${start}-${Math.min(start + testDownload.segmentBytes, archive.length) - 1}`,
+        );
+      }
+      expect(rangeRequests[0]).toBe("bytes=0-0");
+      expect(rangeRequests.slice(1).toSorted()).toEqual(segments.toSorted());
+      expect(maxInFlight).toBe(Math.min(testDownload.concurrency, segments.length));
+      const resolved = yield* installation.resolve();
+      expect(resolved.version).toBe(assetVersion);
+      expect(yield* fs.readFileString(resolved.executablePath)).toBe(serverContents);
+      expect(yield* fs.exists(path.join(installation.managedDirectory, "downloads"))).toBe(false);
+    }),
+  );
+
+  it.effect("resumes a segment from its written bytes after a transient failure", () =>
+    Effect.gen(function* () {
+      const failed = yield* Deferred.make<void>();
+      let failures = 0;
+      const { installation, archive, rangeRequests } = yield* makeHarness({
+        ranges: true,
+        download: { ...testDownload, concurrency: 1 },
+        rangeBody: (from) =>
+          from === 8 && failures++ === 0
+            ? Stream.concat(
+                Stream.make(new Uint8Array(completeArchive.subarray(8, 11))),
+                Stream.fromEffect(
+                  Deferred.succeed(failed, undefined).pipe(
+                    Effect.andThen(Effect.fail(new Cause.TimeoutError())),
+                  ),
+                ),
+              )
+            : undefined,
+      });
+      yield* installation.start;
+      yield* Deferred.await(failed);
+      expect(yield* terminalState(installation)).toMatchObject({ phase: "succeeded" });
+      const segmentEnd = Math.min(16, archive.length) - 1;
+      expect(rangeRequests).toContain(`bytes=8-${segmentEnd}`);
+      expect(rangeRequests).toContain(`bytes=11-${segmentEnd}`);
+    }),
+  );
+
+  it.effect("reuses cached segments when a cancelled install starts again", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-test-" });
+      const entered = yield* Deferred.make<void>();
+      const interrupted = yield* Deferred.make<void>();
+      const sequential = { ...testDownload, concurrency: 1 };
+      const first = yield* makeHarness({
+        baseDir,
+        ranges: true,
+        download: sequential,
+        rangeBody: (from) =>
+          from === 8
+            ? Stream.concat(
+                Stream.make(new Uint8Array(completeArchive.subarray(8, 11))),
+                Stream.fromEffect(
+                  Deferred.succeed(entered, undefined).pipe(
+                    Effect.andThen(Effect.never),
+                    Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
+                  ),
+                ),
+              )
+            : undefined,
+      });
+      const started = yield* first.installation.start;
+      yield* Deferred.await(entered);
+      expect(
+        (yield* first.installation.cancel(started.operationId ?? "missing-operation-id")).phase,
+      ).toBe("cancelled");
+      yield* Deferred.await(interrupted);
+
+      const second = yield* makeHarness({ baseDir, ranges: true, download: sequential });
+      const progress = yield* Effect.forkChild(
+        second.installation.changes.pipe(
+          Stream.takeUntil((state) => ["succeeded", "failed", "cancelled"].includes(state.phase)),
+          Stream.runCollect,
+        ),
+      );
+      yield* second.installation.start;
+      const states = yield* Fiber.join(progress);
+      yield* Deferred.await(second.stagingReleased);
+      expect(states.at(-1)?.phase).toBe("succeeded");
+      expect(
+        states.find((state) => state.phase === "downloading" && state.totalBytes !== null),
+      ).toMatchObject({ downloadedBytes: 11, totalBytes: completeArchive.length });
+      const segmentEnd = Math.min(16, completeArchive.length) - 1;
+      expect(second.rangeRequests.slice(0, 2)).toEqual(["bytes=0-0", `bytes=11-${segmentEnd}`]);
+      expect(second.rangeRequests).not.toContain("bytes=0-7");
+      expect(yield* fs.exists(path.join(second.installation.managedDirectory, "downloads"))).toBe(
+        false,
+      );
+    }),
+  );
+
+  it.effect("falls back to one uncached stream when the server ignores Range", () =>
+    Effect.gen(function* () {
+      const { installation, fs, path, requests, stagingReleased } = yield* makeHarness({
+        previous: true,
+      });
+      yield* installation.start;
+      expect((yield* terminalState(installation)).phase).toBe("succeeded");
+      yield* Deferred.await(stagingReleased);
+      expect(requests).toHaveLength(1);
+      expect((yield* installation.resolve()).version).toBe(assetVersion);
+      expect(yield* fs.exists(path.join(installation.managedDirectory, "downloads"))).toBe(false);
+    }),
+  );
+
+  it.effect("refuses activation and clears cached segments when the merged checksum fails", () =>
+    Effect.gen(function* () {
+      const asset = { ...(yield* releaseAsset()), sha512: "2".repeat(128) };
+      const { installation, fs, path, validations, stagingReleased } = yield* makeHarness({
+        asset,
+        previous: true,
+        ranges: true,
+      });
+      yield* installation.start;
+      expect(yield* terminalState(installation)).toMatchObject({
+        phase: "failed",
+        message:
+          "The Antigravity download failed its size or checksum check. Nothing was installed.",
+      });
+      yield* Deferred.await(stagingReleased);
+      expect(validations).toEqual([]);
+      yield* expectPreviousRelease(installation);
+      expect(yield* fs.exists(path.join(installation.managedDirectory, "downloads"))).toBe(false);
+    }),
+  );
+
+  it.effect("finishes an issued segment write before a cancel closes the file", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const events: string[] = [];
+      const writeEntered = yield* Deferred.make<void>();
+      const releaseWrite = yield* Deferred.make<void>();
+      let blocked = false;
+      const { installation } = yield* makeHarness({
+        ranges: true,
+        download: { ...testDownload, concurrency: 1 },
+        fileSystem: FileSystem.FileSystem.of({
+          ...fs,
+          open: (target, options) =>
+            target.endsWith(".part")
+              ? fs.open(target, options).pipe(
+                  Effect.tap(() =>
+                    Effect.addFinalizer(() => Effect.sync(() => events.push("close"))),
+                  ),
+                  Effect.map((file) =>
+                    Object.assign(Object.create(file), {
+                      writeAll: (chunk: Uint8Array) => {
+                        if (blocked) return file.writeAll(chunk);
+                        blocked = true;
+                        return Deferred.succeed(writeEntered, undefined).pipe(
+                          Effect.andThen(Deferred.await(releaseWrite)),
+                          Effect.andThen(file.writeAll(chunk)),
+                          Effect.andThen(Effect.sync(() => events.push("write-end"))),
+                        );
+                      },
+                    }),
+                  ),
+                )
+              : fs.open(target, options),
+        }),
+      });
+      const started = yield* installation.start;
+      yield* Deferred.await(writeEntered);
+      const cancelling = yield* Effect.forkChild(
+        installation.cancel(started.operationId ?? "missing-operation-id"),
+      );
+      // Let the cancel deliver its interrupt while the write is still pending.
+      yield* Effect.yieldNow;
+      yield* Deferred.succeed(releaseWrite, undefined);
+      expect((yield* Fiber.join(cancelling)).phase).toBe("cancelled");
+      expect(events).toEqual(["write-end", "close"]);
+    }),
+  );
+
+  it.effect("keeps a cache another download holds when pruning other releases", () =>
+    Effect.gen(function* () {
+      const { installation, fs, path, stagingReleased } = yield* makeHarness({ ranges: true });
+      const downloads = path.join(installation.managedDirectory, "downloads");
+      const held = path.join(downloads, "a".repeat(64));
+      const abandoned = path.join(downloads, "b".repeat(64));
+      for (const directory of [held, abandoned]) {
+        yield* fs.makeDirectory(directory, { recursive: true });
+        yield* fs.writeFileString(path.join(directory, "0-7.part"), "partial");
+      }
+      const release = yield* Effect.promise(() => lock(held, { realpath: false }));
+      yield* installation.start;
+      expect((yield* terminalState(installation)).phase).toBe("succeeded");
+      yield* Deferred.await(stagingReleased);
+      expect(yield* fs.readFileString(path.join(held, "0-7.part"))).toBe("partial");
+      expect(yield* fs.exists(abandoned)).toBe(false);
+      expect(yield* installation.remove().pipe(Effect.flip)).toMatchObject({
+        operation: "remove",
+        detail: "Another Antigravity download is in progress. Try again when it finishes.",
+      });
+      expect((yield* installation.resolve()).version).toBe(assetVersion);
+      yield* Effect.promise(() => release());
+      yield* installation.remove();
+      expect(yield* fs.exists(installation.managedDirectory)).toBe(false);
+    }),
+  );
+
+  it.effect("reclaims a crashed download's stale lock when pruning", () =>
+    Effect.gen(function* () {
+      const { installation, fs, path, stagingReleased } = yield* makeHarness({ ranges: true });
+      const downloads = path.join(installation.managedDirectory, "downloads");
+      const orphan = path.join(downloads, `${"c".repeat(64)}.lock`);
+      yield* fs.makeDirectory(orphan, { recursive: true });
+      // The epoch is far past proper-lockfile's stale threshold.
+      yield* fs.utimes(orphan, 0, 0);
+      yield* installation.start;
+      expect((yield* terminalState(installation)).phase).toBe("succeeded");
+      yield* Deferred.await(stagingReleased);
+      expect(yield* fs.exists(downloads)).toBe(false);
+    }),
+  );
+
+  it.effect("never appends to a hard-linked segment outside the cache", () =>
+    Effect.gen(function* () {
+      const { installation, fs, path, stagingReleased } = yield* makeHarness({
+        ranges: true,
+        previous: true,
+      });
+      const outside = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-outside-" });
+      const victim = path.join(outside, "record.json");
+      yield* fs.writeFileString(victim, "abc");
+      const cache = path.join(
+        installation.managedDirectory,
+        "downloads",
+        assetRelease(yield* releaseAsset()).releaseId,
+      );
+      yield* fs.makeDirectory(cache, { recursive: true });
+      yield* fs.link(victim, path.join(cache, "0-7.part"));
+      yield* installation.start;
+      expect((yield* terminalState(installation)).phase).toBe("succeeded");
+      yield* Deferred.await(stagingReleased);
+      expect(yield* fs.readFileString(victim)).toBe("abc");
+      expect((yield* installation.resolve()).version).toBe(assetVersion);
+    }),
+  );
+
+  it.effect("removes a linked downloads directory without touching its target", () =>
+    Effect.gen(function* () {
+      const { installation, fs, path, stagingReleased } = yield* makeHarness({ ranges: true });
+      const outside = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-outside-" });
+      yield* fs.writeFileString(path.join(outside, "keep.txt"), "keep");
+      yield* fs.makeDirectory(installation.managedDirectory, { recursive: true });
+      const downloads = path.join(installation.managedDirectory, "downloads");
+      yield* Effect.promise(() => NodeFSP.symlink(outside, downloads, "junction"));
+      yield* installation.start;
+      expect((yield* terminalState(installation)).phase).toBe("succeeded");
+      yield* Deferred.await(stagingReleased);
+      expect(yield* fs.readFileString(path.join(outside, "keep.txt"))).toBe("keep");
+      expect(yield* fs.exists(downloads)).toBe(false);
     }),
   );
 

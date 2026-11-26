@@ -30,10 +30,9 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http";
+import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as EffectAcpErrors from "effect-acp/errors";
 import { lock } from "proper-lockfile";
@@ -46,6 +45,7 @@ import {
   parseAntigravityCliRelease,
   type AntigravityCliReleaseAsset,
 } from "./antigravityCliRelease.ts";
+import * as AntigravityDownload from "./antigravityDownload.ts";
 import { makeAntigravityAcpRuntime } from "./acp/AntigravityAcpSupport.ts";
 import {
   buildAntigravityAcpSpawnInput,
@@ -89,6 +89,7 @@ export class AntigravityInstallationError extends Schema.TaggedError<Antigravity
   }
 }
 const isInstallationError = Schema.is(AntigravityInstallationError);
+const isDownloadError = Schema.is(AntigravityDownload.AntigravityDownloadError);
 const isAcpProcessExitedError = Schema.is(EffectAcpErrors.AcpProcessExitedError);
 
 export interface AntigravityExecutable {
@@ -147,6 +148,7 @@ export class AntigravityInstallation extends Context.Service<
 export interface AntigravityInstallationOptions {
   readonly baseDir: string;
   readonly releaseAsset?: AntigravityCliReleaseAsset | null;
+  readonly download?: AntigravityDownload.AntigravityDownloadSettings;
   readonly updateChecksEnabled?: Effect.Effect<boolean>;
   readonly validate?: (
     executable: AntigravityExecutable,
@@ -203,6 +205,18 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
   );
   const versionsDirectory = path.join(managedDirectory, "versions");
   const activePath = path.join(managedDirectory, "active.json");
+  const downloadsDirectory = path.join(managedDirectory, "downloads");
+  const downloadSettings = options.download ?? AntigravityDownload.DEFAULT_DOWNLOAD_SETTINGS;
+  const removeDownloadCache = (cacheDirectory: string) =>
+    AntigravityDownload.removeDownloadCache(cacheDirectory).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
+  const pruneStaleDownloads = (releaseId: string) =>
+    AntigravityDownload.pruneDownloadCaches(downloadsDirectory, releaseId).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
   // Windows briefly keeps handles on fresh runtime files after taskkill or an antivirus scan; retry for up to 10 seconds.
   const retryWhileWindowsHoldsHandles = <A, R>(effect: Effect.Effect<A, PlatformError, R>) =>
     effect.pipe(
@@ -858,6 +872,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       yield* ensureRealManagedRoot("install");
       yield* SubscriptionRef.update(state, (current) => ({ ...current, canRemove: true }));
       const destination = path.join(versionsDirectory, releaseId);
+      const cacheDirectory = path.join(downloadsDirectory, releaseId);
       const writeAndActivate = Effect.fn("AntigravityInstallation.writeAndActivate")(function* (
         pointerDirectory: string,
       ) {
@@ -911,6 +926,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         ),
       );
 
+      yield* pruneStaleDownloads(releaseId);
       if ((yield* fs.exists(destination)) || (yield* isSymlink(destination))) {
         const existing = yield* inspectRelease(releaseId);
         if (existing._tag === "valid") {
@@ -926,6 +942,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
             withValidationTimeout,
           );
           yield* activate();
+          yield* removeDownloadCache(cacheDirectory);
           return;
         }
       }
@@ -934,7 +951,8 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         try: () => NodeFSP.statfs(versionsDirectory, { bigint: true }),
         catch: (cause) => installationError("download", "Could not check free disk space.", cause),
       }).pipe(Effect.option);
-      const required = MAX_DOWNLOAD_BYTES + MAX_EXECUTABLE_BYTES + FREE_SPACE_MARGIN;
+      // Cached segments stay on disk beside the merged download until activation succeeds.
+      const required = 2 * MAX_DOWNLOAD_BYTES + MAX_EXECUTABLE_BYTES + FREE_SPACE_MARGIN;
       if (
         Option.isSome(available) &&
         available.value.bavail * available.value.bsize < BigInt(required)
@@ -952,37 +970,33 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       const archivePath = path.join(staging, "download");
       const pairDirectory = path.join(staging, "runtime");
       yield* fs.makeDirectory(pairDirectory);
-      const hash = NodeCrypto.createHash("sha512");
-      let downloadedBytes = 0;
       let lastProgressAt = yield* Clock.currentTimeMillis;
-      yield* Effect.gen(function* () {
-        const response = yield* http
-          .execute(HttpClientRequest.get(asset.url))
-          .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-        yield* response.stream.pipe(
-          Stream.tap((chunk) =>
-            Effect.gen(function* () {
-              downloadedBytes += chunk.byteLength;
-              if (downloadedBytes > MAX_DOWNLOAD_BYTES) {
-                return yield* installationError(
-                  "download",
-                  "The Antigravity download exceeded its allowed size.",
-                );
-              }
-              hash.update(chunk);
-              const now = yield* Clock.currentTimeMillis;
-              if (now - lastProgressAt >= 250) {
-                lastProgressAt = now;
-                yield* SubscriptionRef.update(state, (current) => ({
-                  ...current,
-                  downloadedBytes,
-                }));
-              }
-            }),
-          ),
-          Stream.run(fs.sink(archivePath, { flag: "wx", mode: 0o600 })),
-        );
+      let reportedTotal: number | null = null;
+      const digest = yield* AntigravityDownload.downloadAntigravityAsset({
+        url: asset.url,
+        expectedSha512: asset.sha512,
+        cacheDirectory,
+        destination: archivePath,
+        maxBytes: MAX_DOWNLOAD_BYTES,
+        settings: downloadSettings,
+        onProgress: Effect.fn("AntigravityInstallation.downloadProgress")(function* (
+          downloadedBytes: number,
+          totalBytes: number | null,
+        ) {
+          const now = yield* Clock.currentTimeMillis;
+          if (totalBytes === reportedTotal && now - lastProgressAt < 250) return;
+          lastProgressAt = now;
+          reportedTotal = totalBytes;
+          yield* SubscriptionRef.update(state, (current) => ({
+            ...current,
+            downloadedBytes,
+            totalBytes,
+          }));
+        }),
       }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+        Effect.provideService(HttpClient.HttpClient, http),
         Effect.timeout(DOWNLOAD_TIMEOUT),
         Effect.mapError((cause) =>
           HttpClientError.isHttpClientError(cause) || Cause.isTimeoutError(cause)
@@ -991,15 +1005,25 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
                 "Could not download Antigravity from Google. Check the network connection and any proxy settings, then try again.",
                 cause,
               )
-            : cause,
+            : isDownloadError(cause)
+              ? installationError("download", cause.detail, cause)
+              : cause,
         ),
       );
-      if (hash.digest("hex") !== asset.sha512) {
+      if (digest !== asset.sha512) {
+        yield* removeDownloadCache(cacheDirectory);
         return yield* installationError(
           "download",
           "The Antigravity download failed its size or checksum check. Nothing was installed.",
         );
       }
+      // Throttled progress can trail the last bytes; publish the finished size before extracting.
+      const downloadedBytes = Number((yield* fs.stat(archivePath)).size);
+      yield* SubscriptionRef.update(state, (current) => ({
+        ...current,
+        downloadedBytes,
+        totalBytes: downloadedBytes,
+      }));
 
       yield* report("extracting", "Extracting the verified runtime.");
       const executablePath = path.join(pairDirectory, asset.executable.name);
@@ -1209,6 +1233,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         );
         yield* activate();
       }
+      yield* removeDownloadCache(cacheDirectory);
     },
     Effect.scoped,
     Effect.mapError(
@@ -1393,6 +1418,17 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
             );
           }
           if ((yield* fs.exists(managedDirectory)) || (yield* isSymlink(managedDirectory))) {
+            // Pruning reclaims stale locks, so a lock that survives belongs to a live download.
+            yield* pruneStaleDownloads("");
+            const downloads = yield* fs
+              .readDirectory(downloadsDirectory)
+              .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+            if (downloads.some((entry) => entry.endsWith(".lock"))) {
+              return yield* installationError(
+                "remove",
+                "Another Antigravity download is in progress. Try again when it finishes.",
+              );
+            }
             const homeDirectory = yield* HostProcess.HomeDirectory;
             yield* withManagedLock(
               "remove",
