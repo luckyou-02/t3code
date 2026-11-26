@@ -1041,6 +1041,37 @@ function OpenCommandPaletteDialog(props: {
     );
   };
 
+  // The system dialog only sees this machine's Windows filesystem; WSL, remote and web-only
+  // environments keep the in-palette browser.
+  const canPickWindowsFolderNatively = (environmentId: EnvironmentId): boolean => {
+    if (environmentId !== primaryEnvironmentId || window.desktopBridge === undefined) return false;
+    const environment = environments.find((candidate) => candidate.environmentId === environmentId);
+    return isWindowsPlatform(
+      getEnvironmentBrowsePlatform(environment?.serverConfig?.environment.platform.os),
+    );
+  };
+
+  const addProjectFromNativeFolderPicker = async (environmentId: EnvironmentId): Promise<void> => {
+    const api = readLocalApi();
+    if (!api || isPickingProjectFolder) return;
+    setIsPickingProjectFolder(true);
+    let pickedPath: string | null = null;
+    try {
+      pickedPath = await api.dialogs.pickFolder(undefined);
+    } catch {
+      pickedPath = null;
+    } finally {
+      setIsPickingProjectFolder(false);
+    }
+    if (!pickedPath) return;
+    await handleAddProjectForEnvironment({
+      environmentId,
+      rawCwd: pickedPath,
+      platform: getEnvironmentBrowsePlatform("windows"),
+      currentProjectCwd: null,
+    });
+  };
+
   const startAddProjectClone = (
     environmentId: EnvironmentId,
     source: AddProjectRemoteSource,
@@ -1096,6 +1127,10 @@ function OpenCommandPaletteDialog(props: {
         icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
         keepOpen: true,
         run: async () => {
+          if (canPickWindowsFolderNatively(environmentId)) {
+            await addProjectFromNativeFolderPicker(environmentId);
+            return;
+          }
           await startAddProjectBrowse(environmentId);
         },
       },

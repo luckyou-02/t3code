@@ -11,6 +11,7 @@ import { primaryServerKeybindingsAtom } from "../state/server";
 const scopes = vi.hoisted(() => ({
   denied: undefined as string | undefined,
   sourceControl: undefined as unknown,
+  os: "linux",
 }));
 const setup = (deniedScope?: string, sourceControl?: unknown) => {
   scopes.denied = deniedScope;
@@ -85,7 +86,10 @@ vi.mock("../state/environments", async (original) => ({
         connection: { phase: "connected" },
         entry: { target: { _tag: "PrimaryConnectionTarget" } },
         serverConfig: {
-          environment: { platform: { os: "linux" }, capabilities: { projectCloneTracking: true } },
+          environment: {
+            platform: { os: scopes.os },
+            capabilities: { projectCloneTracking: true },
+          },
           settings: { addProjectBaseDirectory: "/workspace/" },
           newProjectsRoot: "/workspace/",
         },
@@ -243,4 +247,21 @@ it("tells screen readers whether a new project will be published", async () => {
   await expect.element(option).toHaveAttribute("aria-checked", "false");
   await option.click();
   await expect.element(option).toHaveAttribute("aria-checked", "true");
+});
+
+it("opens the system folder picker for a local folder on the Windows desktop backend", async () => {
+  scopes.os = "windows";
+  const pickFolder = vi.fn(async () => null);
+  Object.assign(window, { desktopBridge: { pickFolder } });
+  try {
+    await using _screen = await render(<CommandPalette>{null}</CommandPalette>);
+    await act(() => openCommandPalette({ open: "add-project" }));
+    await page.getByText("Local folder", { exact: true }).click();
+    await vi.waitFor(() => expect(pickFolder).toHaveBeenCalledOnce());
+    // Cancelling the dialog leaves the source list in place instead of the path browser.
+    await expect.element(page.getByText("Local folder", { exact: true })).toBeVisible();
+  } finally {
+    scopes.os = "linux";
+    Reflect.deleteProperty(window, "desktopBridge");
+  }
 });
