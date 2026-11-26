@@ -823,8 +823,11 @@ function useSidebarLookups() {
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
   const projectGroups = useSidebarProjectGroups();
+  // A label only tells rows apart when more than one environment is connected.
   const environmentLabelById = new Map(
-    environments.map((environment) => [environment.environmentId, environment.label] as const),
+    environments.length > 1
+      ? environments.map((environment) => [environment.environmentId, environment.label] as const)
+      : [],
   );
   const projectByKey = new Map(
     projects.map((project) => [`${project.environmentId}:${project.id}`, project] as const),
