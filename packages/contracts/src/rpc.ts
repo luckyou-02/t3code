@@ -188,11 +188,11 @@ import {
   IssueCreateResult,
   IssueDetail,
   IssueLinkedThreadsResult,
+  IssueDetailInput,
   IssueListInput,
   IssueListResult,
   IssueOperationError,
   IssueReactionInput,
-  IssueRef,
   IssueScopeRef,
   IssueSetStateInput,
   IssueTemplateList,
@@ -1330,7 +1330,7 @@ const WsIssuesListRpc = Rpc.make(WS_METHODS.issuesList, {
 });
 
 const WsIssuesDetailRpc = Rpc.make(WS_METHODS.issuesDetail, {
-  payload: IssueRef,
+  payload: IssueDetailInput,
   success: IssueDetail,
   error: IssueRpcError,
 });
