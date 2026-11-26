@@ -1930,7 +1930,8 @@ code {
 :is(.chat-markdown, .composer-tiptap) h4,
 :is(.chat-markdown, .composer-tiptap) h5,
 :is(.chat-markdown, .composer-tiptap) h6 {
-  font-size: 0.875rem;
+  /* Body size, whatever the surface sets it to, so the smallest headings never read below it. */
+  font-size: 1em;
 }
 
 :is(.chat-markdown, .composer-tiptap) h6 {

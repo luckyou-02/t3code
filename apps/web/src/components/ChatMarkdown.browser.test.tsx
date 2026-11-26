@@ -163,6 +163,7 @@ import {
   serializeRenderedMarkdownFragment,
 } from "../markdown-clipboard";
 import { AudioPreview } from "./files/AudioPreview";
+import { MESSAGE_TEXT_CLASS_NAME } from "./chat/TimelineRowParts";
 
 it("keeps compact audio playback loaded across signed URL renewals", async () => {
   const original =
@@ -237,6 +238,23 @@ it("keeps decimal markers in nested user lists while documents keep their counte
   expect(
     [...preview!.querySelectorAll("ol")].map((list) => getComputedStyle(list).listStyleType),
   ).toEqual(["decimal", "lower-alpha", "lower-roman"]);
+});
+
+it("never sets the smallest headings below the body text, at any body size", async () => {
+  setup();
+  const text = "Body text\n\n#### Small heading";
+  await using screen = await render(
+    <div>
+      <ChatMarkdown cwd={undefined} text={text} className={MESSAGE_TEXT_CLASS_NAME} />
+      <ChatMarkdown cwd={undefined} text={text} />
+    </div>,
+  );
+  await expect.element(screen.getByText("Body text").first()).toBeVisible();
+  for (const markdown of screen.container.querySelectorAll(".chat-markdown")) {
+    const body = Number.parseFloat(getComputedStyle(markdown.querySelector("p")!).fontSize);
+    const heading = Number.parseFloat(getComputedStyle(markdown.querySelector("h4")!).fontSize);
+    expect(heading).toBeGreaterThanOrEqual(body);
+  }
 });
 
 it("shows unavailable audio when a workspace embed has no thread", async () => {
