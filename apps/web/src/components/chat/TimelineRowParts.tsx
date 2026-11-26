@@ -7,8 +7,8 @@ import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../times
 
 export const MESSAGE_HEADING_LEVEL = 3;
 
-// Message prose reads at 16px like Claude's desktop app.
-export const MESSAGE_TEXT_CLASS_NAME = "text-base/relaxed";
+// Message prose size lives in index.css (.chat-message-text).
+export const MESSAGE_TEXT_CLASS_NAME = "chat-message-text";
 
 export function MessageAuthorHeading({ children }: { children: string }) {
   return <h3 className="sr-only select-none">{children}</h3>;

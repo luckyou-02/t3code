@@ -1884,6 +1884,13 @@ code {
 
 /* Chat markdown rendering */
 
+/* Chat message prose, sized against Claude's desktop app. Unlayered like the rules below, so it
+   wins over ChatMarkdown's text-sm utility. */
+.chat-markdown.chat-message-text {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
 .chat-markdown > :first-child {
   margin-top: 0;
 }
