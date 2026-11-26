@@ -1167,6 +1167,35 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect("keeps the file-count budget independent of the native-host bytecode cache", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const fixture = yield* makeWindowsPayloadFixture({ copyUnpackedNatives: true });
+        const validate = (fileLimit?: number) =>
+          validateWindowsPackagedPayload({
+            stageDistDir: fixture.stageDistDir,
+            appExecutableName: fixture.appExecutableName,
+            targetArch: "x64",
+            appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
+            ...(fileLimit === undefined ? {} : { fileLimit }),
+          });
+        const crossBuilt = yield* validate();
+        const cacheDir = path.join(fixture.packagedAppDir, "resources", "server-compile-cache");
+        yield* fs.makeDirectory(cacheDir, { recursive: true });
+        yield* fs.writeFileString(path.join(cacheDir, "manifest.json"), "{}");
+        for (let index = 0; index < 5; index += 1) {
+          yield* fs.writeFileString(path.join(cacheDir, `entry-${index}`), "bytecode");
+        }
+
+        const nativeBuilt = yield* validate(crossBuilt.fileCount);
+
+        assert.equal(nativeBuilt.fileCount, crossBuilt.fileCount);
+      }),
+    ).pipe(Effect.provideService(HostProcess.Platform, "linux")),
+  );
+
   it.effect("rejects a sidecar whose extracted server bundle cannot resolve", () =>
     Effect.scoped(
       Effect.gen(function* () {
