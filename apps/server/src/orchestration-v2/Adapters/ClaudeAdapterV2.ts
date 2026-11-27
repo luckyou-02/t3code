@@ -11056,9 +11056,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               return updated;
             });
             const turn = input.activeContext;
+            // Claude starts no wake turn for a task the user stopped, so holding it would never clear.
             const notifiedTask =
               turn !== null &&
               turn === (yield* Ref.get(activeTurn)) &&
+              !userStoppedBackgroundTaskIds.has(message.task_id) &&
               (yield* isWakeEligibleOpaqueBackgroundTaskOnNativeThread(
                 input.nativeThreadId,
                 message.task_id,

@@ -14387,6 +14387,89 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  it.effect("forgets a task stopped mid-turn when Claude reports it before the result", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeWakeHarnessWithOptions({ stopTask: () => Effect.void });
+      const now = yield* DateTime.now;
+      const stopBackgroundTask = harness.runtime.stopBackgroundTask;
+      if (stopBackgroundTask === undefined) {
+        throw new Error("Claude adapter runtime must expose stopBackgroundTask.");
+      }
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now,
+          attemptId: RunAttemptId.make("attempt-claude-stop-mid-turn"),
+          text: "Start the dev server in the background.",
+          attachments: [],
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "system",
+          subtype: "background_tasks_changed",
+          tasks: [{ task_id: WAKE_TASK_ID, task_type: "local_bash", description: WAKE_TASK_ID }],
+          uuid: "00000000-0000-4000-8000-000000000411",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      let listed: ReadonlyArray<OrchestrationV2PendingBackgroundTask> = [];
+      while (listed.length !== 1) {
+        const { providerThread } = yield* Queue.take(harness.providerThreadReceipts);
+        listed = providerThread.pendingBackgroundTasks ?? [];
+      }
+
+      yield* stopBackgroundTask({ providerThread: harness.providerThread, taskId: WAKE_TASK_ID });
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "system",
+          subtype: "task_notification",
+          task_id: WAKE_TASK_ID,
+          status: "stopped",
+          output_file: `/tmp/claude-replay/tasks/${WAKE_TASK_ID}.output`,
+          summary: WAKE_TASK_ID,
+          uuid: "00000000-0000-4000-8000-000000000412",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "system",
+          subtype: "background_tasks_changed",
+          tasks: [],
+          uuid: "00000000-0000-4000-8000-000000000413",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      yield* Queue.offer(harness.sdkMessages, turnOneResult);
+      yield* Queue.take(harness.terminalReceipts);
+
+      const hasPendingBackgroundWork = harness.runtime.hasPendingBackgroundWork;
+      if (hasPendingBackgroundWork === undefined) {
+        throw new Error("Claude adapter runtime must expose hasPendingBackgroundWork.");
+      }
+      assert.isFalse(yield* hasPendingBackgroundWork);
+      assert.deepStrictEqual(
+        providerThreadRosterEvents(harness.events).at(-1)?.providerThread.pendingBackgroundTasks ??
+          [],
+        [],
+      );
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          NodeServices.layer,
+          NodeCrypto.layer,
+        ),
+      ),
+    ),
+  );
+
   it.effect("keeps a running Claude monitor typed after many newer monitors end", () =>
     Effect.gen(function* () {
       const harness = yield* makeWakeHarness;

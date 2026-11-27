@@ -62,7 +62,7 @@ is available. T3 checks Google's CLI release channel while provider update check
 are enabled. Installing or reinstalling also checks that channel. Updates keep
 your profile and existing runtime available if the new release fails validation.
 
-T3 needs Antigravity 1.5 or newer and recommends 1.5.12 or newer. Sessions do not
+T3 needs Antigravity 1.5.1 or newer and recommends 1.5.12 or newer. Sessions do not
 start on an older runtime: update the managed runtime here, or update the executable
 a custom binary path or `PATH` points at. You may need to sign in again after
 updating from a runtime older than 1.5. Threads already running finish with their
