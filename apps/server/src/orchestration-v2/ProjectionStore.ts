@@ -3780,7 +3780,6 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
 
     const turnItemMatch = (threadId: ThreadId, filter: ProjectionRecordFilter | undefined) => sql`
       ${threadColumn(filter?.turnItemNodeIds)} = ${threadId}
-        AND type <> 'link_request'
         ${filter?.turnItemRequestIds === undefined ? sql`` : sql`AND json_extract(payload_json, '$.requestId') IN (SELECT value FROM json_each(${encodeIdList(filter.turnItemRequestIds)}))`}
         ${filter?.turnItemTypes === undefined ? sql`` : sql`AND type IN (SELECT value FROM json_each(${encodeIdList(filter.turnItemTypes)}))`}
         ${filter?.turnItemStatuses === undefined ? sql`` : sql`AND status IN (SELECT value FROM json_each(${encodeIdList(filter.turnItemStatuses)}))`}
@@ -3973,9 +3972,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                   filter?.turnItemStatuses === undefined &&
                   filter?.turnItemRunId === undefined &&
                   filter?.turnItemRunIds === undefined
-                    ? sql`WHERE ${turnItemMatch(threadId, filter)}`
+                    ? sql`WHERE type <> 'link_request' AND ${turnItemMatch(threadId, filter)}`
                     : // Matches on the type/status or run index and fetches only those payloads. Sorted, SQLite would walk the thread by ordinal instead.
-                      sql`WHERE rowid IN (
+                      sql`WHERE type <> 'link_request' AND rowid IN (
                     SELECT rowid FROM orchestration_v2_projection_turn_items
                     WHERE ${turnItemMatch(threadId, filter)}
                   )`

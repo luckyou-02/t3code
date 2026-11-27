@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
@@ -242,6 +243,7 @@ export const make = Effect.gen(function* () {
   const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
   const random = yield* SecureRandom.SecureRandom;
   const catalogPath = path.join(environment.stateDir, "connection-catalog.json");
+  const preserveBackupSemaphore = yield* Semaphore.make(1);
   const encryptionAvailable = safeStorage.isEncryptionAvailable.pipe(
     Effect.mapError(
       (cause) =>
@@ -328,18 +330,27 @@ export const make = Effect.gen(function* () {
         path: backupPath,
         cause,
       });
-    if (!(yield* fileSystem.exists(backupPath).pipe(Effect.mapError(preserveError)))) {
-      const suffix = (yield* random.uuidV4()).replace(/-/g, "");
-      // Back up the document that failed to decrypt, not the file at `catalogPath`: a
-      // concurrent `set` may already have replaced it.
-      yield* writeDocument({ fileSystem, path, catalogPath: backupPath, contents, suffix }).pipe(
-        Effect.mapError(preserveError),
-      );
-      yield* Effect.logWarning(
-        "The desktop connection catalog can no longer be decrypted; starting a new one.",
-        { catalogPath, backupPath, reason: decryptError._tag },
-      );
-    }
+    // Windows rejects concurrent renames onto the same destination path.
+    yield* preserveBackupSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        if (!(yield* fileSystem.exists(backupPath).pipe(Effect.mapError(preserveError)))) {
+          const suffix = (yield* random.uuidV4()).replace(/-/g, "");
+          // Back up the document that failed to decrypt, not the file at `catalogPath`: a
+          // concurrent `set` may already have replaced it.
+          yield* writeDocument({
+            fileSystem,
+            path,
+            catalogPath: backupPath,
+            contents,
+            suffix,
+          }).pipe(Effect.mapError(preserveError));
+          yield* Effect.logWarning(
+            "The desktop connection catalog can no longer be decrypted; starting a new one.",
+            { catalogPath, backupPath, reason: decryptError._tag },
+          );
+        }
+      }),
+    );
   });
 
   const decryptDocument = Effect.fn("desktop.connectionCatalogStore.decryptDocument")(
