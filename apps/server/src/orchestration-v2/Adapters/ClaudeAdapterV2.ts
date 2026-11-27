@@ -14024,14 +14024,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 ? turnInput.providerThread
                 : {
                     ...turnInput.providerThread,
+                    // The owed record replaces the snapshot's copy, which may still claim `stoppable`.
                     pendingBackgroundTasks: [
-                      ...(turnInput.providerThread.pendingBackgroundTasks ?? []),
-                      ...owedWakeTasks.filter(
-                        (task) =>
-                          !(turnInput.providerThread.pendingBackgroundTasks ?? []).some(
-                            (current) => current.taskId === task.taskId,
-                          ),
+                      ...(turnInput.providerThread.pendingBackgroundTasks ?? []).filter(
+                        (current) => !owedWakeTasks.some((task) => task.taskId === current.taskId),
                       ),
+                      ...owedWakeTasks,
                     ],
                   },
             );
