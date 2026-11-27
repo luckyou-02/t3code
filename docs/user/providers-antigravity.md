@@ -14,7 +14,7 @@ you can also sign in from **Settings > Providers** in the mobile app.
 
 Installation continues if you leave settings or reconnect. Setup requires
 permission to operate the environment; update an older server if it does not offer
-Antigravity setup.
+Antigravity setup. Antigravity 1.5.1 or newer is required.
 
 ### Sign in from a remote device
 
