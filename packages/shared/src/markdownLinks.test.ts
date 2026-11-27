@@ -69,6 +69,13 @@ describe("inlineCodeFilePathCandidate", () => {
     ["/bin/echo hello world.txt", null],
     ["~/bin/run tests.sh", null],
     ["/Users/me/notes with spaces.md", "/Users/me/notes with spaces.md"],
+    [
+      "\\\\server\\share\\Project\\Guide Notes.md:10-20",
+      "\\\\server\\share\\Project\\Guide Notes.md:10-20",
+    ],
+    ["\\\\server\\Shared Docs\\Guide.md", "\\\\server\\Shared Docs\\Guide.md"],
+    ["\\\\server name\\share\\Guide Notes.md", null],
+    ["\\\\server\\Guide Notes.md", null],
   ])("distinguishes file paths from code and hostnames in %s", (source, candidate) => {
     expect(inlineCodeFilePathCandidate(source)).toBe(candidate);
   });
