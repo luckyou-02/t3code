@@ -733,6 +733,22 @@ describe("MessagesTimeline messages", () => {
     });
   });
 
+  it("keeps minimap marks apart in a thread with many user messages", async () => {
+    setup();
+    const entries = Array.from({ length: 400 }, (_, index) =>
+      message(`Question ${index}`, {}, `user-${index}`),
+    );
+    await using screen = await renderTimeline(entries);
+    const tops = () =>
+      [...screen.container.querySelectorAll<HTMLElement>("[data-minimap-strip]")]
+        .map((strip) => strip.getBoundingClientRect().top)
+        .sort((a, b) => a - b);
+    await vi.waitFor(() => expect(tops().length).toBeGreaterThan(1));
+    const markTops = tops();
+    const gaps = markTops.slice(1).map((top, index) => top - markTops[index]!);
+    // A mark is 2px tall; closer than 4px apart and neighbours read as one bar.
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(4);
+  });
   it("enables the minimap's next turn button on a thread restored above its bottom", async () => {
     setup();
     const base = baseProps();
