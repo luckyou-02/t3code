@@ -118,11 +118,17 @@ export function composerMathRanges(
     ...mentions.filter((mention) => mention.type === "mention" && mention.source.startsWith("[")),
     ...collectComposerContextReferences(text),
   ];
-  let masked = text;
-  for (const { start, end } of links) {
-    masked = masked.slice(0, start) + "x".repeat(end - start) + masked.slice(end);
+  // One pass over sorted ranges: re-slicing the whole draft per link is quadratic in link count.
+  const pieces: string[] = [];
+  let cursor = 0;
+  for (const { start, end } of links.toSorted((left, right) => left.start - right.start)) {
+    const from = Math.max(start, cursor);
+    if (end <= from) continue;
+    pieces.push(text.slice(cursor, from), "x".repeat(end - from));
+    cursor = end;
   }
-  return findMath(masked).map(({ start, end }) => ({
+  pieces.push(text.slice(cursor));
+  return findMath(pieces.join("")).map(({ start, end }) => ({
     start,
     end,
     source: text.slice(start, end),

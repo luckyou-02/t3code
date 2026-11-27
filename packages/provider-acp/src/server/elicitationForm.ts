@@ -293,15 +293,16 @@ export function parseElicitationForm(
         const typed = answer === undefined ? undefined : typedAnswer(field, answer);
         const companionId = companions.get(id);
         if (typed !== undefined) entries.push([id, typed]);
-        else if (
+        // A declared companion wins over `allowOther`, so the choice field keeps its enum.
+        else if (companionId !== undefined && typeof answer === "string") {
+          entries.push([companionId, answer]);
+        } else if (
           allowOther &&
           field.kind === "choice" &&
           typeof answer === "string" &&
           answer.trim() !== ""
         ) {
           entries.push([id, answer]);
-        } else if (companionId !== undefined && typeof answer === "string") {
-          entries.push([companionId, answer]);
         } else if (required.has(id)) return undefined;
       }
       // Own properties for every field, `__proto__` included; assigning to

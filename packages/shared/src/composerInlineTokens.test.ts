@@ -267,6 +267,10 @@ describe("collectComposerInlineTokens", () => {
     [`${serializeComposerFileLink("app/routes/posts.$postId.tsx")} sets $x_i$`, ["$x_i$"]],
     ["[Fix $x$ parsing](t3-context://v1/thread/thread_1) sets $x_i$", ["$x_i$"]],
     ["Use $ui with [posts.$b.tsx](t3-context://v1/file/ctx_1) ", []],
+    [
+      `[Fix $x](t3-context://v1/thread/t1) ${serializeComposerFileLink("posts.$id.tsx")} $y$`,
+      ["$y$"],
+    ],
   ])("ignores TeX delimiters inside file links and context references: %s", (text, formulas) => {
     expect(composerMathRanges(text, markdownMathRanges).map((formula) => formula.source)).toEqual(
       formulas,

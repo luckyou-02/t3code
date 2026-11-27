@@ -241,6 +241,13 @@ export function useSharedTooltip(content: SharedTooltipContent): SharedTooltipTr
   useEffect(() => {
     if (api && anchorRef.current) api.refresh(anchorRef.current, content);
   }, [api, content]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a removed trigger fires no pointerleave, so it must close the popup anchored to it
+  useEffect(
+    () => () => {
+      if (api && anchorRef.current) api.release(anchorRef.current);
+    },
+    [api],
+  );
   if (!api) return null;
   return {
     // Touch never opens it, as Base UI's mouseOnly trigger; taps also send compatibility mouse events.

@@ -624,6 +624,16 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   mask-image: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
 }
 
+/* Forced colors drop gradient backgrounds, so draw a gapped ring with a system color. */
+@media (forced-colors: active) {
+  .task-checklist-spinner {
+    -webkit-mask-image: none;
+    mask-image: none;
+    border: 1.5px solid CanvasText;
+    border-top-color: transparent;
+  }
+}
+
 @keyframes live-activity-focus {
   from {
     transform: translateX(0);

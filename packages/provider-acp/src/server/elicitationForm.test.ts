@@ -100,6 +100,24 @@ describe("parseElicitationForm", () => {
       q0_other: "Only on Fridays",
     });
 
+    // A declared companion still takes custom text when the client also allows other answers.
+    const withAllowOther = parseElicitationForm(
+      {
+        type: "object",
+        properties: {
+          q0: ask("Use Postgres for the new service?", "Database"),
+          q0_other: { type: "string", title: "Other" },
+        },
+      },
+      "Answer 1 question",
+      { allowOther: true },
+    );
+    assert(withAllowOther !== undefined);
+    assert.deepStrictEqual(withAllowOther.content({ q0: "Only on Fridays" }), {
+      q0_other: "Only on Fridays",
+    });
+    assert.deepStrictEqual(withAllowOther.content({ q0: "Yes" }), { q0: "Yes" });
+
     // A multi-select answer can carry options and free text together, so both fields stay.
     const multi = parseElicitationForm(
       {
