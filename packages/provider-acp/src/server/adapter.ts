@@ -1,4 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off
+import * as NodeCrypto from "node:crypto";
 
 import {
   type ChatAttachment,
@@ -1362,24 +1363,78 @@ function withinRecoveredImageBudget(
   return output;
 }
 
-function withinDirectImageBudget(
-  context: Pick<ActiveAcpTurn, "recoveredImageChars" | "budgetedDirectImageOutputs">,
-  toolCallId: string,
+function toolImageDigest(output: unknown): string | undefined {
+  const images = toolOutputImages(output).filter((image) => image.data !== undefined);
+  if (images.length === 0) return undefined;
+  const hash = NodeCrypto.createHash("sha256");
+  for (const image of images) {
+    hash.update(image.mimeType);
+    hash.update("\0");
+    hash.update(image.data!);
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+function applyDirectImageBudget(
+  context: Pick<ActiveAcpTurn, "recoveredImageChars" | "budgetedToolImageDecisions">,
+  cacheKey: string,
   output: unknown,
 ): unknown {
-  const images = toolOutputImages(output).filter((image) => image.data !== undefined);
-  if (images.length === 0) return output;
-  const signature = images
-    .map(
-      (image) =>
-        `${image.mimeType}:${image.data!.length}:${image.data!.slice(0, 32)}:${image.data!.slice(-32)}`,
-    )
-    .join("|");
-  const cached = context.budgetedDirectImageOutputs.get(toolCallId);
-  if (cached?.signature === signature) return cached.output;
-  const bounded = withinRecoveredImageBudget(context, output);
-  context.budgetedDirectImageOutputs.set(toolCallId, { signature, output: bounded });
-  return bounded;
+  const imageDigest = toolImageDigest(output);
+  if (imageDigest === undefined) return output;
+  const cached = context.budgetedToolImageDecisions.get(cacheKey);
+  if (cached?.imageDigest === imageDigest) {
+    return cached.keepImages ? output : omitToolOutputImageData(output);
+  }
+  const chars = toolOutputImages(output).reduce(
+    (total, image) => total + (image.data?.length ?? 0),
+    0,
+  );
+  const keepImages = context.recoveredImageChars + chars <= MAX_RECOVERED_IMAGE_CHARS_PER_TURN;
+  if (keepImages) {
+    context.recoveredImageChars += chars;
+  }
+  context.budgetedToolImageDecisions.set(cacheKey, { imageDigest, keepImages });
+  return keepImages ? output : omitToolOutputImageData(output);
+}
+
+function applyBudgetToRawOutput(
+  context: Pick<ActiveAcpTurn, "recoveredImageChars" | "budgetedToolImageDecisions">,
+  toolCallId: string,
+  rawOutput: unknown,
+): unknown {
+  if (rawOutput === undefined) return rawOutput;
+  if (toolImageDigest(rawOutput) !== undefined) {
+    return applyDirectImageBudget(context, toolCallId, rawOutput);
+  }
+  const record = unknownRecord(rawOutput);
+  if (record !== undefined && "result" in record && toolImageDigest(record.result) !== undefined) {
+    const boundedResult = applyDirectImageBudget(context, toolCallId, record.result);
+    return boundedResult === record.result ? rawOutput : { ...record, result: boundedResult };
+  }
+  return rawOutput;
+}
+
+function applyBudgetToToolCall(
+  context: Pick<ActiveAcpTurn, "recoveredImageChars" | "budgetedToolImageDecisions">,
+  toolCall: AcpToolCallState,
+): AcpToolCallState {
+  const boundedRawOutput = applyBudgetToRawOutput(
+    context,
+    toolCall.toolCallId,
+    toolCall.data.rawOutput,
+  );
+  if (boundedRawOutput === toolCall.data.rawOutput) {
+    return toolCall;
+  }
+  return {
+    ...toolCall,
+    data: {
+      ...toolCall.data,
+      rawOutput: boundedRawOutput,
+    },
+  };
 }
 
 function acpMcpToolCallOutput(rawOutput: unknown): unknown {
@@ -1859,10 +1914,10 @@ interface ActiveAcpTurn {
   readonly claimedToolResults: Map<string, unknown>;
   /** Image characters kept in tool outputs (recovered or direct) this turn. */
   recoveredImageChars: number;
-  /** Direct provider-returned image outputs already charged to `recoveredImageChars`. */
-  readonly budgetedDirectImageOutputs: Map<
+  /** Direct provider-returned image budget decisions (reuses keep/omit decision only, never stale text). */
+  readonly budgetedToolImageDecisions: Map<
     string,
-    { readonly signature: string; readonly output: unknown }
+    { readonly imageDigest: string; readonly keepImages: boolean }
   >;
   /** `${toolCallId}\0${tool}\0${inputHash}` keys that already drained a recorded MCP result. */
   readonly drainedToolResultKeys: Set<string>;
@@ -5452,7 +5507,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               ? (context.backgroundCommands.get(backgroundCommandTaskId) ?? undefined)
               : undefined;
           // Preserve hydrated output; only a replayed start ACK needs its output restored.
-          const toolCall =
+          const unbudgetedToolCall =
             completion === undefined
               ? normalized
               : {
@@ -5461,6 +5516,8 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                     : setToolOutputText(normalized, completion.output)),
                   status: completion.status,
                 };
+          // Budget direct provider-returned images before retaining the tool call in context.tools.
+          const toolCall = applyBudgetToToolCall(context, unbudgetedToolCall);
           context.tools.set(
             toolCall.toolCallId,
             backgroundCommandTaskId === undefined
@@ -5880,7 +5937,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               }
             }
             if (!outputRecoveredFromCache && output !== undefined) {
-              output = withinDirectImageBudget(context, toolCall.toolCallId, output);
+              output = applyDirectImageBudget(context, toolCall.toolCallId, output);
             }
             turnItem = {
               ...base,
@@ -10607,7 +10664,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               tools: new Map(),
               claimedToolResults: new Map(),
               recoveredImageChars: 0,
-              budgetedDirectImageOutputs: new Map(),
+              budgetedToolImageDecisions: new Map(),
               drainedToolResultKeys: new Set(),
               blockedInputRecoveryKeys: new Set(),
               attemptedInputRecoveryKeys: new Set(),

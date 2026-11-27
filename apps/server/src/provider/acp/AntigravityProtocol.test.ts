@@ -714,6 +714,48 @@ describe("Antigravity tool results", () => {
       _meta: { preview: { type: "image", mimeType: "image/png" } },
     });
   });
+
+  it("strips source.data images from rawInput/_meta and lifts content-only screenshots to rawOutput", () => {
+    const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
+    const sourceImage = {
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: png },
+    };
+    const withSource = normalizeAntigravitySessionUpdate({
+      sessionId: "session-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "shot-source",
+        status: "completed",
+        rawInput: { nested: sourceImage },
+        _meta: { nested: sourceImage },
+        rawOutput: { content: [sourceImage] },
+      },
+    } satisfies EffectAcpSchema.SessionNotification);
+    expect(withSource.update).toMatchObject({
+      rawInput: { nested: { type: "image", source: { type: "base64", media_type: "image/png" } } },
+      _meta: { nested: { type: "image", source: { type: "base64", media_type: "image/png" } } },
+    });
+    expect(toolOutputImages(parseToolUpdate(withSource).toolCall.data.rawOutput)).toEqual([
+      { mimeType: "image/png", data: png },
+    ]);
+
+    const contentOnly = normalizeAntigravitySessionUpdate({
+      sessionId: "session-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "shot-content-only",
+        status: "completed",
+        content: [
+          { type: "content", content: { type: "image", mimeType: "image/png", data: png } },
+        ],
+      },
+    } satisfies EffectAcpSchema.SessionNotification);
+    expect(toolOutputImages(parseToolUpdate(contentOnly).toolCall.data.rawOutput)).toEqual([
+      { mimeType: "image/png", data: png },
+    ]);
+  });
   it.each([
     ["/workspace/result.png", "/workspace/result.png"],
     ["C:\\work\\result.png", "C:\\work\\result.png"],

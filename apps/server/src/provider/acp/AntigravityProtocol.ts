@@ -8,6 +8,7 @@ import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
 import {
   MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH,
   MAX_TOOL_OUTPUT_IMAGES,
+  readToolOutputImage,
 } from "@t3tools/shared/toolOutput";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -321,17 +322,46 @@ function sanitizeToolValue(
   if (!Predicate.isObject(value)) {
     return value;
   }
+  if (value.type === "image") {
+    const parsedImage = readToolOutputImage(value);
+    const keepImage =
+      parsedImage?.data !== undefined && budget.images > 0 && isKeptImageData(parsedImage.data);
+    if (keepImage) {
+      budget.images -= 1;
+    }
+    const imageEntries: Array<readonly [string, unknown]> = [];
+    for (const [key, entry] of Object.entries(value)) {
+      if (budget.nodes <= 0) break;
+      if (key === "data") {
+        if (keepImage && typeof entry === "string") imageEntries.push([key, entry]);
+        continue;
+      }
+      if (key === "blob") continue;
+      if (key === "source" && Predicate.isObject(entry)) {
+        const sourceEntries: Array<readonly [string, unknown]> = [];
+        for (const [sourceKey, sourceEntry] of Object.entries(entry)) {
+          if (budget.nodes <= 0) break;
+          if (sourceKey === "data") {
+            if (keepImage && typeof sourceEntry === "string") {
+              sourceEntries.push([sourceKey, sourceEntry]);
+            }
+            continue;
+          }
+          const sanitizedSource = sanitizeToolValue(sourceEntry, budget, depth + 2, sourceKey);
+          if (sanitizedSource !== undefined) sourceEntries.push([sourceKey, sanitizedSource]);
+        }
+        imageEntries.push([key, Object.fromEntries(sourceEntries)]);
+        continue;
+      }
+      const sanitized = sanitizeToolValue(entry, budget, depth + 1, key);
+      if (sanitized !== undefined) imageEntries.push([key, sanitized]);
+    }
+    return Object.fromEntries(imageEntries);
+  }
   const entries: Array<readonly [string, unknown]> = [];
   for (const [key, entry] of Object.entries(value)) {
     if (budget.nodes <= 0) break;
-    // Screenshot tools return their result as image bytes; keep them outside the text budget.
-    if (value.type === "image" && key === "data" && budget.images > 0 && isKeptImageData(entry)) {
-      budget.images -= 1;
-      entries.push([key, entry]);
-      continue;
-    }
     if (
-      (value.type === "image" && (key === "data" || key === "blob")) ||
       (key === "blob" &&
         typeof value.mimeType === "string" &&
         value.mimeType.startsWith("image/")) ||
@@ -522,6 +552,16 @@ export function normalizeAntigravitySessionUpdate(
     );
     return decoded === undefined ? [] : [decoded];
   });
+  const contentImages =
+    update.rawOutput === undefined
+      ? (content ?? []).flatMap((entry) => {
+          if (entry.type !== "content") return [];
+          const image = readToolOutputImage(entry.content);
+          return image?.data === undefined
+            ? []
+            : [{ type: "image", mimeType: image.mimeType, data: image.data }];
+        })
+      : [];
   const meta = sanitizeAntigravityToolPayload(update._meta);
   return {
     ...notification,
@@ -533,7 +573,9 @@ export function normalizeAntigravitySessionUpdate(
         : {}),
       ...(update.rawOutput !== undefined
         ? { rawOutput: sanitizeAntigravityToolPayload(update.rawOutput, { keepImages: true }) }
-        : {}),
+        : contentImages.length > 0
+          ? { rawOutput: { content: contentImages } }
+          : {}),
       ...(update.content !== undefined ? { content: content ?? [] } : {}),
       ...(update._meta !== undefined ? { _meta: isJsonRecord(meta) ? meta : null } : {}),
     },

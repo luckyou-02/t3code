@@ -172,6 +172,67 @@ describe("McpProviderSessions tool results", () => {
     }).pipe(Effect.provide(McpProviderSessions.layer)),
   );
 
+  it.effect(
+    "poisons exact keys of collaterally evicted html_preview entries across count and byte limits",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* McpProviderSessions.McpProviderSessions;
+        const countThread = ThreadId.make("thread-html-collateral-count");
+        const htmlA = { html: "<p>A</p>", width: 728, appearance: "dark" };
+        const htmlB = { html: "<p>B</p>", width: 728, appearance: "dark" };
+        yield* sessions.recordToolResult(countThread, "html_preview", htmlA, { id: "a1" });
+        yield* sessions.recordToolResult(countThread, "html_preview", htmlB, { id: "b1" });
+        for (let i = 0; i < 64; i++) {
+          yield* sessions.recordToolResult(
+            countThread,
+            "send_to_user",
+            { message: `m-${i}` },
+            { ok: true },
+          );
+        }
+        yield* sessions.recordToolResult(countThread, "html_preview", htmlB, { id: "b2" });
+        assert.isUndefined(yield* sessions.takeToolResult(countThread, "html_preview", htmlB));
+        assert.deepEqual(
+          yield* sessions.takeToolResult(countThread, "html_preview", htmlB, { id: "b2" }),
+          { id: "b2" },
+        );
+
+        const byteThread = ThreadId.make("thread-html-collateral-bytes");
+        const bigShot = (fill: string) => ({
+          content: [{ type: "image", mimeType: "image/png", data: fill.repeat(12 * 1024 * 1024) }],
+        });
+        yield* sessions.recordToolResult(byteThread, "html_preview", htmlA, bigShot("A"));
+        yield* sessions.recordToolResult(byteThread, "html_preview", htmlB, bigShot("B"));
+        yield* sessions.recordToolResult(byteThread, "device_screenshot", { id: 1 }, bigShot("C"));
+        yield* sessions.recordToolResult(byteThread, "html_preview", htmlB, { id: "b3" });
+        assert.isUndefined(yield* sessions.takeToolResult(byteThread, "html_preview", htmlB));
+      }).pipe(Effect.provide(McpProviderSessions.layer)),
+  );
+
+  it.effect(
+    "bounds per-turn eviction tracking and disables input-only recovery once saturated",
+    () =>
+      Effect.gen(function* () {
+        const sessions = yield* McpProviderSessions.McpProviderSessions;
+        const saturatedThread = ThreadId.make("thread-eviction-cap");
+        for (let i = 0; i < 340; i++) {
+          yield* sessions.recordToolResult(saturatedThread, "send_to_user", { i }, { i });
+        }
+        const fresh = { i: 999 };
+        yield* sessions.recordToolResult(saturatedThread, "send_to_user", fresh, { fresh: true });
+        assert.isUndefined(yield* sessions.takeToolResult(saturatedThread, "send_to_user", fresh));
+        assert.deepEqual(
+          yield* sessions.takeToolResult(saturatedThread, "send_to_user", fresh, { fresh: true }),
+          { fresh: true },
+        );
+        yield* sessions.clearToolResults(saturatedThread);
+        yield* sessions.recordToolResult(saturatedThread, "send_to_user", fresh, { fresh: true });
+        assert.deepEqual(yield* sessions.takeToolResult(saturatedThread, "send_to_user", fresh), {
+          fresh: true,
+        });
+      }).pipe(Effect.provide(McpProviderSessions.layer)),
+  );
+
   it.effect("drops stale-session writes and clears unconsumed results on clearToolResults", () =>
     Effect.gen(function* () {
       const sessions = yield* McpProviderSessions.McpProviderSessions;

@@ -1326,10 +1326,34 @@ describe("AntigravityAdapterV2 html_render pages", () => {
                     );
                     yield* updateTool("snapshot", "completed");
 
-                    // Direct provider-returned screenshots share the same per-turn byte budget.
+                    // Content-only screenshots (no rawOutput, no MCP cache) still reach turn_item.updated.
+                    yield* startTool("content-only-shot", "preview_snapshot", { tabId: "content" });
+                    yield* send({
+                      sessionUpdate: "tool_call_update",
+                      toolCallId: "content-only-shot",
+                      status: "completed",
+                      content: [
+                        {
+                          type: "content",
+                          content: { type: "image", mimeType: "image/png", data: "BBBB" },
+                        },
+                      ],
+                    });
+
+                    // Direct provider-returned screenshots share the same per-turn byte budget,
+                    // and a follow-up update with the same image must keep its updated text.
                     yield* startTool("direct-shot", "preview_snapshot", { tabId: "direct" });
+                    yield* updateTool("direct-shot", "in_progress", {
+                      content: [
+                        { type: "image", mimeType: "image/png", data: directShot },
+                        { type: "text", text: "before" },
+                      ],
+                    });
                     yield* updateTool("direct-shot", "completed", {
-                      content: [{ type: "image", mimeType: "image/png", data: directShot }],
+                      content: [
+                        { type: "image", mimeType: "image/png", data: directShot },
+                        { type: "text", text: "after" },
+                      ],
                     });
 
                     // Recovered screenshots stay with the turn, so their bytes are bounded.
@@ -1461,6 +1485,17 @@ describe("AntigravityAdapterV2 html_render pages", () => {
           { mimeType: "image/png", data: "AAAA" },
         ]);
         assert.isTrue(yield* mcpSessions.areToolResultImagesRecovered(instanceId));
+        assert.deepEqual(toolOutputImages(tool("content-only-shot")?.output), [
+          { mimeType: "image/png", data: "BBBB" },
+        ]);
+        assert.deepEqual(
+          (
+            tool("direct-shot")?.output as {
+              content?: ReadonlyArray<{ type?: string; text?: string }>;
+            }
+          )?.content?.[1],
+          { type: "text", text: "after" },
+        );
         assert.deepEqual(
           ["direct-shot", "large-tab-1", "large-tab-2", "large-tab-3"].map((id) =>
             toolOutputImages(tool(id)?.output).map((image) => image.data?.length),

@@ -17,6 +17,8 @@ const MAX_KEPT_HTML_RENDERS = 64;
 const MAX_KEPT_TOOL_RESULTS = 64;
 // Screenshots make kept results large; a thread keeps at most this much until its turn ends.
 const MAX_KEPT_TOOL_RESULT_BYTES = 32 * 1024 * 1024;
+// Once a turn evicts more distinct inputs than this, disable input-only recovery for the turn.
+const MAX_EVICTED_INPUT_KEYS = 256;
 
 // Antigravity truncates long HTML arguments to a marked tail of at most 8,000 characters.
 const BOUNDED_TEXT_MARKER = "[Earlier output truncated]\n\n";
@@ -49,7 +51,7 @@ interface KeptToolResult {
 interface ToolResultState {
   readonly entries: ReadonlyMap<ThreadId, ReadonlyArray<KeptToolResult>>;
   readonly epochs: ReadonlyMap<ThreadId, number>;
-  readonly evictedInputKeys: ReadonlyMap<ThreadId, ReadonlySet<string>>;
+  readonly evictedInputKeys: ReadonlyMap<ThreadId, ReadonlySet<string> | "all">;
 }
 
 const toolInputKey = (toolName: string, inputHash: string) => `${toolName}\0${inputHash}`;
@@ -242,37 +244,41 @@ const withinToolResultLimits = (
   readonly evictedKeys: ReadonlyArray<string>;
 } => {
   const evicted = new Set<string>();
+  const recordEvicted = (entry: KeptToolResult) => {
+    evicted.add(toolInputKey(entry.toolName, entry.inputHash));
+    if (entry.htmlTail !== undefined) {
+      evicted.add(htmlPreviewNonHtmlKey(entry.htmlTail.nonHtmlInputHash));
+    }
+  };
   let rest = kept;
   if (rest.length > MAX_KEPT_TOOL_RESULTS) {
     const overflow = rest.slice(0, rest.length - MAX_KEPT_TOOL_RESULTS);
-    for (const entry of overflow) {
-      evicted.add(toolInputKey(entry.toolName, entry.inputHash));
-      if (entry.htmlTail !== undefined) {
-        evicted.add(htmlPreviewNonHtmlKey(entry.htmlTail.nonHtmlInputHash));
+    for (const entry of overflow) recordEvicted(entry);
+    const keptAfterCount: KeptToolResult[] = [];
+    for (const entry of rest.slice(-MAX_KEPT_TOOL_RESULTS)) {
+      const droppedBySibling =
+        evicted.has(toolInputKey(entry.toolName, entry.inputHash)) ||
+        (entry.htmlTail !== undefined &&
+          evicted.has(htmlPreviewNonHtmlKey(entry.htmlTail.nonHtmlInputHash)));
+      if (droppedBySibling) {
+        recordEvicted(entry);
+      } else {
+        keptAfterCount.push(entry);
       }
     }
-    rest = rest
-      .slice(-MAX_KEPT_TOOL_RESULTS)
-      .filter(
-        (entry) =>
-          !evicted.has(toolInputKey(entry.toolName, entry.inputHash)) &&
-          (entry.htmlTail === undefined ||
-            !evicted.has(htmlPreviewNonHtmlKey(entry.htmlTail.nonHtmlInputHash))),
-      );
+    rest = keptAfterCount;
   }
   let bytes = rest.reduce((total, entry) => total + entry.outputJson.length, 0);
   while (bytes > MAX_KEPT_TOOL_RESULT_BYTES && rest.length > 0) {
     const oldest = rest[0]!;
-    evicted.add(toolInputKey(oldest.toolName, oldest.inputHash));
-    if (oldest.htmlTail !== undefined) {
-      evicted.add(htmlPreviewNonHtmlKey(oldest.htmlTail.nonHtmlInputHash));
-    }
+    recordEvicted(oldest);
     const dropped = rest.filter(
       (entry) =>
         (entry.toolName === oldest.toolName && entry.inputHash === oldest.inputHash) ||
         (oldest.htmlTail !== undefined &&
           entry.htmlTail?.nonHtmlInputHash === oldest.htmlTail.nonHtmlInputHash),
     );
+    for (const entry of dropped) recordEvicted(entry);
     rest = rest.filter((entry) => !dropped.includes(entry));
     bytes -= dropped.reduce((total, entry) => total + entry.outputJson.length, 0);
   }
@@ -429,10 +435,20 @@ const make = Effect.gen(function* () {
           if (bounded.evictedKeys.length === 0) {
             return { ...state, entries };
           }
+          const currentEvicted = state.evictedInputKeys.get(threadId);
+          if (currentEvicted === "all") {
+            return { ...state, entries };
+          }
           const evictedInputKeys = new Map(state.evictedInputKeys);
-          const nextEvicted = new Set(evictedInputKeys.get(threadId) ?? []);
-          for (const key of bounded.evictedKeys) nextEvicted.add(key);
-          evictedInputKeys.set(threadId, nextEvicted);
+          const nextEvicted = new Set(currentEvicted ?? []);
+          for (const key of bounded.evictedKeys) {
+            nextEvicted.add(key);
+            if (nextEvicted.size > MAX_EVICTED_INPUT_KEYS) break;
+          }
+          evictedInputKeys.set(
+            threadId,
+            nextEvicted.size > MAX_EVICTED_INPUT_KEYS ? "all" : nextEvicted,
+          );
           return { ...state, entries, evictedInputKeys };
         });
       },
@@ -441,11 +457,11 @@ const make = Effect.gen(function* () {
       function (threadId, toolName, input, reported) {
         const canonicalTool = resolveT3McpToolId(toolName) ?? toolName;
         return Ref.modify(toolResultState, (state) => {
+          const threadEvicted = state.evictedInputKeys.get(threadId);
           if (
             reported === undefined &&
-            state.evictedInputKeys
-              .get(threadId)
-              ?.has(toolInputKey(canonicalTool, hashToolInput(input)))
+            (threadEvicted === "all" ||
+              threadEvicted?.has(toolInputKey(canonicalTool, hashToolInput(input))))
           ) {
             return [undefined, state];
           }
@@ -455,7 +471,7 @@ const make = Effect.gen(function* () {
             canonicalTool,
             input,
             reported,
-            state.evictedInputKeys.get(threadId),
+            threadEvicted === "all" ? undefined : threadEvicted,
           );
           if (index === -1) {
             return [undefined, state];
