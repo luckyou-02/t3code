@@ -21,6 +21,7 @@ type TextPart =
   | typeof CELL_END
   | typeof LINE_START
   | typeof THEMATIC_BREAK
+  | { columnGap: number }
   | { imageDescription: string }
   | { fallback: string };
 
@@ -318,6 +319,12 @@ function* xstringText(node: XmlNode): Generator<string, void> {
         literal ? `_${literal}` : String.fromCharCode(Number.parseInt(hex!, 16)),
     );
 }
+
+function hasXstringText(node: XmlNode): boolean {
+  for (const value of xstringText(node)) if (value.trim()) return true;
+  return false;
+}
+
 function* paragraphs(node: XmlNode): Generator<TextPart, void> {
   if (HIDDEN.has(node.name)) return;
   if (node.imageDescription !== undefined) {
@@ -517,7 +524,7 @@ function* table(node: XmlNode): Generator<TextPart, void> {
         for (let i = 0; i < count; i++) {
           column += span;
           if (column > 512) throw new Truncation("Column limit");
-          if (gap) yield "\t".repeat(gap);
+          if (gap) yield { columnGap: gap };
           gap = span;
           // LibreOffice hides the contents a merge covers; the cell still holds its column.
           if (covered(cell)) continue;
@@ -984,7 +991,7 @@ async function* document(path: string, extension: string): AsyncGenerator<TextPa
       const formats = cellFormats ? children(cellFormats) : [];
       const sharedPath = workbookPartPath("sharedStrings");
       const strings = has(sharedPath) ? [...all(read(sharedPath), "si")] : [];
-      const populatedStrings = strings.map(hasCellText);
+      const populatedStrings = strings.map(hasXstringText);
       for (const sheet of all(workbook, "sheet")) {
         yield `\n## Sheet: ${sheet.attrs.name}\n`;
         const target = rels.get(sheet.attrs["r:id"] ?? sheet.attrs.id)?.Target;
@@ -999,7 +1006,7 @@ async function* document(path: string, extension: string): AsyncGenerator<TextPa
             const raw = value?.children.find((child) => typeof child === "string")?.trim();
             return !!raw && !!populatedStrings[Number(raw)];
           }
-          if (cell.attrs.t === "inlineStr") return hasCellText(cell);
+          if (cell.attrs.t === "inlineStr") return hasXstringText(cell);
           if (value && hasCellText(value)) return true;
           for (const formula of all(cell, "f")) if (hasCellText(formula)) return true;
           return false;
@@ -1180,8 +1187,12 @@ export async function extractDocumentText(path: string, extension: string): Prom
       }
       let raw: string;
       let isImageDescription = false;
+      let isColumnGap = false;
       if (typeof part === "string") raw = part;
-      else if ("imageDescription" in part) {
+      else if ("columnGap" in part) {
+        raw = "\t".repeat(part.columnGap);
+        isColumnGap = true;
+      } else if ("imageDescription" in part) {
         raw = part.imageDescription;
         isImageDescription = true;
       } else {
@@ -1224,6 +1235,8 @@ export async function extractDocumentText(path: string, extension: string): Prom
           value = "";
         }
       } else {
+        // Trim leading text whitespace here so leading table column gaps survive trimEnd().
+        if (!result && !isColumnGap) value = value.trimStart();
         midLine = endsMidLine(value) ?? midLine;
       }
       result += value;
@@ -1242,7 +1255,7 @@ export async function extractDocumentText(path: string, extension: string): Prom
     if (!(error instanceof Truncation)) throw error;
     truncated = true;
   }
-  result = result.replaceAll(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
+  result = result.replaceAll(/\n(?:[ \t]*\n){2,}/g, "\n\n").trimEnd();
   if (!result && !truncated) throw new Error("No text extracted");
   return truncated ? result.replace(/[\uD800-\uDBFF]$/, "").trimEnd() + TRUNCATED : result;
 }

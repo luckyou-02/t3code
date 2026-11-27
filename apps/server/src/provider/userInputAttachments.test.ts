@@ -1215,6 +1215,19 @@ describe("question answer paths", () => {
           ext: "docx",
           bounded: true,
           parts: {
+            "word/document.xml":
+              '<w:document xmlns:w="urn:w"><w:body>\n\t<w:tbl>' +
+              "<w:tr><w:tc><w:p><w:r><w:t/></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>USD</w:t></w:r></w:p></w:tc></w:tr>" +
+              "<w:tr><w:tc><w:p><w:r><w:t>Revenue</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>900</w:t></w:r></w:p></w:tc></w:tr>" +
+              "</w:tbl>\n</w:body></w:document>",
+          },
+          expected: [],
+          exact: "\tUSD\nRevenue\t900",
+        },
+        {
+          ext: "docx",
+          bounded: true,
+          parts: {
             "word/document.xml": [
               '<w:document xmlns:w="urn:w" xmlns:mc="urn:mc"><w:body>',
               '<w:p><w:r><w:t>First</w:t><w:cr/><w:t>Second</w:t><w:br/><w:t>Third</w:t><w:noBreakHyphen/><w:t>party</w:t><mc:AlternateContent><mc:Choice Requires="w"><w:noBreakHyphen/></mc:Choice><mc:Fallback><w:t>‑</w:t></mc:Fallback></mc:AlternateContent><w:t>End</w:t></w:r></w:p>',
@@ -1384,13 +1397,13 @@ describe("question answer paths", () => {
             "xl/_rels/workbook.xml.rels":
               '<Relationships><Relationship Id="a" Target="worksheets/a.xml"/></Relationships>',
             "xl/sharedStrings.xml":
-              "<sst><si><t>first_x000D_\nsecond</t></si><si><t>_x005F_x0041_</t></si><si><t>_x005F_x005F_x0041_</t></si><si><r><t>Bold_x000D_</t></r><r><t>_x005F_x000D_</t></r></si><si><t>&amp;_xnothex_ cap_X0041_ _x000d_ tail</t></si></sst>",
-            "xl/worksheets/a.xml":
-              '<worksheet><row><c t="s"><v>0</v></c><c t="s"><v>1</v></c><c t="s"><v>2</v></c><c t="s"><v>3</v></c><c t="s"><v>4</v></c></row><row><c t="inlineStr"><is><t>_x005F_x005F_</t></is></c><c t="inlineStr"><is><t>first_x000D_second</t></is></c><c t="str"><f>A1</f><v>Total_x000D_due</v></c></row></worksheet>',
+              "<sst><si><t>first_x000D_\nsecond</t></si><si><t>_x005F_x0041_</t></si><si><t>_x005F_x005F_x0041_</t></si><si><r><t>Bold_x000D_</t></r><r><t>_x005F_x000D_</t></r></si><si><t>&amp;_xnothex_ cap_X0041_ _x000d_ tail</t></si><si><t>_x000D_</t></si><si><t>_x005F_x000D_</t></si></sst>",
+            "xl/worksheets/a.xml": `<worksheet><sheetData>${'<row><c t="s"><v>5</v></c><c t="inlineStr"><is><t>_x000D_</t></is></c></row>'.repeat(10_001)}<row><c t="s"><v>0</v></c><c t="s"><v>1</v></c><c t="s"><v>2</v></c><c t="s"><v>3</v></c><c t="s"><v>4</v></c></row><row><c t="inlineStr"><is><t>_x005F_x005F_</t></is></c><c t="inlineStr"><is><t>first_x000D_second</t></is></c><c t="str"><f>A1</f><v>Total_x000D_due</v></c></row><row><c t="s"><v>6</v></c><c t="inlineStr"><is><t>_x005F_x000D_</t></is></c></row></sheetData></worksheet>`,
           },
           expected: [
-            "## Sheet: Escapes\nfirst second\t_x0041_\t_x005F_x0041_\tBold _x000D_\t&_xnothex_ cap_X0041_ tail\n_x005F_\tfirst second\tTotal due",
+            "## Sheet: Escapes\nfirst second\t_x0041_\t_x005F_x0041_\tBold _x000D_\t&_xnothex_ cap_X0041_ tail\n_x005F_\tfirst second\tTotal due\n_x000D_\t_x000D_",
           ],
+          absent: ["[Extracted text truncated"],
         },
         {
           ext: "xlsx",
@@ -1841,6 +1854,7 @@ describe("question answer paths", () => {
           expect(extracted.split(item.occurrences.text).length - 1).toBe(item.occurrences.count);
         if ("absent" in item)
           for (const absent of item.absent) expect(extracted).not.toContain(absent);
+        if ("exact" in item) expect(extracted).toBe(item.exact);
         if (("bounded" in item && item.bounded) || item.ext === "epub") {
           expect(extracted.length).toBeLessThan(1_000_100);
           expect(extracted.match(/\[Extracted text truncated/g)?.length ?? 0).toBeLessThanOrEqual(
