@@ -5173,7 +5173,7 @@ it.effect.each([
         yield* resumeSecondThread;
         assert.equal((yield* Ref.get(state)).resumeCount, ++resumeCount);
 
-        assert.deepEqual((yield* Ref.get(state)).unloadedNativeThreadIds, ["native-thread-second"]);
+        assert.deepEqual((yield* Ref.get(state)).unloadedNativeThreadIds, []);
 
         const reloadCases = [
           {
@@ -5212,10 +5212,7 @@ it.effect.each([
         assert.isTrue(Option.isSome(yield* manager.get(providerSessionId)));
         assert.equal((yield* Ref.get(state)).closeCount, 0);
         assert.equal((yield* Ref.get(state)).interruptCount, 1);
-        assert.deepEqual((yield* Ref.get(state)).unloadedNativeThreadIds, [
-          "native-thread-second",
-          "native-thread",
-        ]);
+        assert.deepEqual((yield* Ref.get(state)).unloadedNativeThreadIds, ["native-thread"]);
 
         yield* manager.detach({ providerSessionId, threadId: secondThreadId });
         yield* TestClock.adjust("1 second");

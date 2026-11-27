@@ -3788,20 +3788,38 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
         ${filter?.turnItemRunIds === undefined ? sql`` : turnItemRunIdsMatch(threadId, filter.turnItemRunIds)}
     `;
 
-    // SQLite seeks no OR of `run_id IN (...)` and `run_id IS NULL` on the run index and walks the
-    // whole thread instead, so a mixed list seeks each part on its own.
-    const turnItemRunIdsMatch = (threadId: ThreadId, runIds: ReadonlyArray<RunId | null>) => {
+    const turnItemRunIdsMatch = (_threadId: ThreadId, runIds: ReadonlyArray<RunId | null>) => {
       const ids = runIds.filter((id): id is RunId => id !== null);
       const inRuns = sql`run_id IN (SELECT value FROM json_each(${encodeIdList(ids)}))`;
       if (!runIds.includes(null)) return sql`AND ${inRuns}`;
       if (ids.length === 0) return sql`AND run_id IS NULL`;
-      return sql`AND rowid IN (
+      return sql`AND (${inRuns} OR run_id IS NULL)`;
+    };
+
+    // SQLite seeks no OR of `run_id IN (...)` and `run_id IS NULL` on the run index and walks the
+    // whole thread instead, so a mixed list unions each covering-index seek directly as the rowid subquery.
+    const turnItemRowidSubquery = (
+      threadId: ThreadId,
+      filter: ProjectionRecordFilter | undefined,
+    ) => {
+      const runIds = filter?.turnItemRunIds;
+      const ids = runIds?.filter((id): id is RunId => id !== null) ?? [];
+      if (filter !== undefined && runIds !== undefined && runIds.includes(null) && ids.length > 0) {
+        const { turnItemRunIds: _turnItemRunIds, ...baseFilter } = filter;
+        return sql`
+          SELECT rowid FROM orchestration_v2_projection_turn_items
+          WHERE ${turnItemMatch(threadId, baseFilter)}
+            AND run_id IN (SELECT value FROM json_each(${encodeIdList(ids)}))
+          UNION ALL
+          SELECT rowid FROM orchestration_v2_projection_turn_items
+          WHERE ${turnItemMatch(threadId, baseFilter)}
+            AND run_id IS NULL
+        `;
+      }
+      return sql`
         SELECT rowid FROM orchestration_v2_projection_turn_items
-        WHERE thread_id = ${threadId} AND ${inRuns}
-        UNION ALL
-        SELECT rowid FROM orchestration_v2_projection_turn_items
-        WHERE thread_id = ${threadId} AND run_id IS NULL
-      )`;
+        WHERE ${turnItemMatch(threadId, filter)}
+      `;
     };
 
     // An id filter reads by primary key. `+` keeps SQLite off the thread index, which walks
@@ -3975,8 +3993,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     ? sql`WHERE type <> 'link_request' AND ${turnItemMatch(threadId, filter)}`
                     : // Matches on the type/status or run index and fetches only those payloads. Sorted, SQLite would walk the thread by ordinal instead.
                       sql`WHERE type <> 'link_request' AND rowid IN (
-                    SELECT rowid FROM orchestration_v2_projection_turn_items
-                    WHERE ${turnItemMatch(threadId, filter)}
+                    ${turnItemRowidSubquery(threadId, filter)}
                   )`
                 }
                 ORDER BY ordinal ASC, turn_item_id ASC

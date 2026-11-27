@@ -1489,7 +1489,10 @@ function renumberFollowingItems(
 function leadingCheckboxLength(paragraph: ProseMirrorNode): number {
   const first = paragraph.firstChild;
   if (!first?.isText) return 0;
-  return /^\[[ xX]\](?:[ \t]+|$)/.exec(first.text ?? "")?.[0].length ?? 0;
+  const match = /^\[[ xX]\]([ \t]+|$)/.exec(first.text ?? "");
+  if (!match) return 0;
+  if (match[1] === "" && paragraph.childCount > 1) return 0;
+  return match[0].length;
 }
 
 /** `prepare` runs first in the same transaction, which the split then reads. */

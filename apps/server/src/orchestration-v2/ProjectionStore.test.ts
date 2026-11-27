@@ -914,12 +914,16 @@ it.effect("idle compaction filters keep the latest run, live work and the newest
         statement.includes("FROM orchestration_v2_projection_turn_items"),
       );
       assert.isDefined(runQuery);
+      const plan = (yield* sql.unsafe<{ readonly detail: string }>(
+        `EXPLAIN QUERY PLAN ${runQuery}`,
+      ))
+        .map((row) => row.detail)
+        .join("\n");
       assert.include(
-        (yield* sql.unsafe<{ readonly detail: string }>(`EXPLAIN QUERY PLAN ${runQuery}`))
-          .map((row) => row.detail)
-          .join("\n"),
+        plan,
         "USING COVERING INDEX orchestration_v2_projection_turn_items_thread_run_idx (thread_id=? AND run_id=?)",
       );
+      assert.notInclude(plan, "(thread_id=?)");
     }
     assert.deepEqual(
       records.providerTurns.map((turn) => turn.id),

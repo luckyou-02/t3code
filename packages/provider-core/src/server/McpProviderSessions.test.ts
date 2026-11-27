@@ -120,6 +120,11 @@ describe("McpProviderSessions tool results", () => {
       yield* sessions.recordToolResult(threadId, "device_screenshot", tablet, shot("B"));
       yield* sessions.recordToolResult(threadId, "device_screenshot", watch, shot("C"));
       assert.isUndefined(yield* take(threadId, phone));
+      // A later same-input result must not be handed via input-only lookup to the evicted earlier call.
+      yield* sessions.recordToolResult(threadId, "device_screenshot", phone, {
+        content: [{ type: "image", mimeType: "image/png", data: "D" }],
+      });
+      assert.isUndefined(yield* take(threadId, phone));
       assert.deepEqual(yield* take(threadId, tablet), shot("B"));
       assert.deepEqual(yield* take(threadId, watch), shot("C"));
 

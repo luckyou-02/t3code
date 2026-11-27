@@ -42,7 +42,10 @@ interface KeptToolResult {
 interface ToolResultState {
   readonly entries: ReadonlyMap<ThreadId, ReadonlyArray<KeptToolResult>>;
   readonly epochs: ReadonlyMap<ThreadId, number>;
+  readonly evictedInputKeys: ReadonlyMap<ThreadId, ReadonlySet<string>>;
 }
+
+const toolInputKey = (toolName: string, inputHash: string) => `${toolName}\0${inputHash}`;
 
 const hashText = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
 
@@ -185,18 +188,32 @@ const matchingToolResultIndex = (
  * Drops the oldest results until the thread fits. Every result kept for the same call input goes
  * with it, so an input-only lookup can never hand the dropped call's sibling output to another call.
  */
-const withinByteLimit = (kept: ReadonlyArray<KeptToolResult>): ReadonlyArray<KeptToolResult> => {
+const withinToolResultLimits = (
+  kept: ReadonlyArray<KeptToolResult>,
+): {
+  readonly kept: ReadonlyArray<KeptToolResult>;
+  readonly evictedKeys: ReadonlyArray<string>;
+} => {
+  const evicted = new Set<string>();
   let rest = kept;
+  if (rest.length > MAX_KEPT_TOOL_RESULTS) {
+    const overflow = rest.slice(0, rest.length - MAX_KEPT_TOOL_RESULTS);
+    for (const entry of overflow) evicted.add(toolInputKey(entry.toolName, entry.inputHash));
+    rest = rest
+      .slice(-MAX_KEPT_TOOL_RESULTS)
+      .filter((entry) => !evicted.has(toolInputKey(entry.toolName, entry.inputHash)));
+  }
   let bytes = rest.reduce((total, entry) => total + entry.outputJson.length, 0);
   while (bytes > MAX_KEPT_TOOL_RESULT_BYTES && rest.length > 0) {
     const oldest = rest[0]!;
+    evicted.add(toolInputKey(oldest.toolName, oldest.inputHash));
     const dropped = rest.filter(
       (entry) => entry.toolName === oldest.toolName && entry.inputHash === oldest.inputHash,
     );
     rest = rest.filter((entry) => !dropped.includes(entry));
     bytes -= dropped.reduce((total, entry) => total + entry.outputJson.length, 0);
   }
-  return rest;
+  return { kept: rest, evictedKeys: [...evicted] };
 };
 
 const clearThreadToolResults = (state: ToolResultState, threadId: ThreadId): ToolResultState => {
@@ -204,7 +221,9 @@ const clearThreadToolResults = (state: ToolResultState, threadId: ThreadId): Too
   entries.delete(threadId);
   const epochs = new Map(state.epochs);
   epochs.set(threadId, (state.epochs.get(threadId) ?? 0) + 1);
-  return { entries, epochs };
+  const evictedInputKeys = new Map(state.evictedInputKeys);
+  evictedInputKeys.delete(threadId);
+  return { entries, epochs, evictedInputKeys };
 };
 
 const make = Effect.gen(function* () {
@@ -213,6 +232,7 @@ const make = Effect.gen(function* () {
   const toolResultState = yield* Ref.make<ToolResultState>({
     entries: new Map(),
     epochs: new Map(),
+    evictedInputKeys: new Map(),
   });
   const toolResultImagesRecoveredBy = yield* Ref.make<ReadonlySet<ProviderInstanceId>>(new Set());
   return McpProviderSessions.of({
@@ -327,13 +347,16 @@ const make = Effect.gen(function* () {
             return state;
           }
           const entries = new Map(state.entries);
-          entries.set(
-            threadId,
-            withinByteLimit(
-              [...(entries.get(threadId) ?? []), entry].slice(-MAX_KEPT_TOOL_RESULTS),
-            ),
-          );
-          return { ...state, entries };
+          const bounded = withinToolResultLimits([...(entries.get(threadId) ?? []), entry]);
+          entries.set(threadId, bounded.kept);
+          if (bounded.evictedKeys.length === 0) {
+            return { ...state, entries };
+          }
+          const evictedInputKeys = new Map(state.evictedInputKeys);
+          const nextEvicted = new Set(evictedInputKeys.get(threadId) ?? []);
+          for (const key of bounded.evictedKeys) nextEvicted.add(key);
+          evictedInputKeys.set(threadId, nextEvicted);
+          return { ...state, entries, evictedInputKeys };
         });
       },
     ),
@@ -341,6 +364,14 @@ const make = Effect.gen(function* () {
       function (threadId, toolName, input, reported) {
         const canonicalTool = resolveT3McpToolId(toolName) ?? toolName;
         return Ref.modify(toolResultState, (state) => {
+          if (
+            reported === undefined &&
+            state.evictedInputKeys
+              .get(threadId)
+              ?.has(toolInputKey(canonicalTool, hashToolInput(input)))
+          ) {
+            return [undefined, state];
+          }
           const kept = state.entries.get(threadId) ?? [];
           const index = matchingToolResultIndex(kept, canonicalTool, input, reported);
           if (index === -1) {
