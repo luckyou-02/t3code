@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off -- Pure synchronous hashing keeps page matching bounded without a runtime dependency.
 import * as NodeCrypto from "node:crypto";
-import type { ThreadId } from "@t3tools/contracts";
+import type { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
 import { stableStringify } from "@t3tools/shared/stableJson";
 import { resolveT3McpToolId } from "@t3tools/shared/t3McpToolPresentation";
@@ -15,6 +15,8 @@ import type { McpProviderSessionConfig } from "./mcpSession.ts";
 // Other providers may never consume these references.
 const MAX_KEPT_HTML_RENDERS = 64;
 const MAX_KEPT_TOOL_RESULTS = 64;
+// Screenshots make kept results large; a thread keeps at most this much until its turn ends.
+const MAX_KEPT_TOOL_RESULT_BYTES = 32 * 1024 * 1024;
 
 // Antigravity truncates long HTML arguments to a marked tail of at most 8,000 characters.
 const BOUNDED_TEXT_MARKER = "[Earlier output truncated]\n\n";
@@ -92,6 +94,14 @@ export class McpProviderSessions extends Context.Service<
       reported?: Record<string, unknown>,
     ) => Effect.Effect<Record<string, unknown> | undefined>;
     readonly clearToolResults: (threadId: ThreadId) => Effect.Effect<void>;
+    // An adapter that recovers T3 tool results says so for its provider instance, so screenshot
+    // results are kept only where something will take them back out.
+    readonly recoversToolResultImages: (
+      providerInstanceId: ProviderInstanceId,
+    ) => Effect.Effect<void>;
+    readonly areToolResultImagesRecovered: (
+      providerInstanceId: ProviderInstanceId,
+    ) => Effect.Effect<boolean>;
   }
 >()("@t3tools/provider-core/server/McpProviderSessions") {}
 
@@ -171,6 +181,24 @@ const matchingToolResultIndex = (
   return matches.every((index) => kept[index]!.outputJson === firstOutput) ? matches[0]! : -1;
 };
 
+/**
+ * Drops the oldest results until the thread fits. Every result kept for the same call input goes
+ * with it, so an input-only lookup can never hand the dropped call's sibling output to another call.
+ */
+const withinByteLimit = (kept: ReadonlyArray<KeptToolResult>): ReadonlyArray<KeptToolResult> => {
+  let rest = kept;
+  let bytes = rest.reduce((total, entry) => total + entry.outputJson.length, 0);
+  while (bytes > MAX_KEPT_TOOL_RESULT_BYTES && rest.length > 0) {
+    const oldest = rest[0]!;
+    const dropped = rest.filter(
+      (entry) => entry.toolName === oldest.toolName && entry.inputHash === oldest.inputHash,
+    );
+    rest = rest.filter((entry) => !dropped.includes(entry));
+    bytes -= dropped.reduce((total, entry) => total + entry.outputJson.length, 0);
+  }
+  return rest;
+};
+
 const clearThreadToolResults = (state: ToolResultState, threadId: ThreadId): ToolResultState => {
   const entries = new Map(state.entries);
   entries.delete(threadId);
@@ -186,6 +214,7 @@ const make = Effect.gen(function* () {
     entries: new Map(),
     epochs: new Map(),
   });
+  const toolResultImagesRecoveredBy = yield* Ref.make<ReadonlySet<ProviderInstanceId>>(new Set());
   return McpProviderSessions.of({
     set: Effect.fn("McpProviderSessions.set")(function* (config) {
       const current = yield* Ref.get(sessions);
@@ -300,7 +329,9 @@ const make = Effect.gen(function* () {
           const entries = new Map(state.entries);
           entries.set(
             threadId,
-            [...(entries.get(threadId) ?? []), entry].slice(-MAX_KEPT_TOOL_RESULTS),
+            withinByteLimit(
+              [...(entries.get(threadId) ?? []), entry].slice(-MAX_KEPT_TOOL_RESULTS),
+            ),
           );
           return { ...state, entries };
         });
@@ -329,6 +360,20 @@ const make = Effect.gen(function* () {
     clearToolResults: Effect.fn("McpProviderSessions.clearToolResults")(function (threadId) {
       return Ref.update(toolResultState, (state) => clearThreadToolResults(state, threadId));
     }),
+    recoversToolResultImages: Effect.fn("McpProviderSessions.recoversToolResultImages")(
+      function (providerInstanceId) {
+        return Ref.update(toolResultImagesRecoveredBy, (current) =>
+          new Set(current).add(providerInstanceId),
+        );
+      },
+    ),
+    areToolResultImagesRecovered: Effect.fn("McpProviderSessions.areToolResultImagesRecovered")(
+      function (providerInstanceId) {
+        return Ref.get(toolResultImagesRecoveredBy).pipe(
+          Effect.map((current) => current.has(providerInstanceId)),
+        );
+      },
+    ),
   });
 });
 
