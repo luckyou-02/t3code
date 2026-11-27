@@ -14470,6 +14470,173 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  it.effect(
+    "drops a finished background task from the roster as soon as its wake turn replays it",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const now = yield* DateTime.now;
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-wake-replay-clears-roster-1"),
+            text: "Run the package script in the background.",
+            attachments: [],
+          }),
+        );
+        yield* Queue.offer(harness.sdkMessages, wakeTaskStarted);
+        yield* Queue.offer(harness.sdkMessages, turnOneResult);
+        yield* harness.awaitTerminal(1);
+        const afterTurnOne = providerThreadRosterEvents(harness.events).at(-1)?.providerThread;
+        assert.deepStrictEqual(
+          afterTurnOne?.pendingBackgroundTasks?.map((task) => task.taskId),
+          [WAKE_TASK_ID],
+        );
+
+        // While idle, Claude drops the task from its live roster, sends task_notification, and starts a wake turn.
+        yield* harness.offerAndWait(
+          claudeSdkFrame({
+            type: "system",
+            subtype: "background_tasks_changed",
+            tasks: [],
+            uuid: "00000000-0000-4000-8000-000000000421",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+        );
+        yield* harness.offerAndWait(wakeNotification);
+        yield* harness.offerAndWait(wakeAssistant);
+        yield* harness.awaitContinuation(1);
+
+        const beforeWakeStart = providerThreadRosterEvents(harness.events).at(-1)?.providerThread;
+        assert.deepStrictEqual(
+          beforeWakeStart?.pendingBackgroundTasks?.map((task) => task.taskId),
+          [WAKE_TASK_ID],
+        );
+
+        // Start the wake continuation turn, but keep it running (no result frame yet).
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: beforeWakeStart ?? harness.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-wake-replay-clears-roster-2"),
+            text: WAKE_SUMMARY,
+            attachments: [],
+            providerTurnOrdinal: 2,
+            messageCreatedBy: "agent",
+            messageCreationSource: "provider",
+          }),
+        );
+        // Offer a follow-up frame on the active wake turn so drain has completed.
+        yield* harness.offerAndWait(
+          makeAssistantTextFrame({
+            uuid: "00000000-0000-4000-8000-000000000422",
+            text: "Now flashing the image.",
+          }),
+        );
+        yield* harness.until(
+          () =>
+            (providerThreadRosterEvents(harness.events).at(-1)?.providerThread
+              .pendingBackgroundTasks?.length ?? 0) === 0,
+        );
+
+        assert.deepStrictEqual(
+          providerThreadRosterEvents(harness.events).at(-1)?.providerThread
+            .pendingBackgroundTasks ?? [],
+          [],
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
+        ),
+      ),
+  );
+
+  it.effect(
+    "drops a finished background task from the roster once a mid-turn tool result absorbs its notification",
+    () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const now = yield* DateTime.now;
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-mid-turn-held-clears-roster"),
+            text: "Start a background command and keep working.",
+            attachments: [],
+          }),
+        );
+        yield* harness.offerAndWait(wakeTaskStarted);
+        yield* harness.until(
+          () =>
+            providerThreadRosterEvents(harness.events).at(-1)?.providerThread
+              .pendingBackgroundTasks?.[0]?.taskId === WAKE_TASK_ID,
+        );
+        const rosterCountBeforeEmpty = providerThreadRosterEvents(harness.events).length;
+        yield* harness.offerAndWait(
+          claudeSdkFrame({
+            type: "system",
+            subtype: "background_tasks_changed",
+            tasks: [],
+            uuid: "00000000-0000-4000-8000-000000000431",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+        );
+        yield* harness.until(
+          () => providerThreadRosterEvents(harness.events).length > rosterCountBeforeEmpty,
+        );
+        assert.deepStrictEqual(
+          providerThreadRosterEvents(harness.events)
+            .at(-1)
+            ?.providerThread.pendingBackgroundTasks?.map((task) => task.taskId),
+          [WAKE_TASK_ID],
+        );
+        yield* harness.offerAndWait(wakeNotification);
+        // The next tool_result delivers the held notification to Claude mid-turn.
+        yield* harness.offerAndWait(
+          claudeSdkFrame({
+            type: "user",
+            message: {
+              role: "user",
+              content: [{ type: "tool_result", tool_use_id: "toolu_other", content: "ok" }],
+            },
+            parent_tool_use_id: null,
+            uuid: "00000000-0000-4000-8000-000000000432",
+            session_id: WAKE_NATIVE_SESSION,
+          }),
+        );
+        yield* harness.until(
+          () =>
+            (providerThreadRosterEvents(harness.events).at(-1)?.providerThread
+              .pendingBackgroundTasks?.length ?? 0) === 0,
+        );
+
+        assert.deepStrictEqual(
+          providerThreadRosterEvents(harness.events).at(-1)?.providerThread
+            .pendingBackgroundTasks ?? [],
+          [],
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            IdAllocator.layer,
+            McpProviderSessions.layer,
+            NodeServices.layer,
+            NodeCrypto.layer,
+          ),
+        ),
+      ),
+  );
+
   it.effect("keeps a running Claude monitor typed after many newer monitors end", () =>
     Effect.gen(function* () {
       const harness = yield* makeWakeHarness;

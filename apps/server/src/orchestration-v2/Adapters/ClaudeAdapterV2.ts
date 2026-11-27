@@ -11359,13 +11359,20 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
           if (context === (yield* Ref.get(activeTurn))) {
             // The next tool round's request carries every notice held so far.
+            const held = heldTurnNotificationsByNativeThread.get(liveQuery.nativeThreadId);
             if (
               message.type === "user" &&
               message.parent_tool_use_id == null &&
               claudeToolResultBlocksFromUserMessage(message).length > 0 &&
-              heldTurnNotificationsByNativeThread.get(liveQuery.nativeThreadId)?.turn === context
+              held?.turn === context
             ) {
               heldTurnNotificationsByNativeThread.delete(liveQuery.nativeThreadId);
+              const listed = (yield* Ref.get(lastProviderThreadByNativeThread)).get(
+                liveQuery.nativeThreadId,
+              )?.pendingBackgroundTasks;
+              if (listed?.some((task) => held.tasks.has(task.taskId))) {
+                yield* emitRosterUpdate(liveQuery.nativeThreadId, context);
+              }
             }
             const lifecycle = claudePromptLifecycle(message);
             if (
@@ -12248,11 +12255,33 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               updated.delete(message.task_id);
               return updated;
             });
-            yield* applyBackgroundTaskRosterMessage({
+            if (wasBackgroundTask) {
+              yield* clearOpaqueBackgroundTaskReplayTombstone(
+                liveQuery.nativeThreadId,
+                message.task_id,
+              );
+            }
+            const rosterEmitted = yield* applyBackgroundTaskRosterMessage({
               nativeThreadId: liveQuery.nativeThreadId,
               message,
               activeContext: context,
             });
+            if (
+              wasBackgroundTask &&
+              !rosterEmitted &&
+              !(
+                heldTurnNotificationsByNativeThread
+                  .get(liveQuery.nativeThreadId)
+                  ?.tasks.has(message.task_id) ?? false
+              )
+            ) {
+              const listed = (yield* Ref.get(lastProviderThreadByNativeThread)).get(
+                liveQuery.nativeThreadId,
+              )?.pendingBackgroundTasks;
+              if (listed?.some((task) => task.taskId === message.task_id)) {
+                yield* emitRosterUpdate(liveQuery.nativeThreadId, context);
+              }
+            }
             if (
               !wasBackgroundTask &&
               !context.ignoredTaskIds.has(message.task_id) &&
@@ -12272,12 +12301,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                       ? "cancelled"
                       : "failed",
               });
-            }
-            if (wasBackgroundTask) {
-              yield* clearOpaqueBackgroundTaskReplayTombstone(
-                liveQuery.nativeThreadId,
-                message.task_id,
-              );
             }
           }
 
