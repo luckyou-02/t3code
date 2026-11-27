@@ -198,7 +198,7 @@ function TimelineListFooter({
     });
   }, [onGrow]);
   return (
-    <div>
+    <div className="relative">
       <div ref={contentRef}>{children}</div>
       <div aria-hidden style={{ height: composerInset }} />
       <div aria-hidden className="h-3 sm:h-4" />

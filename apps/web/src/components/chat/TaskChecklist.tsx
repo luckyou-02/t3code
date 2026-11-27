@@ -23,7 +23,7 @@ export function TaskChecklist({ checklist }: { readonly checklist: TaskChecklist
             key={step.id}
             data-task-status={step.status}
             className={cn(
-              "flex min-w-0 items-start gap-2.5 py-0.5",
+              "relative flex min-w-0 items-start gap-2.5 py-0.5",
               step.status === "running" ? "text-foreground" : "text-muted-foreground",
             )}
           >

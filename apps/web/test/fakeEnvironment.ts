@@ -247,6 +247,7 @@ export interface FakeThread {
   readonly runs: ReadonlyArray<OrchestrationV2Run>;
   readonly items: ReadonlyArray<OrchestrationV2TurnItem>;
   readonly runtimeRequests?: OrchestrationV2ThreadProjection["runtimeRequests"];
+  readonly plans?: OrchestrationV2ThreadProjection["plans"];
 }
 
 /** A thread of `turns` user prompts, each answered in markdown with a list and inline code. */
@@ -345,9 +346,9 @@ function shellOf(thread: FakeThread): OrchestrationV2ThreadShell {
     createdBy: thread.providerSubagentOf ? "agent" : "user",
     creationSource: thread.providerSubagentOf ? "provider" : "web",
     latestRunId: latest?.id ?? null,
-    activeRunId: null,
+    activeRunId: latest?.status === "running" ? latest.id : null,
     // Idle reads as waiting on the user, which shows a per-second duration in the sidebar.
-    status: latest ? "completed" : "idle",
+    status: latest ? latest.status : "idle",
     pendingRuntimeRequest: null,
     latestVisibleMessage: null,
     latestUserMessageAt: AT,
@@ -408,7 +409,7 @@ function projectionOf(thread: FakeThread): OrchestrationV2ThreadProjection {
     providerTurns: [],
     runtimeRequests: [...(thread.runtimeRequests ?? [])],
     messages: [],
-    plans: [],
+    plans: thread.plans ?? [],
     turnItems: [...thread.items],
     checkpointScopes: [],
     checkpoints: [],

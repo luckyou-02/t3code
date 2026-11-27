@@ -3,7 +3,9 @@ import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime/environ
 import {
   EnvironmentId,
   IssueTrackerKind,
+  NodeId,
   ORCHESTRATION_V2_WS_METHODS,
+  PlanId,
   RunId,
   ThreadId,
   WS_METHODS,
@@ -1197,4 +1199,60 @@ it("a new thread on a branch with changes opens them from thread details", async
   await changesRow.click();
   // The panel reads the draft's checkout; without one it asks for a thread instead.
   await expect.element(page.getByText("Loading changes...")).toBeVisible();
+});
+
+it("chat column never becomes a vertical scroll container when a long thread shows a task checklist", async () => {
+  await page.viewport(1440, 900);
+  const style = document.createElement("style");
+  style.textContent = stylesheet;
+  document.head.append(style);
+  try {
+    const baseThread = threadWithHistory("scroll-probe", 15);
+    const runningRun = {
+      ...baseThread.runs.at(-1)!,
+      status: "running" as const,
+      completedAt: null,
+    };
+    const thread = {
+      ...baseThread,
+      runs: [...baseThread.runs.slice(0, -1), runningRun],
+      plans: [
+        {
+          id: PlanId.make("plan-scroll-probe"),
+          threadId: baseThread.id,
+          runId: runningRun.id,
+          nodeId: NodeId.make("node-scroll-probe"),
+          kind: "todo_list" as const,
+          status: "active" as const,
+          steps: [
+            { id: "s1", text: "Commit and push changes", status: "completed" as const },
+            { id: "s2", text: "Rebuild WSL CLI runtime", status: "running" as const },
+            { id: "s3", text: "Build Windows x64 installer", status: "pending" as const },
+          ],
+        },
+      ],
+    };
+    using _environment = installFakeEnvironment([thread]);
+    __setClientSettingsForTests({
+      ...DEFAULT_CLIENT_SETTINGS,
+      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const router = getRouter(
+      createMemoryHistory({ initialEntries: [`/${ENVIRONMENT_ID}/${thread.id}`] }),
+    );
+    await router.load();
+    await using _app = await render(<AppRoot router={router} />, { router: false });
+    await expect.element(page.getByTestId("composer-editor")).toBeVisible();
+    await expect.poll(() => document.querySelector("[data-task-checklist]") !== null).toBe(true);
+    const column = document.querySelector<HTMLElement>("[data-chat-column]");
+    const checklist = document.querySelector<HTMLElement>("[data-task-checklist]");
+    if (!column || !checklist) throw new Error("chat column or task checklist missing");
+    expect(getComputedStyle(column).overflowY).toBe("hidden");
+    expect(column.scrollHeight).toBeLessThanOrEqual(column.clientHeight);
+    for (const srOnly of checklist.querySelectorAll<HTMLElement>(".sr-only")) {
+      expect(srOnly.offsetParent?.closest("[data-task-checklist]")).toBe(checklist);
+    }
+  } finally {
+    style.remove();
+  }
 });
