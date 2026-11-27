@@ -6,7 +6,6 @@ import { use, useState } from "react";
 import { AppMark } from "../AppMark";
 import {
   BotIcon,
-  BrainIcon,
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
@@ -15,6 +14,8 @@ import {
   MessageCircleIcon,
   SearchIcon,
   SmartphoneIcon,
+  // oxlint-disable-next-line t3code/no-sparkles-icon -- yl code uses SparklesIcon for thinking rows
+  SparklesIcon,
   SquarePenIcon,
   TerminalIcon,
   HammerIcon,
@@ -236,7 +237,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
     case "bot":
       return <BotIcon className={className} aria-hidden />;
     case "brain":
-      return <BrainIcon className={className} aria-hidden />;
+      return <SparklesIcon className={className} aria-hidden />;
     case "browser":
     case "computer":
       return <BrowserAppIcon className={className} />;
