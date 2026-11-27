@@ -28,8 +28,6 @@ import { THREAD_DETAILS_PANEL_ICON_CLASS } from "./threadDetailsPanelStyles";
 export interface ThreadBackgroundWork {
   readonly tasks: ReadonlyArray<OrchestrationV2PendingBackgroundTask>;
   readonly turnItems: ThreadStructure["turnItems"];
-  /** Tasks the provider can stop one at a time; the rest only stop together. */
-  readonly stoppableTaskIds: ReadonlySet<string>;
   readonly stopAllDisabled: boolean;
   readonly stoppingAll: boolean;
   readonly onStopAll: () => Promise<void>;
@@ -90,6 +88,7 @@ export function ThreadBackgroundTasksPanel(props: {
   return (
     <ThreadDetailsSection
       headingId="thread-details-background-tasks-heading"
+      data-thread-background-tasks-panel
       title={gt("Background tasks", { $context: "thread details section" })}
       actions={
         onlyOne ? null : (
@@ -113,16 +112,19 @@ export function ThreadBackgroundTasksPanel(props: {
           const task = work.tasks.find((candidate) => candidate.taskId === presented.taskId);
           if (task === undefined) return null;
           const itemKey = task.nativeItemId ?? task.taskId;
-          const item = work.turnItems.findLast(
-            (candidate) => (candidate.nativeItemRef?.nativeId || candidate.id) === itemKey,
+          const item = work.turnItems.findLast((candidate) =>
+            task.itemId === undefined
+              ? (candidate.nativeItemRef?.nativeId || candidate.id) === itemKey
+              : candidate.id === task.itemId,
           );
           const startedAtMs = item?.startedAt ? DateTime.toEpochMillis(item.startedAt) : null;
           const Icon = KIND_ICONS[task.kind as keyof typeof KIND_ICONS] ?? CircleDashedIcon;
           // Monospace only for raw command text, not for the agent's description of it.
           const isCommand = task.command !== undefined && presented.label === task.command.trim();
           // With one task, stopping all is stopping it, so every provider gets a row button.
-          const stopsAlone = canStopTask && work.stoppableTaskIds.has(task.taskId);
-          const stoppable = stopsAlone || (onlyOne && !work.stopAllDisabled);
+          const stopsAlone = canStopTask && task.stoppable === true;
+          // Kept mounted while Stop all runs, so its spinner shows.
+          const stoppable = stopsAlone || (onlyOne && (!work.stopAllDisabled || work.stoppingAll));
           const stopping = stoppingTaskId === task.taskId || (onlyOne && work.stoppingAll);
           const childThreadId = task.kind === "subagent" ? task.childThreadId : undefined;
           const rowContent = (

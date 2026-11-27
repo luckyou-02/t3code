@@ -14320,10 +14320,12 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           session_id: WAKE_NATIVE_SESSION,
         }),
       );
-      while (true) {
+      let listed: ReadonlyArray<OrchestrationV2PendingBackgroundTask> = [];
+      while (listed.length !== 2) {
         const { providerThread } = yield* Queue.take(harness.providerThreadReceipts);
-        if ((providerThread.pendingBackgroundTasks ?? []).length === 2) break;
+        listed = providerThread.pendingBackgroundTasks ?? [];
       }
+      assert.isTrue(listed.every((task) => task.stoppable === true));
 
       yield* Queue.offer(harness.sdkMessages, turnOneResult);
       yield* Queue.take(harness.terminalReceipts);
@@ -14526,6 +14528,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           command: "sleep 8 && echo MONITOR_DONE",
           itemId: monitorItem.turnItem.id,
           sourceThreadId: harness.threadId,
+          stoppable: true,
         },
       ]);
       assert.isDefined(harness.runtime.awaitBackgroundTasks);
@@ -16383,6 +16386,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             description: "work on A",
             kind: "command",
             nativeItemId: "toolu-roster-a",
+            stoppable: true,
           },
         ]);
         assert.isTrue(yield* hasPendingBackgroundWork);
@@ -16480,6 +16484,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             description: "work on B",
             kind: "command",
             nativeItemId: "toolu-roster-b",
+            stoppable: true,
           },
         ]);
         assert.isFalse(yield* hasPendingBackgroundWorkForThread(providerThreadA));

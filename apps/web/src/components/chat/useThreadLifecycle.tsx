@@ -122,7 +122,6 @@ interface ThreadLifecycleInput {
   readonly runIsLive: boolean;
   readonly pendingBackgroundTasks: Parameters<typeof backgroundWorkNowItem>[0]["tasks"];
   readonly turnItems: Parameters<typeof backgroundWorkNowItem>[0]["turnItems"];
-  readonly stoppableBackgroundTaskIds: ReadonlySet<string>;
   /** The thread details card lists background work, so the timeline leaves it out. */
   readonly backgroundWorkInDetailsCard: boolean;
   readonly activePendingApproval: PendingThreadRequests["activePendingApproval"];
@@ -178,7 +177,6 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     runIsLive,
     pendingBackgroundTasks,
     turnItems,
-    stoppableBackgroundTaskIds,
     backgroundWorkInDetailsCard,
     activePendingApproval,
     activePendingUserInput,
@@ -643,7 +641,6 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
   const backgroundWork: ThreadBackgroundWork = {
     tasks: activeBackgroundTasks,
     turnItems,
-    stoppableTaskIds: stoppableBackgroundTaskIds,
     stopAllDisabled: backgroundStopAllDisabled,
     stoppingAll: isStoppingBackgroundWork,
     onStopAll: handleStopBackgroundWorkStable,

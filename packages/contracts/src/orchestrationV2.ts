@@ -1104,6 +1104,8 @@ const PendingBackgroundTaskFields = {
    * subagent. Only the agent knows whether a command is a wait or a dev server it left running.
    */
   awaited: Schema.optional(Schema.Literal(true)),
+  /** The adapter can stop this task alone; others stop only with the whole thread's work. */
+  stoppable: Schema.optional(Schema.Literal(true)),
 };
 
 export const OrchestrationV2PendingBackgroundTask = kindUnionWithFallback(

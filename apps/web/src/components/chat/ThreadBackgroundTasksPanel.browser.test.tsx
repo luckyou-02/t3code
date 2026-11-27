@@ -40,9 +40,10 @@ const work = (
   stoppable: ReadonlyArray<string>,
   onStopAll: () => Promise<void>,
 ): ThreadBackgroundWork => ({
-  tasks,
+  tasks: tasks.map((task) =>
+    stoppable.includes(task.taskId) ? { ...task, stoppable: true as const } : task,
+  ),
   turnItems: [],
-  stoppableTaskIds: new Set(stoppable),
   stopAllDisabled: false,
   stoppingAll: false,
   onStopAll,

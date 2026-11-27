@@ -19,7 +19,6 @@ import {
   deriveAvailableRevertTurnCounts,
   deriveThreadPendingBackgroundTasks,
   presentThreadShellFromProjection,
-  rosterBackgroundTaskIds,
 } from "./ChatView.logic";
 import { usePullRequestDraftThread } from "./chat/usePullRequestDraftThread";
 import { usePullRequestLinking } from "../hooks/usePullRequestLinking";
@@ -2096,8 +2095,10 @@ export default function ChatView(props: ChatViewProps) {
   const showsBackgroundTasksItem = useClientSettings(
     (settings) => resolveThreadDetailsVisibility(settings).backgroundTasks,
   );
+  // Same conditions ThreadDetailsPanel uses to render the section.
   const backgroundWorkInDetailsCard =
     !embedded &&
+    !draftId &&
     showsBackgroundTasksItem &&
     threadPanelPresentation === "inline" &&
     threadPanelInlineOpen;
@@ -2606,7 +2607,6 @@ export default function ChatView(props: ChatViewProps) {
     runIsLive: (isWorking && activeRuntime?.status !== "waiting") || phase === "connecting",
     pendingBackgroundTasks,
     turnItems: serverProjection?.turnItems ?? EMPTY_TURN_ITEMS,
-    stoppableBackgroundTaskIds: rosterBackgroundTaskIds(serverProjection),
     backgroundWorkInDetailsCard,
     activePendingApproval,
     activePendingUserInput,

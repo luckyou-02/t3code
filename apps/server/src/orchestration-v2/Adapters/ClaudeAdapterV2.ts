@@ -4175,9 +4175,12 @@ function claudePendingBackgroundTasksFromRoster(
   roster: ReadonlyMap<string, OrchestrationV2PendingBackgroundTask>,
   awaitedTaskIds: ReadonlySet<string>,
 ): ReadonlyArray<OrchestrationV2PendingBackgroundTask> {
-  return Array.from(roster.values(), (task) =>
-    awaitedTaskIds.has(task.taskId) ? { ...task, awaited: true as const } : task,
-  );
+  // Live SDK roster entries are what query.stopTask can stop one at a time.
+  return Array.from(roster.values(), (task) => ({
+    ...task,
+    ...(awaitedTaskIds.has(task.taskId) ? { awaited: true as const } : {}),
+    stoppable: true as const,
+  }));
 }
 
 function parseClaudeBackgroundTaskEntry(
@@ -7136,8 +7139,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               !roster.has(task.taskId) &&
               !userStoppedBackgroundTaskIds.has(task.taskId) &&
               (yield* isKnownOpaqueBackgroundTaskOnNativeThread(nativeThreadId, task.taskId))
-            )
-              tasks.push(task);
+            ) {
+              // An ended task only waits to wake the agent; the SDK has nothing left to stop.
+              const { stoppable: _stoppable, ...owed } = task;
+              tasks.push(owed);
+            }
           }
           return tasks;
         });
