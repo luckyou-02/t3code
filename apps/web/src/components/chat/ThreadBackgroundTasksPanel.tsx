@@ -95,7 +95,6 @@ export function ThreadBackgroundTasksPanel(props: {
         onlyOne ? null : (
           <ThreadDetailsControl
             part="meta"
-            tone="destructive"
             disabled={work.stopAllDisabled}
             onClick={() => void work.onStopAll()}
           >
@@ -119,7 +118,8 @@ export function ThreadBackgroundTasksPanel(props: {
           );
           const startedAtMs = item?.startedAt ? DateTime.toEpochMillis(item.startedAt) : null;
           const Icon = KIND_ICONS[task.kind as keyof typeof KIND_ICONS] ?? CircleDashedIcon;
-          const isCommand = task.kind === "command" || task.kind === "monitor";
+          // Monospace only for raw command text, not for the agent's description of it.
+          const isCommand = task.command !== undefined && presented.label === task.command.trim();
           // With one task, stopping all is stopping it, so every provider gets a row button.
           const stopsAlone = canStopTask && work.stoppableTaskIds.has(task.taskId);
           const stoppable = stopsAlone || (onlyOne && !work.stopAllDisabled);

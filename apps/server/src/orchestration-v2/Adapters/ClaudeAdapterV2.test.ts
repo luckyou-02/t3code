@@ -14325,15 +14325,54 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         if ((providerThread.pendingBackgroundTasks ?? []).length === 2) break;
       }
 
+      yield* Queue.offer(harness.sdkMessages, turnOneResult);
+      yield* Queue.take(harness.terminalReceipts);
+
       yield* stopBackgroundTask({ providerThread: harness.providerThread, taskId: "dev-server" });
       const unknown = yield* Effect.exit(
         stopBackgroundTask({ providerThread: harness.providerThread, taskId: "already-finished" }),
       );
+      // Claude reports the kill, then drops the task from its roster, but starts no wake turn.
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "system",
+          subtype: "task_notification",
+          task_id: "dev-server",
+          status: "stopped",
+          output_file: "/tmp/claude-replay/tasks/dev-server.output",
+          summary: "dev-server",
+          uuid: "00000000-0000-4000-8000-000000000402",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      yield* Queue.offer(
+        harness.sdkMessages,
+        claudeSdkFrame({
+          type: "system",
+          subtype: "background_tasks_changed",
+          tasks: [{ task_id: WAKE_TASK_ID, task_type: "local_bash", description: WAKE_TASK_ID }],
+          uuid: "00000000-0000-4000-8000-000000000403",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      yield* harness.until(() =>
+        providerThreadRosterEvents(harness.events).some(
+          (event) =>
+            event.providerThread.pendingBackgroundTasks?.length === 1 &&
+            event.providerThread.pendingBackgroundTasks[0]?.taskId === WAKE_TASK_ID,
+        ),
+      );
 
       assert.deepStrictEqual(stopped, ["dev-server"]);
       assert.isTrue(Exit.isFailure(unknown));
-      yield* Queue.offer(harness.sdkMessages, turnOneResult);
-      yield* Queue.take(harness.terminalReceipts);
+      assert.deepStrictEqual(
+        (
+          providerThreadRosterEvents(harness.events).at(-1)?.providerThread
+            .pendingBackgroundTasks ?? []
+        ).map((task) => task.taskId),
+        [WAKE_TASK_ID],
+      );
     }).pipe(
       Effect.provide(
         Layer.mergeAll(

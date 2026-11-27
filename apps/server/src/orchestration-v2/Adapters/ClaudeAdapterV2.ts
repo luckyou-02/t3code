@@ -6386,6 +6386,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         const opaqueBackgroundTaskReplayTombstonesByNativeThread = yield* Ref.make(
           new Map<string, Set<string>>(),
         );
+        // Claude starts no wake turn for a task the user stopped, so it must not hold the thread.
+        const userStoppedBackgroundTaskIds = new Set<string>();
         const lastProviderThreadByNativeThread = yield* Ref.make(
           new Map<string, OrchestrationV2ProviderThread>(),
         );
@@ -7132,6 +7134,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           for (const task of previous?.pendingBackgroundTasks ?? []) {
             if (
               !roster.has(task.taskId) &&
+              !userStoppedBackgroundTaskIds.has(task.taskId) &&
               (yield* isKnownOpaqueBackgroundTaskOnNativeThread(nativeThreadId, task.taskId))
             )
               tasks.push(task);
@@ -15243,6 +15246,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 detail: "No running background task with this id belongs to this provider thread",
               });
             }
+            userStoppedBackgroundTaskIds.add(taskId);
             // Claude's next background_tasks_changed roster drops the task, which updates clients.
             yield* liveQuery.query.stopTask(taskId).pipe(
               Effect.mapError(
@@ -15253,6 +15257,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                     cause,
                   }),
               ),
+              Effect.onError(() => Effect.sync(() => userStoppedBackgroundTaskIds.delete(taskId))),
+            );
+            // The roster may already have dropped it into the owed-wake list; republish without it.
+            const active = yield* Ref.get(activeTurn);
+            yield* emitRosterUpdate(
+              nativeThreadId,
+              active?.nativeThreadId === nativeThreadId ? active : null,
             );
           }),
           awaitBackgroundTasks: Effect.fn("ClaudeAdapterV2.awaitBackgroundTasks")(
