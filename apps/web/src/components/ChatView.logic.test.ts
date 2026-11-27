@@ -17,6 +17,7 @@ import {
   withMessageContext,
   deriveAvailableRevertTurnCounts,
   deriveThreadPendingBackgroundTasks,
+  rosterBackgroundTaskIds,
   resolveProactiveTurnDiffAction,
 } from "./ChatView.logic";
 import {
@@ -1532,6 +1533,28 @@ describe("deriveAvailableRevertTurnCounts", () => {
   it("offers nothing without a provider session to rewind", () => {
     expect(deriveAvailableRevertTurnCounts(projection({ providerSessionId: null })).size).toBe(0);
     expect(deriveAvailableRevertTurnCounts(null).size).toBe(0);
+  });
+});
+
+describe("rosterBackgroundTaskIds", () => {
+  it("offers single-task stop only for Claude's own roster", () => {
+    const base = makeThreadProjectionFixture();
+    const providerThread = (driver: string, taskIds: ReadonlyArray<string>) => ({
+      id: `provider-thread-${driver}`,
+      driver,
+      pendingBackgroundTasks: taskIds.map((taskId) => ({ taskId, kind: "command" })),
+    });
+
+    const ids = rosterBackgroundTaskIds({
+      ...base,
+      providerThreads: [
+        providerThread("claudeAgent", ["claude-shell"]),
+        providerThread("muse", ["muse-child"]),
+      ],
+    } as unknown as ReturnType<typeof makeThreadProjectionFixture>);
+
+    expect([...ids]).toEqual(["claude-shell"]);
+    expect(rosterBackgroundTaskIds(null).size).toBe(0);
   });
 });
 

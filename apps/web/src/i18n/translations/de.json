@@ -1,7 +1,4 @@
 {
-  "6c6e16b9488f8b91": "Scrolle, um alles zu lesen.",
-  "035aab5e99159bd8": "{count, plural, one {… {hidden} Zeichen in der Mitte wird nicht angezeigt.} other {… {hidden} Zeichen in der Mitte werden nicht angezeigt.}} Der Text endet mit:",
-  "011b1ef726fa9928": "Scrolle in beiden Teilen, um alles zu lesen.",
   "4bcfa3b976a421cf": "Nebenchat",
   "23be753133ae6950": "Thread",
   "eef7f4dacbc3c3f2": "Rechner",
@@ -3005,6 +3002,9 @@
   "f2a955905704b91d": "{hours} Std. {minutes} Min.",
   "3609f564a63c8eca": "{minutes} Min.",
   "9251bb742f60720d": "{hours} Std.",
+  "035aab5e99159bd8": "{count, plural, one {… {hidden} Zeichen in der Mitte wird nicht angezeigt.} other {… {hidden} Zeichen in der Mitte werden nicht angezeigt.}} Der Text endet mit:",
+  "011b1ef726fa9928": "Scrolle in beiden Teilen, um alles zu lesen.",
+  "6c6e16b9488f8b91": "Scrolle, um alles zu lesen.",
   "a1e982c6047c0860": "Zur zitierten Antwort: {label}",
   "c156140c3f5ebb75": "Zur Antwort, auf die sich dies bezieht: {label}",
   "f8031a49c6e9fe25": "Zitierten Assistententext anzeigen: {label}",
@@ -3875,6 +3875,15 @@
       "v": "v"
     }
   ],
+  "4245740f905b59d8": "Hintergrundaufgabe konnte nicht gestoppt werden",
+  "1bcb35917c410a99": "Subagent",
+  "e7f6d6b0a06817ca": "Befehl",
+  "0d2521e4bc6a8428": "Monitor",
+  "cff999470519030d": "Hintergrundaufgabe",
+  "3ea873e51849c40e": "Hintergrundaufgaben",
+  "860b269b00ff305b": "{label} stoppen",
+  "a10dcee2b2f7a7d3": "Alle stoppen",
+  "7e98190eab1ce2a7": "Stoppen",
   "e58a1d884fa1d8f2": "Thread-Details",
   "43c5fbd02c6f330a": "Weniger anzeigen",
   "de45b075b016cb14": [
@@ -3894,6 +3903,7 @@
   "ba1b076eac28418c": "Abstammung",
   "dc28386e0a961d4d": "Nebenchats",
   "16fb3b76d0abbb2e": "Kontextfenster",
+  "c93ddc5cb7d6cd78": "Hintergrundaufgaben",
   "42f634397f3960aa": "In Thread-Details anzeigen",
   "e3738ef0423ddfe7": "Auf Standard zurücksetzen",
   "ae10d34e11064fec": "Versionskontrolle",
@@ -6097,6 +6107,19 @@
   "20b4665c78f801c3": "Auf {host} öffnen",
   "258d16c1554b734c": "Link kopieren",
   "c3d96c942dc3125d": "Der Link konnte nicht kopiert werden",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "hat kommentiert"
+    }
+  ],
   "05cf59d40e17ba63": "Review angefordert",
   "e369d7ce5ff36689": "Verfasst",
   "87d943aa8f91b9a2": "Andere",
@@ -6456,19 +6479,6 @@
       "t": "span",
       "i": 2,
       "c": "hat ein Review abgegeben"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "hat kommentiert"
     }
   ],
   "04ea50285b00dcdd": "Übersicht",

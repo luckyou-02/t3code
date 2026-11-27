@@ -192,6 +192,7 @@ function Panel({
         onUpdateProjectScript={scriptResult}
         onDeleteProjectScript={scriptResult}
         usage={{} as never}
+        backgroundWork={{ tasks: [] } as never}
       />
     </ChatCanvasContext>
   );

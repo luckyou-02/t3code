@@ -1,7 +1,4 @@
 {
-  "6c6e16b9488f8b91": "Faites défiler pour tout lire.",
-  "035aab5e99159bd8": "{count, plural, one {… {hidden} caractère au milieu n’est pas affiché.} other {… {hidden} caractères au milieu ne sont pas affichés.}} Le texte se termine par :",
-  "011b1ef726fa9928": "Faites défiler chaque partie pour la lire en entier.",
   "4bcfa3b976a421cf": "Discussion annexe",
   "23be753133ae6950": "Fil",
   "eef7f4dacbc3c3f2": "Machine",
@@ -3004,6 +3001,9 @@
   "f2a955905704b91d": "{hours} h {minutes} min",
   "3609f564a63c8eca": "{minutes} min",
   "9251bb742f60720d": "{hours} h",
+  "035aab5e99159bd8": "{count, plural, one {… {hidden} caractère au milieu n’est pas affiché.} other {… {hidden} caractères au milieu ne sont pas affichés.}} Le texte se termine par :",
+  "011b1ef726fa9928": "Faites défiler chaque partie pour la lire en entier.",
+  "6c6e16b9488f8b91": "Faites défiler pour tout lire.",
   "a1e982c6047c0860": "Aller à la réponse citée : {label}",
   "c156140c3f5ebb75": "Aller à la réponse à laquelle ceci répond : {label}",
   "f8031a49c6e9fe25": "Voir le texte cité de l’assistant : {label}",
@@ -3872,6 +3872,15 @@
       "v": "v"
     }
   ],
+  "4245740f905b59d8": "Impossible d'arrêter la tâche en arrière-plan",
+  "1bcb35917c410a99": "Sous-agent",
+  "e7f6d6b0a06817ca": "Commande",
+  "0d2521e4bc6a8428": "Moniteur",
+  "cff999470519030d": "Tâche en arrière-plan",
+  "3ea873e51849c40e": "Tâches en arrière-plan",
+  "860b269b00ff305b": "Arrêter {label}",
+  "a10dcee2b2f7a7d3": "Tout arrêter",
+  "7e98190eab1ce2a7": "Arrêter",
   "e58a1d884fa1d8f2": "Détails du fil",
   "43c5fbd02c6f330a": "Afficher moins",
   "de45b075b016cb14": [
@@ -3892,6 +3901,7 @@
   "ba1b076eac28418c": "Lignée",
   "dc28386e0a961d4d": "Discussions annexes",
   "16fb3b76d0abbb2e": "Fenêtre de contexte",
+  "c93ddc5cb7d6cd78": "Tâches en arrière-plan",
   "42f634397f3960aa": "Afficher dans les détails du fil",
   "e3738ef0423ddfe7": "Rétablir la valeur par défaut",
   "ae10d34e11064fec": "Gestion de versions",
@@ -6097,6 +6107,19 @@
   "20b4665c78f801c3": "Ouvrir sur {host}",
   "258d16c1554b734c": "Copier le lien",
   "c3d96c942dc3125d": "Impossible de copier le lien",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "a commenté"
+    }
+  ],
   "05cf59d40e17ba63": "Revue demandée",
   "e369d7ce5ff36689": "Créées par moi",
   "87d943aa8f91b9a2": "Autres",
@@ -6457,19 +6480,6 @@
       "t": "span",
       "i": 2,
       "c": "a fait une revue"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "a commenté"
     }
   ],
   "04ea50285b00dcdd": "Vue d’ensemble",

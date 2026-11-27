@@ -1673,6 +1673,20 @@ export function deriveThreadPendingBackgroundTasks(projection: ThreadStructure |
 }
 
 /**
+ * Tasks the server can stop one at a time: Claude's own background roster. Other providers
+ * either keep no roster or cannot stop a single task, so their work only stops together.
+ */
+export function rosterBackgroundTaskIds(projection: ThreadStructure | null): ReadonlySet<string> {
+  return new Set(
+    projection?.providerThreads.flatMap((thread) =>
+      thread.driver === "claudeAgent"
+        ? (thread.pendingBackgroundTasks?.map((task) => task.taskId) ?? [])
+        : [],
+    ) ?? [],
+  );
+}
+
+/**
  * Run ordinals the conversation can be reverted to: those whose provider turn belongs to the
  * active provider thread, plus 0 for the thread start. Empty without a live provider session
  * on the thread's selected instance.

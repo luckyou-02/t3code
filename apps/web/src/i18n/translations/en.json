@@ -1,7 +1,4 @@
 {
-  "6c6e16b9488f8b91": "Scroll to read all of it.",
-  "035aab5e99159bd8": "{count, plural, one {… {hidden} character in the middle is not shown.} other {… {hidden} characters in the middle are not shown.}} The text ends with:",
-  "011b1ef726fa9928": "Scroll each part to read all of it.",
   "4bcfa3b976a421cf": "Side chat",
   "23be753133ae6950": "Thread",
   "eef7f4dacbc3c3f2": "Machine",
@@ -3004,6 +3001,9 @@
   "f2a955905704b91d": "{hours}h {minutes}m",
   "3609f564a63c8eca": "{minutes}m",
   "9251bb742f60720d": "{hours}h",
+  "035aab5e99159bd8": "{count, plural, one {… {hidden} character in the middle is not shown.} other {… {hidden} characters in the middle are not shown.}} The text ends with:",
+  "011b1ef726fa9928": "Scroll each part to read all of it.",
+  "6c6e16b9488f8b91": "Scroll to read all of it.",
   "a1e982c6047c0860": "Go to quoted response: {label}",
   "c156140c3f5ebb75": "Go to the response this replies to: {label}",
   "f8031a49c6e9fe25": "View cited assistant text: {label}",
@@ -3873,6 +3873,15 @@
       "v": "v"
     }
   ],
+  "4245740f905b59d8": "Could not stop background task",
+  "1bcb35917c410a99": "Subagent",
+  "e7f6d6b0a06817ca": "Command",
+  "0d2521e4bc6a8428": "Monitor",
+  "cff999470519030d": "Background task",
+  "3ea873e51849c40e": "Background tasks",
+  "860b269b00ff305b": "Stop {label}",
+  "a10dcee2b2f7a7d3": "Stop all",
+  "7e98190eab1ce2a7": "Stop",
   "e58a1d884fa1d8f2": "Thread details",
   "43c5fbd02c6f330a": "Show less",
   "de45b075b016cb14": [
@@ -3893,6 +3902,7 @@
   "ba1b076eac28418c": "Lineage",
   "dc28386e0a961d4d": "Side chats",
   "16fb3b76d0abbb2e": "Context window",
+  "c93ddc5cb7d6cd78": "Background tasks",
   "42f634397f3960aa": "Show in thread details",
   "e3738ef0423ddfe7": "Reset to default",
   "ae10d34e11064fec": "Version Control",
@@ -6103,6 +6113,19 @@
   "20b4665c78f801c3": "Open on {host}",
   "258d16c1554b734c": "Copy link",
   "c3d96c942dc3125d": "Could not copy the link",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "commented"
+    }
+  ],
   "05cf59d40e17ba63": "Review requested",
   "e369d7ce5ff36689": "Authored",
   "87d943aa8f91b9a2": "Others",
@@ -6463,19 +6486,6 @@
       "t": "span",
       "i": 2,
       "c": "reviewed"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "commented"
     }
   ],
   "04ea50285b00dcdd": "Overview",

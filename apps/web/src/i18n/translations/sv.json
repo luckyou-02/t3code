@@ -1,7 +1,4 @@
 {
-  "6c6e16b9488f8b91": "Scrolla för att läsa allt.",
-  "035aab5e99159bd8": "{count, plural, one {… {hidden} tecken i mitten visas inte.} other {… {hidden} tecken i mitten visas inte.}} Texten slutar med:",
-  "011b1ef726fa9928": "Scrolla i varje del för att läsa allt.",
   "4bcfa3b976a421cf": "Sidochatt",
   "23be753133ae6950": "Tråd",
   "eef7f4dacbc3c3f2": "Dator",
@@ -3004,6 +3001,9 @@
   "f2a955905704b91d": "{hours} h {minutes} min",
   "3609f564a63c8eca": "{minutes} min",
   "9251bb742f60720d": "{hours} h",
+  "035aab5e99159bd8": "{count, plural, one {… {hidden} tecken i mitten visas inte.} other {… {hidden} tecken i mitten visas inte.}} Texten slutar med:",
+  "011b1ef726fa9928": "Scrolla i varje del för att läsa allt.",
+  "6c6e16b9488f8b91": "Scrolla för att läsa allt.",
   "a1e982c6047c0860": "Gå till citerat svar: {label}",
   "c156140c3f5ebb75": "Gå till svaret som detta besvarar: {label}",
   "f8031a49c6e9fe25": "Visa citerad assistenttext: {label}",
@@ -3872,6 +3872,15 @@
       "v": "v"
     }
   ],
+  "4245740f905b59d8": "Kunde inte stoppa bakgrundsuppgiften",
+  "1bcb35917c410a99": "Underagent",
+  "e7f6d6b0a06817ca": "Kommando",
+  "0d2521e4bc6a8428": "Övervakare",
+  "cff999470519030d": "Bakgrundsuppgift",
+  "3ea873e51849c40e": "Bakgrundsuppgifter",
+  "860b269b00ff305b": "Stoppa {label}",
+  "a10dcee2b2f7a7d3": "Stoppa alla",
+  "7e98190eab1ce2a7": "Stoppa",
   "e58a1d884fa1d8f2": "Tråddetaljer",
   "43c5fbd02c6f330a": "Visa mindre",
   "de45b075b016cb14": [
@@ -3892,6 +3901,7 @@
   "ba1b076eac28418c": "Härkomst",
   "dc28386e0a961d4d": "Sidochattar",
   "16fb3b76d0abbb2e": "Kontextfönster",
+  "c93ddc5cb7d6cd78": "Bakgrundsuppgifter",
   "42f634397f3960aa": "Visa i tråddetaljer",
   "e3738ef0423ddfe7": "Återställ till standard",
   "ae10d34e11064fec": "Versionshantering",
@@ -6102,6 +6112,19 @@
   "20b4665c78f801c3": "Öppna på {host}",
   "258d16c1554b734c": "Kopiera länk",
   "c3d96c942dc3125d": "Kunde inte kopiera länken",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "kommenterade"
+    }
+  ],
   "05cf59d40e17ba63": "Granskning begärd",
   "e369d7ce5ff36689": "Skapade av mig",
   "87d943aa8f91b9a2": "Andra",
@@ -6462,19 +6485,6 @@
       "t": "span",
       "i": 2,
       "c": "granskade"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "kommenterade"
     }
   ],
   "04ea50285b00dcdd": "Översikt",

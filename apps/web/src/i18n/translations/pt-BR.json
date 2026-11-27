@@ -1,7 +1,4 @@
 {
-  "6c6e16b9488f8b91": "Role para ler tudo.",
-  "035aab5e99159bd8": "{count, plural, one {… {hidden} caractere do meio não é exibido.} other {… {hidden} caracteres do meio não são exibidos.}} O texto termina com:",
-  "011b1ef726fa9928": "Role cada parte para ler tudo.",
   "4bcfa3b976a421cf": "Chat paralelo",
   "23be753133ae6950": "Thread",
   "eef7f4dacbc3c3f2": "Máquina",
@@ -3004,6 +3001,9 @@
   "f2a955905704b91d": "{hours}h {minutes}min",
   "3609f564a63c8eca": "{minutes}min",
   "9251bb742f60720d": "{hours}h",
+  "035aab5e99159bd8": "{count, plural, one {… {hidden} caractere do meio não é exibido.} other {… {hidden} caracteres do meio não são exibidos.}} O texto termina com:",
+  "011b1ef726fa9928": "Role cada parte para ler tudo.",
+  "6c6e16b9488f8b91": "Role para ler tudo.",
   "a1e982c6047c0860": "Ir para a resposta citada: {label}",
   "c156140c3f5ebb75": "Ir para a resposta a que esta responde: {label}",
   "f8031a49c6e9fe25": "Ver o texto citado do assistente: {label}",
@@ -3872,6 +3872,15 @@
       "v": "v"
     }
   ],
+  "4245740f905b59d8": "Não foi possível parar a tarefa em segundo plano",
+  "1bcb35917c410a99": "Subagente",
+  "e7f6d6b0a06817ca": "Comando",
+  "0d2521e4bc6a8428": "Monitor",
+  "cff999470519030d": "Tarefa em segundo plano",
+  "3ea873e51849c40e": "Tarefas em segundo plano",
+  "860b269b00ff305b": "Parar {label}",
+  "a10dcee2b2f7a7d3": "Parar tudo",
+  "7e98190eab1ce2a7": "Parar",
   "e58a1d884fa1d8f2": "Detalhes da thread",
   "43c5fbd02c6f330a": "Mostrar menos",
   "de45b075b016cb14": [
@@ -3891,6 +3900,7 @@
   "ba1b076eac28418c": "Linhagem",
   "dc28386e0a961d4d": "Chats paralelos",
   "16fb3b76d0abbb2e": "Janela de contexto",
+  "c93ddc5cb7d6cd78": "Tarefas em segundo plano",
   "42f634397f3960aa": "Mostrar nos detalhes da thread",
   "e3738ef0423ddfe7": "Redefinir para o padrão",
   "ae10d34e11064fec": "Controle de versão",
@@ -6096,6 +6106,19 @@
   "20b4665c78f801c3": "Abrir no {host}",
   "258d16c1554b734c": "Copiar link",
   "c3d96c942dc3125d": "Não foi possível copiar o link",
+  "4affc3da49f673c2": [
+    {
+      "i": 1,
+      "k": "_gt_value_1",
+      "v": "v"
+    },
+    " ",
+    {
+      "t": "span",
+      "i": 2,
+      "c": "comentou"
+    }
+  ],
   "05cf59d40e17ba63": "Revisão solicitada",
   "e369d7ce5ff36689": "De sua autoria",
   "87d943aa8f91b9a2": "Outros",
@@ -6456,19 +6479,6 @@
       "t": "span",
       "i": 2,
       "c": "revisou"
-    }
-  ],
-  "4affc3da49f673c2": [
-    {
-      "i": 1,
-      "k": "_gt_value_1",
-      "v": "v"
-    },
-    " ",
-    {
-      "t": "span",
-      "i": 2,
-      "c": "comentou"
     }
   ],
   "04ea50285b00dcdd": "Visão geral",

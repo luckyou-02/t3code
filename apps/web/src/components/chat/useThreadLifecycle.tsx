@@ -78,6 +78,7 @@ import {
   runStopNowItem,
 } from "./ThreadActivityBanners";
 import { useForceStopThread } from "./useForceStopThread";
+import type { ThreadBackgroundWork } from "./ThreadBackgroundTasksPanel";
 import { useAtomValue } from "@effect/atom-react";
 import type { RunStopPresentation } from "@t3tools/client-runtime/state/thread-execution";
 import { Atom } from "effect/reactivity";
@@ -121,6 +122,9 @@ interface ThreadLifecycleInput {
   readonly runIsLive: boolean;
   readonly pendingBackgroundTasks: Parameters<typeof backgroundWorkNowItem>[0]["tasks"];
   readonly turnItems: Parameters<typeof backgroundWorkNowItem>[0]["turnItems"];
+  readonly stoppableBackgroundTaskIds: ReadonlySet<string>;
+  /** The thread details card lists background work, so the timeline leaves it out. */
+  readonly backgroundWorkInDetailsCard: boolean;
   readonly activePendingApproval: PendingThreadRequests["activePendingApproval"];
   readonly activePendingUserInput: PendingThreadRequests["activePendingUserInput"];
   readonly localCheckoutBranchMismatch: {
@@ -174,6 +178,8 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     runIsLive,
     pendingBackgroundTasks,
     turnItems,
+    stoppableBackgroundTaskIds,
+    backgroundWorkInDetailsCard,
     activePendingApproval,
     activePendingUserInput,
     localCheckoutBranchMismatch,
@@ -633,22 +639,33 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
           onForceStop: () => void forceStop.forceStopThread(activeThread.id, runStop.runId),
         })
       : null;
-  const backgroundWorkNow = activeThread
-    ? backgroundWorkNowItem(
-        {
-          environmentId,
-          threadId: activeThread.id,
-          tasks: activeBackgroundTasks,
-          turnItems,
-          // Interrupt stops the active run first, not this work; the composer owns that Stop.
-          stopDisabled: runIsLive || !canOperateThread || isStoppingBackgroundWork,
-          stopping: isStoppingBackgroundWork,
-          onStop: handleStopBackgroundWorkStable,
-          onOpenThread: onOpenRelatedThreadStable,
-        },
-        messages,
-      )
-    : null;
+  const backgroundStopAllDisabled = runIsLive || !canOperateThread || isStoppingBackgroundWork;
+  const backgroundWork: ThreadBackgroundWork = {
+    tasks: activeBackgroundTasks,
+    turnItems,
+    stoppableTaskIds: stoppableBackgroundTaskIds,
+    stopAllDisabled: backgroundStopAllDisabled,
+    stoppingAll: isStoppingBackgroundWork,
+    onStopAll: handleStopBackgroundWorkStable,
+    onOpenThread: onOpenRelatedThreadStable,
+  };
+  const backgroundWorkNow =
+    activeThread && !backgroundWorkInDetailsCard
+      ? backgroundWorkNowItem(
+          {
+            environmentId,
+            threadId: activeThread.id,
+            tasks: activeBackgroundTasks,
+            turnItems,
+            // Interrupt stops the active run first, not this work; the composer owns that Stop.
+            stopDisabled: backgroundStopAllDisabled,
+            stopping: isStoppingBackgroundWork,
+            onStop: handleStopBackgroundWorkStable,
+            onOpenThread: onOpenRelatedThreadStable,
+          },
+          messages,
+        )
+      : null;
   // The relative times read the clock; nowMinute re-renders them on the minute.
   const snoozedUntil = activeThreadShell?.snoozedUntil ?? null;
   const settledAt = activeThreadShell?.settledAt ?? null;
@@ -757,6 +774,7 @@ export function useThreadLifecycle(input: ThreadLifecycleInput) {
     // A Stop that went unanswered needs the user; one in progress is the thread's work.
     attentionNow: runStop?.state === "unresponsive" ? runStopNow : childInputNow,
     workNow: runStop?.state === "stopping" ? runStopNow : backgroundWorkNow,
+    backgroundWork,
     childInputNow,
     goalNow,
     handleSwitchCheckoutToThread,

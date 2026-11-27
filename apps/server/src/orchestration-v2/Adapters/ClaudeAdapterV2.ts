@@ -15225,6 +15225,36 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               Effect.onError(() => Effect.sync(() => workflowStopRequestedAt.delete(taskId))),
             );
           }),
+          stopBackgroundTask: Effect.fn("ClaudeAdapterV2.stopBackgroundTask")(function* ({
+            providerThread,
+            taskId,
+          }) {
+            const liveQuery = yield* Ref.get(queryContext);
+            const nativeThreadId = providerThread.nativeThreadRef?.nativeId;
+            if (
+              liveQuery === null ||
+              liveQuery.stopping ||
+              nativeThreadId == null ||
+              liveQuery.nativeThreadId !== nativeThreadId ||
+              !(yield* hasPendingBackgroundTaskOnNativeThread(nativeThreadId, taskId))
+            ) {
+              return yield* new ProviderAdapter.ProviderAdapterProtocolError({
+                driver: CLAUDE_PROVIDER,
+                detail: "No running background task with this id belongs to this provider thread",
+              });
+            }
+            // Claude's next background_tasks_changed roster drops the task, which updates clients.
+            yield* liveQuery.query.stopTask(taskId).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ProviderAdapter.ProviderAdapterProtocolError({
+                    driver: CLAUDE_PROVIDER,
+                    detail: "Background task stop request failed",
+                    cause,
+                  }),
+              ),
+            );
+          }),
           awaitBackgroundTasks: Effect.fn("ClaudeAdapterV2.awaitBackgroundTasks")(
             function* ({ providerThread, taskIds, awaited }) {
               const nativeThreadId = providerThread.nativeThreadRef?.nativeId;

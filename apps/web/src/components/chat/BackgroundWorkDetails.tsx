@@ -6,7 +6,7 @@ import type {
 import type { ThreadStructure } from "@t3tools/client-runtime/state/shell";
 import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import { T, useGT } from "gt-react";
-import { useState } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 
 import { Button, InlineButton } from "../ui/button";
 import {
@@ -26,6 +26,8 @@ export function BackgroundWorkDetails(props: {
   readonly tasks: ReadonlyArray<OrchestrationV2PendingBackgroundTask>;
   readonly turnItems: ThreadStructure["turnItems"];
   readonly onOpenThread: (threadId: ThreadId) => void;
+  /** Opens the dialog from this element instead of the inline Details button. */
+  readonly trigger?: { readonly render: ReactElement; readonly children: ReactNode };
 }) {
   const gt = useGT();
   const kindLabel = (kind: string) => {
@@ -46,9 +48,13 @@ export function BackgroundWorkDetails(props: {
   const streamsOutput = useCommandOutputStreaming(props.environmentId);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<InlineButton />}>
-        <T>Details</T>
-      </DialogTrigger>
+      {props.trigger ? (
+        <DialogTrigger render={props.trigger.render}>{props.trigger.children}</DialogTrigger>
+      ) : (
+        <DialogTrigger render={<InlineButton />}>
+          <T>Details</T>
+        </DialogTrigger>
+      )}
       <DialogPopup>
         <DialogHeader>
           <DialogTitle>

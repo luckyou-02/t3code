@@ -29,6 +29,10 @@ import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { ThreadRepositorySections } from "./ThreadRepositorySections";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import {
+  ThreadBackgroundTasksPanel,
+  type ThreadBackgroundWork,
+} from "./ThreadBackgroundTasksPanel";
+import {
   ThreadDetailsContext,
   ThreadDetailsUsage,
   type ThreadDetailsUsageInput,
@@ -95,6 +99,7 @@ interface ThreadDetailsPanelProps extends Pick<
   ) => Promise<ProjectScriptActionResult>;
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
   usage: ThreadDetailsUsageInput;
+  backgroundWork: ThreadBackgroundWork;
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
@@ -330,6 +335,15 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
               {visible.context && props.usage.contextWindow ? (
                 <ThreadDetailsContext usage={props.usage.contextWindow} />
+              ) : null}
+
+              {/* Every density: the timeline hides its background work while this card shows it. */}
+              {!props.draftId && visible.backgroundTasks ? (
+                <ThreadBackgroundTasksPanel
+                  environmentId={props.environmentId}
+                  threadId={props.threadId}
+                  work={props.backgroundWork}
+                />
               ) : null}
 
               {/* Shown only when no section above has content, so an emptied card can be refilled. */}

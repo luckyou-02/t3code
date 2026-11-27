@@ -19,6 +19,7 @@ import {
   deriveAvailableRevertTurnCounts,
   deriveThreadPendingBackgroundTasks,
   presentThreadShellFromProjection,
+  rosterBackgroundTaskIds,
 } from "./ChatView.logic";
 import { usePullRequestDraftThread } from "./chat/usePullRequestDraftThread";
 import { usePullRequestLinking } from "../hooks/usePullRequestLinking";
@@ -334,6 +335,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import { resolveThreadDetailsVisibility } from "./chat/threadDetailsItems";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   offersWorkspaceModes,
@@ -2091,6 +2093,14 @@ export default function ChatView(props: ChatViewProps) {
         detailsCardInlineOpen: threadPanelInlineOpen,
       }).detailsCardMode,
   );
+  const showsBackgroundTasksItem = useClientSettings(
+    (settings) => resolveThreadDetailsVisibility(settings).backgroundTasks,
+  );
+  const backgroundWorkInDetailsCard =
+    !embedded &&
+    showsBackgroundTasksItem &&
+    threadPanelPresentation === "inline" &&
+    threadPanelInlineOpen;
   const threadPanelOpen = useRightPanelStore((state) =>
     selectThreadPanelOpen(
       state.threadPanelVisibilityByThreadKey,
@@ -2562,6 +2572,7 @@ export default function ChatView(props: ChatViewProps) {
     activeBranchMismatchKey,
     attentionNow,
     workNow,
+    backgroundWork,
     childInputNow,
     goalNow,
     handleSwitchCheckoutToThread,
@@ -2595,6 +2606,8 @@ export default function ChatView(props: ChatViewProps) {
     runIsLive: (isWorking && activeRuntime?.status !== "waiting") || phase === "connecting",
     pendingBackgroundTasks,
     turnItems: serverProjection?.turnItems ?? EMPTY_TURN_ITEMS,
+    stoppableBackgroundTaskIds: rosterBackgroundTaskIds(serverProjection),
+    backgroundWorkInDetailsCard,
     activePendingApproval,
     activePendingUserInput,
     localCheckoutBranchMismatch,
@@ -4136,6 +4149,7 @@ export default function ChatView(props: ChatViewProps) {
                   onAddProjectScript={saveProjectScriptStable}
                   onUpdateProjectScript={updateProjectScriptStable}
                   onDeleteProjectScript={deleteProjectScriptStable}
+                  backgroundWork={backgroundWork}
                   usage={{
                     providerInstanceId: activeProviderInstanceId,
                     model: activeUsageModel,
