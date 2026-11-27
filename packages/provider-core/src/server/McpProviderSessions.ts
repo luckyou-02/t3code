@@ -32,9 +32,16 @@ interface KeptHtmlRender {
   readonly reference: HtmlRenderReference;
 }
 
+interface KeptHtmlPreviewTail {
+  readonly nonHtmlInputHash: string;
+  readonly htmlLength: number;
+  readonly htmlEnd: string;
+}
+
 interface KeptToolResult {
   readonly toolName: string;
   readonly inputHash: string;
+  readonly htmlTail?: KeptHtmlPreviewTail | undefined;
   readonly outputJson: string;
   readonly output: Record<string, unknown>;
 }
@@ -46,6 +53,21 @@ interface ToolResultState {
 }
 
 const toolInputKey = (toolName: string, inputHash: string) => `${toolName}\0${inputHash}`;
+const htmlPreviewNonHtmlKey = (nonHtmlInputHash: string) =>
+  `html_preview\0nonHtml:${nonHtmlInputHash}`;
+
+const htmlPreviewInlineInput = (
+  toolName: string,
+  input: unknown,
+): { readonly html: string; readonly nonHtmlInputHash: string } | undefined => {
+  if (toolName !== "html_preview" || !Predicate.isObject(input) || Array.isArray(input)) {
+    return undefined;
+  }
+  const record = input as Readonly<Record<string, unknown>>;
+  if (typeof record.html !== "string" || record.html.length === 0) return undefined;
+  const { html, ...rest } = record;
+  return { html, nonHtmlInputHash: hashToolInput(rest) };
+};
 
 const hashText = (text: string) => NodeCrypto.createHash("sha256").update(text).digest("hex");
 
@@ -162,6 +184,7 @@ const matchingToolResultIndex = (
   toolName: string,
   input: unknown,
   reported?: Record<string, unknown>,
+  evictedKeys?: ReadonlySet<string>,
 ): number => {
   const inputHash = hashToolInput(input);
   if (reported !== undefined) {
@@ -173,9 +196,33 @@ const matchingToolResultIndex = (
         entry.outputJson === reportedJson,
     );
   }
-  const matches = kept.flatMap((entry, index) =>
+  const exactMatches = kept.flatMap((entry, index) =>
     entry.toolName === toolName && entry.inputHash === inputHash ? [index] : [],
   );
+  let matches = exactMatches;
+  if (matches.length === 0) {
+    const inlineHtml = htmlPreviewInlineInput(toolName, input);
+    const tail =
+      inlineHtml !== undefined && inlineHtml.html.startsWith(BOUNDED_TEXT_MARKER)
+        ? inlineHtml.html.slice(BOUNDED_TEXT_MARKER.length)
+        : undefined;
+    if (
+      inlineHtml !== undefined &&
+      tail !== undefined &&
+      tail.length > 0 &&
+      !evictedKeys?.has(htmlPreviewNonHtmlKey(inlineHtml.nonHtmlInputHash))
+    ) {
+      matches = kept.flatMap((entry, index) =>
+        entry.toolName === "html_preview" &&
+        entry.htmlTail !== undefined &&
+        entry.htmlTail.nonHtmlInputHash === inlineHtml.nonHtmlInputHash &&
+        tail.length < entry.htmlTail.htmlLength &&
+        entry.htmlTail.htmlEnd.endsWith(tail)
+          ? [index]
+          : [],
+      );
+    }
+  }
   if (matches.length === 0) return -1;
   if (matches.length === 1) return matches[0]!;
   // Identical outputs (e.g. repeated send_to_user calls) are interchangeable; differing outputs
@@ -198,17 +245,33 @@ const withinToolResultLimits = (
   let rest = kept;
   if (rest.length > MAX_KEPT_TOOL_RESULTS) {
     const overflow = rest.slice(0, rest.length - MAX_KEPT_TOOL_RESULTS);
-    for (const entry of overflow) evicted.add(toolInputKey(entry.toolName, entry.inputHash));
+    for (const entry of overflow) {
+      evicted.add(toolInputKey(entry.toolName, entry.inputHash));
+      if (entry.htmlTail !== undefined) {
+        evicted.add(htmlPreviewNonHtmlKey(entry.htmlTail.nonHtmlInputHash));
+      }
+    }
     rest = rest
       .slice(-MAX_KEPT_TOOL_RESULTS)
-      .filter((entry) => !evicted.has(toolInputKey(entry.toolName, entry.inputHash)));
+      .filter(
+        (entry) =>
+          !evicted.has(toolInputKey(entry.toolName, entry.inputHash)) &&
+          (entry.htmlTail === undefined ||
+            !evicted.has(htmlPreviewNonHtmlKey(entry.htmlTail.nonHtmlInputHash))),
+      );
   }
   let bytes = rest.reduce((total, entry) => total + entry.outputJson.length, 0);
   while (bytes > MAX_KEPT_TOOL_RESULT_BYTES && rest.length > 0) {
     const oldest = rest[0]!;
     evicted.add(toolInputKey(oldest.toolName, oldest.inputHash));
+    if (oldest.htmlTail !== undefined) {
+      evicted.add(htmlPreviewNonHtmlKey(oldest.htmlTail.nonHtmlInputHash));
+    }
     const dropped = rest.filter(
-      (entry) => entry.toolName === oldest.toolName && entry.inputHash === oldest.inputHash,
+      (entry) =>
+        (entry.toolName === oldest.toolName && entry.inputHash === oldest.inputHash) ||
+        (oldest.htmlTail !== undefined &&
+          entry.htmlTail?.nonHtmlInputHash === oldest.htmlTail.nonHtmlInputHash),
     );
     rest = rest.filter((entry) => !dropped.includes(entry));
     bytes -= dropped.reduce((total, entry) => total + entry.outputJson.length, 0);
@@ -334,9 +397,23 @@ const make = Effect.gen(function* () {
           }
         }
         const canonicalTool = resolveT3McpToolId(toolName) ?? toolName;
+        const inlineHtml = htmlPreviewInlineInput(canonicalTool, input);
         const entry: KeptToolResult = {
           toolName: canonicalTool,
           inputHash: hashToolInput(input),
+          ...(inlineHtml === undefined
+            ? {}
+            : {
+                htmlTail: {
+                  nonHtmlInputHash: inlineHtml.nonHtmlInputHash,
+                  htmlLength: inlineHtml.html.length,
+                  // Copy the tail so its backing storage cannot retain the entire HTML string.
+                  htmlEnd: Buffer.from(
+                    inlineHtml.html.slice(-KEPT_HTML_END_LENGTH),
+                    "utf16le",
+                  ).toString("utf16le"),
+                },
+              }),
           outputJson: stableStringify(output),
           output,
         };
@@ -373,7 +450,13 @@ const make = Effect.gen(function* () {
             return [undefined, state];
           }
           const kept = state.entries.get(threadId) ?? [];
-          const index = matchingToolResultIndex(kept, canonicalTool, input, reported);
+          const index = matchingToolResultIndex(
+            kept,
+            canonicalTool,
+            input,
+            reported,
+            state.evictedInputKeys.get(threadId),
+          );
           if (index === -1) {
             return [undefined, state];
           }

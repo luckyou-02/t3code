@@ -399,6 +399,25 @@ export const readMedia = DesktopIpc.makeIpcMethod({
   }),
 });
 
+export const downloadUrl = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.DOWNLOAD_URL_CHANNEL,
+  payload: Schema.String,
+  result: Schema.Boolean,
+  handler: Effect.fn("desktop.ipc.window.downloadUrl")(function* (url, event) {
+    const window = yield* (yield* ElectronWindow.ElectronWindow).main;
+    if (
+      event === undefined ||
+      Option.isNone(window) ||
+      window.value.webContents.id !== event.sender.id ||
+      !/^https?:$/.test(URL.parse(url)?.protocol ?? "")
+    ) {
+      return false;
+    }
+    window.value.webContents.downloadURL(url);
+    return true;
+  }),
+});
+
 const REMOTE_EDITOR_PROBE_CONCURRENCY = 8;
 
 export const probeRemoteEditors = DesktopIpc.makeIpcMethod({

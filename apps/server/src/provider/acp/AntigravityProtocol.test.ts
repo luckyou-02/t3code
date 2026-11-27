@@ -685,6 +685,8 @@ describe("Antigravity tool results", () => {
         sessionUpdate: "tool_call_update",
         toolCallId: "shot-1",
         status: "completed",
+        rawInput: { type: "image", mimeType: "image/png", data: png },
+        _meta: { preview: { type: "image", mimeType: "image/png", data: png } },
         rawOutput: {
           content: [
             { type: "image", mimeType: "image/png", data: png },
@@ -706,6 +708,10 @@ describe("Antigravity tool results", () => {
     ]);
     expect(normalized.update).toMatchObject({
       content: [{ type: "content", content: { type: "image", mimeType: "image/png", data: png } }],
+    });
+    expect(update.rawInput).toEqual({ type: "image", mimeType: "image/png" });
+    expect(normalized.update).toMatchObject({
+      _meta: { preview: { type: "image", mimeType: "image/png" } },
     });
   });
   it.each([

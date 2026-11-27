@@ -9,8 +9,21 @@ import { assetEnvironment } from "~/state/assets";
 import { readPreparedConnection, useEnvironmentScope } from "~/state/session";
 import { useAtomQueryRunner } from "~/state/use-atom-query-runner";
 
-import { downloadMedia } from "../media/mediaContent";
 import { toastManager } from "../ui/toast";
+
+function triggerBrowserDownload(url: string, fileName: string) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  try {
+    anchor.click();
+  } finally {
+    anchor.remove();
+  }
+}
 
 export function useFileDownload(environmentId: EnvironmentId | null) {
   const gt = useGT();
@@ -32,7 +45,14 @@ export function useFileDownload(environmentId: EnvironmentId | null) {
       if (result._tag === "Failure") throw squashAtomCommandFailure(result);
       const url = resolveAssetUrl(httpBaseUrl, result.value.relativeUrl);
       if (!url) throw new Error(gt("The file could not be loaded. Try again."));
-      await downloadMedia(url, path.split(/[\\/]/).at(-1) || path);
+      const desktopDownload =
+        typeof window === "undefined" ? undefined : window.desktopBridge?.downloadUrl;
+      if (desktopDownload) {
+        const started = await desktopDownload(url);
+        if (!started) throw new Error(gt("The file could not be loaded. Try again."));
+        return;
+      }
+      triggerBrowserDownload(url, path.split(/[\\/]/).at(-1) || path);
     })().catch((cause: unknown) =>
       toastManager.add({
         type: "error",

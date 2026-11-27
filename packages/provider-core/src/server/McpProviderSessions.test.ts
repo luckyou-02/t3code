@@ -138,6 +138,40 @@ describe("McpProviderSessions tool results", () => {
     }).pipe(Effect.provide(McpProviderSessions.layer)),
   );
 
+  it.effect("recovers html_preview screenshots when Antigravity truncates long inline HTML", () =>
+    Effect.gen(function* () {
+      const sessions = yield* McpProviderSessions.McpProviderSessions;
+      const longHtml = `<html><body>${"a".repeat(9_000)}unique-tail</body></html>`;
+      const truncatedHtml = `[Earlier output truncated]\n\n${longHtml.slice(-8_000)}`;
+      const previewShot = {
+        content: [{ type: "image", mimeType: "image/png", data: "PREVIEWPNG" }],
+        structuredContent: { contentHeight: 420 },
+      };
+
+      yield* sessions.recordToolResult(
+        threadId,
+        "html_preview",
+        { html: longHtml, width: 728, appearance: "dark" },
+        previewShot,
+      );
+      assert.isUndefined(
+        yield* sessions.takeToolResult(threadId, "html_preview", {
+          html: truncatedHtml,
+          width: 390,
+          appearance: "dark",
+        }),
+      );
+      assert.deepEqual(
+        yield* sessions.takeToolResult(threadId, "html_preview", {
+          html: truncatedHtml,
+          width: 728,
+          appearance: "dark",
+        }),
+        previewShot,
+      );
+    }).pipe(Effect.provide(McpProviderSessions.layer)),
+  );
+
   it.effect("drops stale-session writes and clears unconsumed results on clearToolResults", () =>
     Effect.gen(function* () {
       const sessions = yield* McpProviderSessions.McpProviderSessions;

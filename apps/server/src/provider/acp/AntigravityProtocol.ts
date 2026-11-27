@@ -346,10 +346,13 @@ function sanitizeToolValue(
   return Object.fromEntries(entries);
 }
 
-export function sanitizeAntigravityToolPayload(payload: unknown): unknown {
+export function sanitizeAntigravityToolPayload(
+  payload: unknown,
+  options?: { readonly keepImages?: boolean },
+): unknown {
   return sanitizeToolValue(
     payload,
-    { nodes: 512, text: 64_000, images: MAX_TOOL_OUTPUT_IMAGES },
+    { nodes: 512, text: 64_000, images: options?.keepImages ? MAX_TOOL_OUTPUT_IMAGES : 0 },
     0,
   );
 }
@@ -529,7 +532,7 @@ export function normalizeAntigravitySessionUpdate(
         ? { rawInput: sanitizeAntigravityToolPayload(withoutT3McpToolSummary(update)) }
         : {}),
       ...(update.rawOutput !== undefined
-        ? { rawOutput: sanitizeAntigravityToolPayload(update.rawOutput) }
+        ? { rawOutput: sanitizeAntigravityToolPayload(update.rawOutput, { keepImages: true }) }
         : {}),
       ...(update.content !== undefined ? { content: content ?? [] } : {}),
       ...(update._meta !== undefined ? { _meta: isJsonRecord(meta) ? meta : null } : {}),
@@ -690,6 +693,12 @@ export function normalizeAntigravityToolCall(
   const imagePath = localImagePath(output?.imagePath);
   const sanitizedData = sanitizeAntigravityToolPayload(toolCall.data);
   const data: Record<string, unknown> = Predicate.isObject(sanitizedData) ? sanitizedData : {};
+  if (toolCall.data.rawOutput !== undefined) {
+    data.rawOutput = sanitizeAntigravityToolPayload(toolCall.data.rawOutput, { keepImages: true });
+  }
+  if (toolCall.data.content !== undefined) {
+    data.content = sanitizeAntigravityToolPayload(toolCall.data.content, { keepImages: true });
+  }
   const kind = toolCall.kind ?? (command !== undefined ? "execute" : undefined);
   if (kind !== undefined) data.kind = kind;
   if (command !== undefined) data.command = command;

@@ -1129,6 +1129,7 @@ describe("AntigravityAdapterV2 html_render pages", () => {
         const lateText = "Confirmed on a later completion.";
         const lateErrorText = "Late explicit error.";
         const unfinishedText = "Still running when turn ended.";
+        const directShot = "A".repeat(10 * 1024 * 1024);
         const largeShot = "A".repeat(12 * 1024 * 1024);
         const adapter = yield* makeAntigravityAdapterV2({
           instanceId,
@@ -1325,6 +1326,12 @@ describe("AntigravityAdapterV2 html_render pages", () => {
                     );
                     yield* updateTool("snapshot", "completed");
 
+                    // Direct provider-returned screenshots share the same per-turn byte budget.
+                    yield* startTool("direct-shot", "preview_snapshot", { tabId: "direct" });
+                    yield* updateTool("direct-shot", "completed", {
+                      content: [{ type: "image", mimeType: "image/png", data: directShot }],
+                    });
+
                     // Recovered screenshots stay with the turn, so their bytes are bounded.
                     for (const tabId of ["tab-1", "tab-2", "tab-3"]) {
                       yield* startTool(`large-${tabId}`, "preview_snapshot", { tabId });
@@ -1455,10 +1462,10 @@ describe("AntigravityAdapterV2 html_render pages", () => {
         ]);
         assert.isTrue(yield* mcpSessions.areToolResultImagesRecovered(instanceId));
         assert.deepEqual(
-          ["tab-1", "tab-2", "tab-3"].map((tabId) =>
-            toolOutputImages(tool(`large-${tabId}`)?.output).map((image) => image.data?.length),
+          ["direct-shot", "large-tab-1", "large-tab-2", "large-tab-3"].map((id) =>
+            toolOutputImages(tool(id)?.output).map((image) => image.data?.length),
           ),
-          [[largeShot.length], [largeShot.length], [undefined]],
+          [[directShot.length], [largeShot.length], [undefined], [undefined]],
         );
       }).pipe(Effect.provide(layerSession)),
   );

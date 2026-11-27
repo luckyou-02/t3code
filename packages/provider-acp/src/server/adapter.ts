@@ -1362,6 +1362,26 @@ function withinRecoveredImageBudget(
   return output;
 }
 
+function withinDirectImageBudget(
+  context: Pick<ActiveAcpTurn, "recoveredImageChars" | "budgetedDirectImageOutputs">,
+  toolCallId: string,
+  output: unknown,
+): unknown {
+  const images = toolOutputImages(output).filter((image) => image.data !== undefined);
+  if (images.length === 0) return output;
+  const signature = images
+    .map(
+      (image) =>
+        `${image.mimeType}:${image.data!.length}:${image.data!.slice(0, 32)}:${image.data!.slice(-32)}`,
+    )
+    .join("|");
+  const cached = context.budgetedDirectImageOutputs.get(toolCallId);
+  if (cached?.signature === signature) return cached.output;
+  const bounded = withinRecoveredImageBudget(context, output);
+  context.budgetedDirectImageOutputs.set(toolCallId, { signature, output: bounded });
+  return bounded;
+}
+
 function acpMcpToolCallOutput(rawOutput: unknown): unknown {
   const record = unknownRecord(rawOutput);
   if (record === undefined) return rawOutput;
@@ -1837,8 +1857,13 @@ interface ActiveAcpTurn {
   readonly tools: Map<string, AcpToolCallState & { readonly backgroundCommandTaskId?: string }>;
   /** Confirmed T3 MCP tool outputs keyed by `${toolCallId}\0${tool}\0${inputHash}`. */
   readonly claimedToolResults: Map<string, unknown>;
-  /** Image characters recovered into `claimedToolResults` this turn. */
+  /** Image characters kept in tool outputs (recovered or direct) this turn. */
   recoveredImageChars: number;
+  /** Direct provider-returned image outputs already charged to `recoveredImageChars`. */
+  readonly budgetedDirectImageOutputs: Map<
+    string,
+    { readonly signature: string; readonly output: unknown }
+  >;
   /** `${toolCallId}\0${tool}\0${inputHash}` keys that already drained a recorded MCP result. */
   readonly drainedToolResultKeys: Set<string>;
   /** `${toolCallId}\0${tool}\0${inputHash}` keys that reached terminal failure and must never do input-only recovery. */
@@ -5803,6 +5828,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                 });
               }
             }
+            let outputRecoveredFromCache = false;
             if (
               status === "completed" &&
               resolvedT3Tool !== null &&
@@ -5849,8 +5875,12 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                 if (recoveredOutput !== undefined) {
                   context.claimedToolResults.set(callInputKey, recoveredOutput);
                   output = recoveredOutput;
+                  outputRecoveredFromCache = true;
                 }
               }
+            }
+            if (!outputRecoveredFromCache && output !== undefined) {
+              output = withinDirectImageBudget(context, toolCall.toolCallId, output);
             }
             turnItem = {
               ...base,
@@ -10577,6 +10607,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               tools: new Map(),
               claimedToolResults: new Map(),
               recoveredImageChars: 0,
+              budgetedDirectImageOutputs: new Map(),
               drainedToolResultKeys: new Set(),
               blockedInputRecoveryKeys: new Set(),
               attemptedInputRecoveryKeys: new Set(),
