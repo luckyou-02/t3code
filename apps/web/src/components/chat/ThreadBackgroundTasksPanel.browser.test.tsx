@@ -1,8 +1,10 @@
 import {
   EnvironmentId,
   ThreadId,
+  TurnItemId,
   type OrchestrationV2PendingBackgroundTask,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import { Atom } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
@@ -111,4 +113,35 @@ it("renders nothing without background work", async () => {
     />,
   );
   expect(screen.container.querySelector("section")).toBeNull();
+});
+
+it("formats live background task elapsed time in whole seconds without decimals", async () => {
+  const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_700_000_002_900);
+  try {
+    const itemId = TurnItemId.make("item-bg-elapsed");
+    await using screen = await render(
+      <ThreadBackgroundTasksPanel
+        environmentId={environmentId}
+        threadId={threadId}
+        work={{
+          ...work(
+            [{ taskId: "shell", kind: "command", description: "sleep 15", itemId }],
+            ["shell"],
+            async () => undefined,
+          ),
+          turnItems: [
+            {
+              id: itemId,
+              startedAt: DateTime.makeUnsafe(1_700_000_000_000),
+            } as ThreadBackgroundWork["turnItems"][number],
+          ],
+        }}
+      />,
+    );
+    await expect.element(page.getByText("sleep 15")).toBeVisible();
+    const timer = screen.container.querySelector(".tabular-nums");
+    expect(timer?.textContent).toBe("2s");
+  } finally {
+    nowSpy.mockRestore();
+  }
 });

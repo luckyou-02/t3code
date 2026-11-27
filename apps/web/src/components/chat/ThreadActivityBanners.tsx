@@ -179,7 +179,8 @@ export function runStopNowItem(input: {
       <>
         <span
           ref={tickTextContent(
-            (nowMs) => formatDuration(Math.max(1_000, nowMs - requestedAtMs), m),
+            (nowMs) =>
+              formatDuration(Math.max(1, Math.floor((nowMs - requestedAtMs) / 1_000)) * 1_000, m),
             true,
           )}
           className="tabular-nums"
@@ -280,7 +281,8 @@ export function backgroundWorkNowItem(
         {startedAtMs === null ? null : (
           <span
             ref={tickTextContent(
-              (nowMs) => formatDuration(Math.max(1_000, nowMs - startedAtMs), m),
+              (nowMs) =>
+                formatDuration(Math.max(1, Math.floor((nowMs - startedAtMs) / 1_000)) * 1_000, m),
               true,
             )}
             className="tabular-nums"
